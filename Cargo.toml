@@ -18,7 +18,7 @@ description = "A 'Smart' watch"
 keywords = ["arm", "cortex-m", "template"]
 categories = ["embedded", "no-std"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/japaric/cortex-m-quickstart"
+repository = "https://github.com/mabezdev/mabez_watch_rust"
 [profile.dev]
 codegen-units = 1
 incremental = false

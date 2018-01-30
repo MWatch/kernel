@@ -39,18 +39,18 @@ fn main() {
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     // let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
 
-    // USART1 pins
-    let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-    let rx = gpioa.pa10;
+    // USART2
+    let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+    let rx = gpioa.pa3;
 
-    /* Initialze UART1 */
-    let serial = Serial::usart1(
-        p.USART1,   /* Peripheral */
+    /* Initialze UART2 */
+    let serial = Serial::usart2(
+        p.USART2,   /* Peripheral */
         (tx, rx),   /* Pin Tuple */
         &mut afio.mapr,
         9_600.bps(),    /* Baud rate */
         clocks,         /*  Periph clock speed */
-        &mut rcc.apb2,
+        &mut rcc.apb1,
     );
 
     let (mut tx, mut rx) = serial.split();
@@ -60,8 +60,13 @@ fn main() {
         writeln!(stdout, "Transmitting : {}", sent).unwrap();
         block!(tx.write(sent)).ok();
         writeln!(stdout, "Waiting on resp").unwrap();
-        let received = block!(rx.read()).unwrap();
-        writeln!(stdout, "We recieved {}", received).unwrap();
+        let received = block!(rx.read());
+        match received {
+            Ok(byte) => writeln!(stdout, "We recieved: {:b}", byte),
+            Err(why)      => {
+                panic!("Failed to read a byte {:?}", why) 
+            }
+        };
     }
 }
 
