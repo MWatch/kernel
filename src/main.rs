@@ -5,6 +5,7 @@
 #![feature(used)]
 #![no_std]
 
+#[macro_use(singleton)]
 extern crate cortex_m;
 extern crate cortex_m_rt;
 extern crate cortex_m_semihosting;
@@ -36,6 +37,8 @@ fn main() {
     /* Alternate function IO (SERIAL/SPI/I2C etc) */
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
+    let mut channels = p.DMA1.split(&mut rcc.ahb);
+
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     // let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
 
@@ -55,19 +58,33 @@ fn main() {
 
     let (mut tx, mut rx) = serial.split();
 
-    let sent = b'Y';
-    loop {
-        writeln!(stdout, "Transmitting : {}", sent).unwrap();
-        block!(tx.write(sent)).ok();
-        writeln!(stdout, "Waiting on resp").unwrap();
-        let received = block!(rx.read());
-        match received {
-            Ok(byte) => writeln!(stdout, "We recieved: {:b}", byte),
-            Err(why)      => {
-                panic!("Failed to read a byte {:?}", why) 
-            }
-        };
-    }
+    // let sent = b'Y';
+    
+    let buf = singleton!(: [u8; 8] = [0; 8]).unwrap();
+    let dma_rx = rx.read_exact(channels.6, buf);
+
+    // loop {
+        let(_buf, _c, _rx)  = dma_rx.wait();
+        writeln!(stdout, "We recieved: ");
+        for i in 0..8 {
+            write!(stdout, "{}", _buf[i] as char);
+        }
+    // }
+
+
+    // Blocking
+    // loop {
+    //     writeln!(stdout, "Transmitting : {}", sent).unwrap();
+    //     block!(tx.write(sent)).ok();
+    //     writeln!(stdout, "Waiting on resp").unwrap();
+    //     let received = block!(rx.read());
+    //     match received {
+    //         Ok(byte) => writeln!(stdout, "We recieved: {:b}", byte),
+    //         Err(why)      => {
+    //             panic!("Failed to read a byte {:?}", why) 
+    //         }
+    //     };
+    // }
 }
 
 // As we are not using interrupts, we just register a dummy catch all handler

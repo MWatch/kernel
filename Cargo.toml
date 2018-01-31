@@ -31,12 +31,9 @@ debug = true
 stm32f103xx = "0.8.0"
 stm32f103xx-hal = { git = "https://github.com/japaric/stm32f103xx-hal" }
 nb = "0.1.1"
-[dependencies.cortex-m]
-version = "0.3.0"
+cortex-m = "0.4.3"
+cortex-m-semihosting = "0.2.0"
 
 [dependencies.cortex-m-rt]
 version = "0.3.12"
 features = ["abort-on-panic"]
-
-[dependencies.cortex-m-semihosting]
-version = "0.2.0"
