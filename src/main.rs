@@ -19,13 +19,15 @@ use cortex_m_semihosting::hio;
 use hal::prelude::*;
 use hal::serial::Serial;
 use hal::stm32f103xx;
+use hal::dma::Half;
+
 
 
 fn main() {
-    let mut stdout = hio::hstdout().unwrap();
+    
     let p = stm32f103xx::Peripherals::take().unwrap();
 
-    writeln!(stdout, "Hello, world!").unwrap();
+    // writeln!(stdout, "Hello, world!").unwrap();
 
     /* Borrow peripherals, flash and rcc(clocks) */
     let mut flash = p.FLASH.constrain();
@@ -58,33 +60,40 @@ fn main() {
 
     let (mut tx, mut rx) = serial.split();
 
-    // let sent = b'Y';
-    
-    let buf = singleton!(: [u8; 8] = [0; 8]).unwrap();
-    let dma_rx = rx.read_exact(channels.6, buf);
+    let buf = singleton!(: [[u8; 32]; 2] = [[0; 32]; 2]).unwrap();
 
-    // loop {
-        let(_buf, _c, _rx)  = dma_rx.wait();
-        writeln!(stdout, "We recieved: ");
-        for i in 0..8 {
-            write!(stdout, "{}", _buf[i] as char);
-        }
-    // }
+    let mut circ_buffer = rx.circ_read(channels.6, buf);
+    /* Gets the prt of the dma chan in the buffer */
+    // let dtr_in = channels.6.cndtr(); // private?
+    loop {
+        read_dma(&mut circ_buffer);
+    }
+}
 
+fn read_dma(circ_buffer: &mut hal::dma::CircBuffer<[u8; 32], hal::dma::dma1::C6>){
+    let mut stdout = hio::hstdout().unwrap();
+    writeln!(stdout, "Reading First Half").unwrap();
 
-    // Blocking
-    // loop {
-    //     writeln!(stdout, "Transmitting : {}", sent).unwrap();
-    //     block!(tx.write(sent)).ok();
-    //     writeln!(stdout, "Waiting on resp").unwrap();
-    //     let received = block!(rx.read());
-    //     match received {
-    //         Ok(byte) => writeln!(stdout, "We recieved: {:b}", byte),
-    //         Err(why)      => {
-    //             panic!("Failed to read a byte {:?}", why) 
-    //         }
-    //     };
-    // }
+    /* Sits spinning till dma half complete is set */
+    while circ_buffer.readable_half().unwrap() != Half::First {}
+
+    /* When we have half cplt read the buffer */
+    let _first_half = circ_buffer.peek(|half, _| *half).unwrap();
+    // print_buff(&_first_half);
+
+    /* Then do the same for the second half of the buff */
+    writeln!(stdout, "Reading Second Half").unwrap();
+    while circ_buffer.readable_half().unwrap() != Half::Second {}
+
+    let _second_half = circ_buffer.peek(|half, _| *half).unwrap();
+    print_buff(&_second_half);
+}
+
+fn print_buff(array: &[u8; 32]){
+    let mut stdout = hio::hstdout().unwrap();
+    for x in array {
+        writeln!(stdout, "{}", *x as char).unwrap();
+    }
 }
 
 // As we are not using interrupts, we just register a dummy catch all handler
