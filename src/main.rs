@@ -87,15 +87,15 @@ fn idle() -> ! {
 fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     r.CB
         .peek(|_buf, _half| {
-            
+            print_buff(_buf);
             // asm::bkpt();
         })
         .unwrap();
 }
 
-// fn print_buffer(buffer: &u8){
-//     let mut hstdout = hio::hstdout().unwrap();
-//     for i in 0..buffer.len() {
-//         writeln!(hstdout, "{}", c as char);
-//     }
-// }
+fn print_buff(array: &[u8]){
+    let mut stdout = hio::hstdout().unwrap();
+    for x in array {
+        writeln!(stdout, "{}", *x as char).unwrap();
+    }
+}
