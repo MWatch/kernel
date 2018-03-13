@@ -7,6 +7,7 @@
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate stm32f103xx_hal as hal;
+extern crate cortex_m_semihosting as sh;
 
 use cortex_m::asm;
 use hal::dma::{CircBuffer, Event, dma1};
@@ -14,6 +15,8 @@ use hal::prelude::*;
 use hal::serial::Serial;
 use hal::stm32f103xx;
 use rtfm::{app, Threshold};
+use core::fmt::Write;
+use sh::hio;
 
 app! {
     device: stm32f103xx,
@@ -21,6 +24,7 @@ app! {
     resources: {
         static BUFFER: [[u8; 8]; 2] = [[0; 8]; 2];
         static CB: CircBuffer<[u8; 8], dma1::C6>;
+        static STDOUT: sh::hio::HStdout;
     },
 
     init: {
@@ -30,12 +34,14 @@ app! {
     tasks: {
         DMA1_CHANNEL6: {
             path: rx,
-            resources: [CB],
+            resources: [CB, STDOUT],
         },
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
+    let mut hstdout = hio::hstdout().unwrap();
+    
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
 
@@ -68,6 +74,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
+        STDOUT : hstdout,
     }
 }
 
@@ -80,7 +87,15 @@ fn idle() -> ! {
 fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     r.CB
         .peek(|_buf, _half| {
-            asm::bkpt();
+            
+            // asm::bkpt();
         })
         .unwrap();
 }
+
+// fn print_buffer(buffer: &u8){
+//     let mut hstdout = hio::hstdout().unwrap();
+//     for i in 0..buffer.len() {
+//         writeln!(hstdout, "{}", c as char);
+//     }
+// }
