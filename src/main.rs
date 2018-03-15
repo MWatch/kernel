@@ -3,11 +3,10 @@
 #![deny(unsafe_code)]
 // #![deny(warnings)]
 #![no_std]
-
+#[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate stm32f103xx_hal as hal;
-extern crate cortex_m_semihosting as sh;
 
 use cortex_m::asm;
 use hal::dma::{CircBuffer, Event, dma1};
@@ -16,7 +15,7 @@ use hal::serial::Serial;
 use hal::stm32f103xx;
 use rtfm::{app, Threshold};
 use core::fmt::Write;
-use sh::hio;
+
 
 app! {
     device: stm32f103xx,
@@ -24,7 +23,7 @@ app! {
     resources: {
         static BUFFER: [[u8; 8]; 2] = [[0; 8]; 2];
         static CB: CircBuffer<[u8; 8], dma1::C6>;
-        static STDOUT: sh::hio::HStdout;
+        static STDOUT: cortex_m::peripheral::ITM;
     },
 
     init: {
@@ -40,8 +39,10 @@ app! {
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
-    let mut hstdout = hio::hstdout().unwrap();
-    
+
+    let mut itm = p.core.ITM;
+    iprintln!(&mut itm.stim[0], "Hello, world!");
+
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
 
@@ -74,7 +75,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
-        STDOUT : hstdout,
+        STDOUT : itm,
     }
 }
 
@@ -85,17 +86,13 @@ fn idle() -> ! {
 }
 
 fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
+    let prnt = &mut r.STDOUT.stim[0];
     r.CB
         .peek(|_buf, _half| {
-            print_buff(_buf);
-            // asm::bkpt();
+            for x in _buf {
+                iprint!(prnt, "{}", *x as char);
+            }
+            iprintln!(prnt, "");
         })
         .unwrap();
-}
-
-fn print_buff(array: &[u8]){
-    let mut stdout = hio::hstdout().unwrap();
-    for x in array {
-        writeln!(stdout, "{}", *x as char).unwrap();
-    }
 }
