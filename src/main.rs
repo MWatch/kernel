@@ -17,6 +17,8 @@ use rtfm::{app, Threshold};
 /* Our includes */
 mod msgmgr;
 
+use msgmgr::MessageManager;
+
 
 app! {
     device: stm32f103xx,
@@ -84,6 +86,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     
     channels.6.listen(Event::HalfTransfer);
     channels.6.listen(Event::TransferComplete);
+
+    MessageManager::new(r.MSG_BUFFERS);
 
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
