@@ -3,21 +3,39 @@
     Message is a type
  */
 
-#[derive(Debug)]
-struct Message {
-    // type: 
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum MessageType {
+    Unknown,
+    Notification,    /* NOTIFICATION i.e FB Msg */
+    Weather,/* Weather packet */
+    Date,   /* Date packet */
+    Music,  /* Spotify controls */
+}
+
+// #[derive(Copy)]
+pub struct Message {
+    pub msg_type: MessageType,
+    pub payload: [u8; 256],
 }
 
 pub struct MessageManager {
-    buffers: &'static mut [[u8; 256]; 8],
+    pub msg_pool : [Message; 8]
 }
 
+impl Message {
+    pub fn new(rx_buffers: [u8; 256]) -> Self {
+        Message {
+            msg_type: MessageType::Unknown,
+            payload: rx_buffers,
+        }
+     }
+}
 
 impl MessageManager 
 {
-     pub fn new(rx_buffers: &'static mut [[u8; 256]; 8]) -> Self {
+     pub fn new(rx_buffers: [Message; 8]) -> Self {
         MessageManager {
-            buffers: rx_buffers,
+            msg_pool: rx_buffers,
         }
      }
 }
