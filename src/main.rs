@@ -22,15 +22,18 @@ mod msgmgr;
 use msgmgr::MessageManager;
 use msgmgr::Message;
 
+const CB_HALF_LEN: usize = 32;
+const MSG_PAYLOAD_SIZE: usize = 256;
+const MSG_COUNT: usize = 8;
 
 app! {
     device: stm32f103xx,
 
     resources: {
-        static BUFFER: [[u8; 8]; 2] = [[0; 8]; 2];
-        static CB: CircBuffer<[u8; 8], dma1::C6>;
+        static BUFFER: [[u8; CB_HALF_LEN]; 2] = [[0; CB_HALF_LEN]; 2];
+        static CB: CircBuffer<[u8; CB_HALF_LEN], dma1::C6>;
         static STDOUT: cortex_m::peripheral::ITM;
-        static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
+        static MSG_PAYLOADS: [[u8; MSG_PAYLOAD_SIZE]; MSG_COUNT] = [[0; MSG_PAYLOAD_SIZE]; MSG_COUNT];
         static MMGR: MessageManager;
         static RB: RingBuffer<u8, [u8; 128]> = RingBuffer::new();
     },
@@ -60,7 +63,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Enable SYS_TICK IT */
     let mut syst = p.core.SYST;
     syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    syst.set_reload(100000000000000); // V slow systick for now
+    syst.set_reload(100000000); // V slow systick for now ~ 1 second
     syst.enable_interrupt();
     syst.enable_counter();
 
@@ -124,18 +127,17 @@ fn idle() -> ! {
 
 fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     let out = &mut r.STDOUT.stim[0];
-    
+    let mut mgr = r.MMGR;
     r.CB
         .peek(|_buf, _half| {
-            for x in _buf {
-                iprint!(out, "{}", *x as char);
-            }
-            iprintln!(out, "");
+            mgr.write(_buf);
         })
         .unwrap();
 }
 
 fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
-    iprintln!(out, "Message[0].msg_type = {:?}", r.MMGR.msg_pool[0].msg_type);
+    let mgr = r.MMGR;
+    // mgr.process(); // TODO IMPLEMENT
+    mgr.print_rb(out);
 }
