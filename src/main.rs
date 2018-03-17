@@ -7,12 +7,14 @@
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate stm32f103xx_hal as hal;
+extern crate heapless;
 
 use hal::dma::{CircBuffer, Event, dma1};
 use hal::prelude::*;
 use hal::serial::Serial;
 use hal::stm32f103xx;
 use rtfm::{app, Threshold};
+use heapless::RingBuffer;
 
 /* Our includes */
 mod msgmgr;
@@ -30,15 +32,17 @@ app! {
         static STDOUT: cortex_m::peripheral::ITM;
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
+        static RB: RingBuffer<u8, [u8; 128]> = RingBuffer::new();
     },
 
     init: {
-        resources: [BUFFER, MSG_PAYLOADS],
+        resources: [BUFFER, MSG_PAYLOADS, RB],
     },
 
     tasks: {
         DMA1_CHANNEL6: {
             path: rx,
+            priority: 1,
             resources: [CB, STDOUT, MMGR],
         },
         SYS_TICK: {
@@ -56,7 +60,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Enable SYS_TICK IT */
     let mut syst = p.core.SYST;
     syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    syst.set_reload(1);
+    syst.set_reload(100000000000000); // V slow systick for now
     syst.enable_interrupt();
     syst.enable_counter();
 
@@ -99,10 +103,11 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[5] },
         Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[6] },
         Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[7] },
-    ];
+    ]; 
 
+    let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB;
     /* Pass messages to the Message Manager */
-    let mmgr = MessageManager::new(msgs);
+    let mmgr = MessageManager::new(msgs, rb);
 
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
@@ -132,5 +137,5 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
 
 fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
-    // iprintln!(out, "DMA6: Message[0].msg_type = {:?}", r.MMGR.msg_pool[0].msg_type);
+    iprintln!(out, "Message[0].msg_type = {:?}", r.MMGR.msg_pool[0].msg_type);
 }

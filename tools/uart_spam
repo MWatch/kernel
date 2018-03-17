@@ -1,0 +1,6 @@
+#!/bin/bash
+
+while true; do
+	echo "IpsumLorumTextHere123456789Fin!" > $1
+	#sleep 0.3
+done
