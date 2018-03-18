@@ -23,9 +23,9 @@ mod msgmgr;
 use msgmgr::MessageManager;
 use msgmgr::Message;
 
-const CB_HALF_LEN: usize = 8;
-const MSG_PAYLOAD_SIZE: usize = 256;
-const MSG_COUNT: usize = 8;
+const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
+const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
+const MSG_COUNT: usize = 8; /* Number of message to store */
 
 app! {
     device: stm32f103xx,
@@ -63,7 +63,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Enable SYS_TICK IT */
     let mut syst = p.core.SYST;
     syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    syst.set_reload(1_000_000); // V slow systick for now, 80MHZ HCLOCK / this value second
+    syst.set_reload(1_000_000); // 1_000_000 / 80_000_000, where 80_000_000 is HCLK
     syst.enable_interrupt();
     syst.enable_counter();
 
@@ -76,10 +76,11 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut gpioa = p.device.GPIOA.split(&mut rcc.apb2);
 
-    /* USART2 */
+    /* USART2 Pins */
     let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
     let rx = gpioa.pa3;
 
+    /* USART 2 initialization */
     let serial = Serial::usart2(
         p.device.USART2,
         (tx, rx),
@@ -108,7 +109,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[7] },
     ]; 
 
-    let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB;
+    let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
+    
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
@@ -121,7 +123,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
 fn idle() -> ! {
     loop {
-        rtfm::wfi();
+        rtfm::wfi(); /* Wait for interrupts */
     }
 }
 
@@ -139,7 +141,7 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     // mgr.process(); // TODO IMPLEMENT - probably can be interrupted
-    atomic(_t, |cs| { // dont interrrupt the printint process
+    atomic(_t, |cs| { // dont interrrupt the printint process, so we run it atomically
         mgr.print_rb(out);
     });
     

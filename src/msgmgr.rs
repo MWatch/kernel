@@ -5,7 +5,6 @@ extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 
 use heapless::RingBuffer;
-use cortex_m::{asm};
 
 /* 
     Message is a type
@@ -68,11 +67,10 @@ impl MessageManager
 
     pub fn process(&mut self){
         if self.rb.is_empty() {
-            // nothing to do!
+            // Nothing todo!
         } else {
-            for _ in 0..self.rb.len() { /* Run through state machine per byte */
-        //     /* Start Bits */
-        //     /* Stops bits */  
+            while let Some(byte) = self.rb.dequeue() {
+                
             }
         }
     }
