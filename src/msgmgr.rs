@@ -82,17 +82,8 @@ impl MessageManager
             // iprintln!(itm, "RB is Empty!");
         } else {
             iprintln!(itm, "RB Contents: ");
-            for i in 0..self.rb.len() {
-                if let Some(byte) = self.rb.dequeue() {
-                    iprint!(itm, "{}", byte as char);
-                } else {
-                    iprintln!(itm, "Failed to deque byte at position {} / {}, current contents of RB: ", i, self.rb.len());
-                    for x in self.rb.iter() {
-                        iprint!(itm, "{}", *x as char);
-                    }
-                    iprintln!(itm, "");
-                    asm::bkpt();
-                }
+            while let Some(byte) = self.rb.dequeue() {
+                iprint!(itm, "{}", byte as char);
             }
             iprintln!(itm, "");
         }
