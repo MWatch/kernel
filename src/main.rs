@@ -15,6 +15,7 @@ use hal::serial::Serial;
 use hal::stm32f103xx;
 use rtfm::{app, Threshold};
 use heapless::RingBuffer;
+use rtfm::atomic;
 
 /* Our includes */
 mod msgmgr;
@@ -45,7 +46,6 @@ app! {
     tasks: {
         DMA1_CHANNEL6: {
             path: rx,
-            priority: 1,
             resources: [CB, STDOUT, MMGR],
         },
         SYS_TICK: {
@@ -63,7 +63,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Enable SYS_TICK IT */
     let mut syst = p.core.SYST;
     syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    syst.set_reload(100000000); // V slow systick for now ~ 1 second
+    syst.set_reload(1_000_000); // V slow systick for now, 80MHZ HCLOCK / this value second
     syst.enable_interrupt();
     syst.enable_counter();
 
@@ -138,6 +138,9 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
 fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
-    // mgr.process(); // TODO IMPLEMENT
-    mgr.print_rb(out);
+    // mgr.process(); // TODO IMPLEMENT - probably can be interrupted
+    atomic(_t, |cs| { // dont interrrupt the printint process
+        mgr.print_rb(out);
+    });
+    
 }

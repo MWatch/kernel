@@ -2,8 +2,10 @@
 
 extern crate heapless;
 extern crate cortex_m;
+extern crate cortex_m_rtfm as rtfm;
 
 use heapless::RingBuffer;
+use cortex_m::{asm};
 
 /* 
     Message is a type
@@ -77,11 +79,20 @@ impl MessageManager
 
     pub fn print_rb(&mut self, itm: &mut cortex_m::peripheral::itm::Stim){
         if self.rb.is_empty() {
-            iprintln!(itm, "RB is Empty!");
+            // iprintln!(itm, "RB is Empty!");
         } else {
             iprintln!(itm, "RB Contents: ");
-            for _ in 0..self.rb.len() {
-                iprint!(itm, "{}", self.rb.dequeue().unwrap() as char);
+            for i in 0..self.rb.len() {
+                if let Some(byte) = self.rb.dequeue() {
+                    iprint!(itm, "{}", byte as char);
+                } else {
+                    iprintln!(itm, "Failed to deque byte at position {} / {}, current contents of RB: ", i, self.rb.len());
+                    for x in self.rb.iter() {
+                        iprint!(itm, "{}", *x as char);
+                    }
+                    iprintln!(itm, "");
+                    asm::bkpt();
+                }
             }
             iprintln!(itm, "");
         }

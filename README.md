@@ -1,8 +1,8 @@
-# `cortex-m-quickstart`
+# `mabez-watch`
 
-> A template for building applications for ARM Cortex-M microcontrollers
+> A Rust rewrite of a C(++? / Arduino) embedded watch
 
-# [Documentation](https://docs.rs/cortex-m-quickstart)
+# [Documentation](https://github/MabezDev)
 
 # License
 
