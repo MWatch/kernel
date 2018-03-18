@@ -22,7 +22,7 @@ mod msgmgr;
 use msgmgr::MessageManager;
 use msgmgr::Message;
 
-const CB_HALF_LEN: usize = 32;
+const CB_HALF_LEN: usize = 8;
 const MSG_PAYLOAD_SIZE: usize = 256;
 const MSG_COUNT: usize = 8;
 
@@ -137,7 +137,7 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
 
 fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
-    let mgr = r.MMGR;
+    let mut mgr = r.MMGR;
     // mgr.process(); // TODO IMPLEMENT
     mgr.print_rb(out);
 }

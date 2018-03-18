@@ -55,38 +55,33 @@ impl MessageManager
 
     pub fn write(&mut self, data: &[u8]){
         for byte in data {
-            // if we overrun it just means the data in the buffer is not usefull to us
-            // or the consumer (MsgMngr in systick) is not keeping up!
             match self.rb.enqueue(*byte){
                 Ok(_) => {}
                 Err(_) => {
-                    //TODO this needs some looking at
-                    // wrap back around
-                    for _ in 0..self.rb.capacity() {
-                        self.rb.dequeue();
-                    }
-                    // requeue the byte that failed
-                    self.rb.enqueue(*byte);
+                    // the consumer (MsgMngr in systick) is not keeping up!
                 }
             }
         }
     }
 
-    pub fn process(&self){
-        // for byte in self.rb {
-        //     /* Run through state machine per byte */
+    pub fn process(&mut self){
+        if self.rb.is_empty() {
+            // nothing to do!
+        } else {
+            for _ in 0..self.rb.len() { /* Run through state machine per byte */
         //     /* Start Bits */
-        //     /* Stops bits */         
-        // }
+        //     /* Stops bits */  
+            }
+        }
     }
 
-    pub fn print_rb(&self, itm: &mut cortex_m::peripheral::itm::Stim){
+    pub fn print_rb(&mut self, itm: &mut cortex_m::peripheral::itm::Stim){
         if self.rb.is_empty() {
             iprintln!(itm, "RB is Empty!");
         } else {
             iprintln!(itm, "RB Contents: ");
-            for x in self.rb.iter() {
-                iprint!(itm, "{}", *x as char);
+            for _ in 0..self.rb.len() {
+                iprint!(itm, "{}", self.rb.dequeue().unwrap() as char);
             }
             iprintln!(itm, "");
         }
