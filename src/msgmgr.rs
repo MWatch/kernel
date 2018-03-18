@@ -5,6 +5,8 @@ extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 
 use heapless::RingBuffer;
+use heapless::BufferFullError;
+use cortex_m::asm;
 
 /* 
     Message is a type
@@ -12,12 +14,24 @@ use heapless::RingBuffer;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
-    Unknown,
-    Notification,    /* NOTIFICATION i.e FB Msg */
-    Weather,/* Weather packet */
-    Date,   /* Date packet */
-    Music,  /* Spotify controls */
+    Unknown = 0, /* NULL */
+    Notification = 78,    /* 'N' as a u8, NOTIFICATION i.e FB Msg */
+    Weather = 87,/* 'W' as a u8, Weather packet */
+    Date = 68,   /* 'D' as a u8, Date packet */
+    Music = 77,  /* 'M' as a u8, Spotify controls */
 }
+
+enum MessageState {
+    Init,
+    Type,
+    Title,  /* Optional */
+    Payload,
+    End
+}
+
+const STX: u8 = 2;
+const ETX: u8 = 3;
+const DELIM: u8 = 31; // Unit Separator
 
 // #[derive(Copy)]
 pub struct Message {
@@ -39,9 +53,10 @@ impl Message {
 }
 
 pub struct MessageManager {
-    pub msg_pool : [Message; 8],
+    msg_pool : [Message; 8],
     rb: &'static mut RingBuffer<u8, [u8; 128]>,
-    current_msg_idx: usize,
+    msg_state: MessageState,
+    current_msg_idx : usize,
 }
 
 impl MessageManager 
@@ -50,19 +65,19 @@ impl MessageManager
         MessageManager {
             msg_pool: msgs,
             rb: ring_t,
+            msg_state: MessageState::Init,
             current_msg_idx: 0,
         }
     }
 
-    pub fn write(&mut self, data: &[u8]){
+    /* 
+
+     */
+    pub fn write(&mut self, data: &[u8]) -> Result<(), BufferFullError>{
         for byte in data {
-            match self.rb.enqueue(*byte){
-                Ok(_) => {}
-                Err(_) => {
-                    // the consumer (MsgMngr in systick) is not keeping up!
-                }
-            }
+            self.rb.enqueue(*byte)?;
         }
+        Ok(())
     }
 
     pub fn process(&mut self){
@@ -70,8 +85,55 @@ impl MessageManager
             // Nothing todo!
         } else {
             while let Some(byte) = self.rb.dequeue() {
-                
+                match byte {
+                    STX => { /* Start of packet */
+                        self.msg_state = MessageState::Init;
+                    }
+                    ETX => { /* End of packet */
+                        self.msg_state = MessageState::End;
+                    }
+                    DELIM => { // state change
+
+                    }
+                    _ => {
+                        /* Run through Msg state machine */
+                        match self.msg_state {
+                            MessageState::Init => {
+                                asm::bkpt();
+                                // if current_msg_idx + 1 > msgs.len(), cant go
+                                self.msg_state = MessageState::Type;
+                            }
+                            MessageState::Type => {
+                                self.determine_type(byte);
+                            }
+                            MessageState::Title => {
+
+                            }
+                            MessageState::Payload => {
+                                
+                            }
+                            MessageState::End => {
+                                /* Finalize messge then reset state machine ready for next msg*/
+                                self.msg_state = MessageState::Init;
+                                self.current_msg_idx += 1;
+                            }
+                            _ => {
+                                // do nothing, useless bytes
+                            }
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    fn determine_type(&mut self, type_byte: u8){
+        self.msg_pool[self.current_msg_idx].msg_type = match type_byte {
+            Notification => MessageType::Notification,
+            Weather => MessageType::Weather,
+            Date => MessageType::Date,   
+            Music => MessageType::Music,
+            _ => MessageType::Unknown
         }
     }
 
@@ -87,15 +149,12 @@ impl MessageManager
         }
     }
 
-    // Returns the index of the next free buffer,
-    // Returns None if no free buffers are available
-     fn get_next_free(self) -> Option<usize> {
-        // Some(0)
-        unimplemented!();
-     }
-    // pub fn get_msg(msg_index: usize) -> Message {
-
-    // }
+    // takes a closure to execute on the buffer
+    pub fn peek_payload<F>(&mut self, index: usize, f: F)
+    where F: FnOnce(&[u8]) {
+        let msg = &self.msg_pool[index];
+        f(&msg.payload);
+    }
 
     
 }

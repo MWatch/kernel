@@ -131,8 +131,13 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     r.CB
-        .peek(|_buf, _half| {
-            mgr.write(_buf);
+        .peek(|buf, _half| {
+            match mgr.write(buf) {
+                Ok(_) => {},
+                Err(e) => {
+                    iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
+                }
+            }
         })
         .unwrap();
 }
@@ -141,8 +146,11 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     // mgr.process(); // TODO IMPLEMENT - probably can be interrupted
-    atomic(_t, |cs| { // dont interrrupt the printint process, so we run it atomically
+    atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
         mgr.print_rb(out);
     });
     
+    mgr.peek_payload(0, |payload| {
+        // Payload is in the variable payload
+    });
 }
