@@ -16,6 +16,7 @@ use hal::stm32f103xx;
 use rtfm::{app, Threshold};
 use heapless::RingBuffer;
 use rtfm::atomic;
+use cortex_m::asm;
 
 /* Our includes */
 mod msgmgr;
@@ -126,7 +127,8 @@ fn idle() -> ! {
         rtfm::wfi(); /* Wait for interrupts */
     }
 }
-
+/// Example Incoming payload
+/// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
 fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
@@ -145,12 +147,20 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
 fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
-    // mgr.process(); // TODO IMPLEMENT - probably can be interrupted
-    atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
-        mgr.print_rb(out);
-    });
+    mgr.process(); // TODO IMPLEMENT - probably can be interrupted
+    // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
+    //     mgr.print_rb(out);
+    // });
     
     mgr.peek_payload(0, |payload| {
+        if payload.len() > 0 {
+            iprintln!(out, "We have data in the payload!");
+            iprintln!(out, "Here it is: ");
+            for byte in payload {
+                iprint!(out, "{}", *byte as char);
+            }
+            iprintln!(out, "");
+        }
         // Payload is in the variable payload
     });
 }

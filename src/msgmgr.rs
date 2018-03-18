@@ -24,7 +24,6 @@ pub enum MessageType {
 enum MessageState {
     Init,
     Type,
-    Title,  /* Optional */
     Payload,
     End
 }
@@ -57,6 +56,7 @@ pub struct MessageManager {
     rb: &'static mut RingBuffer<u8, [u8; 128]>,
     msg_state: MessageState,
     current_msg_idx : usize,
+    current_payload_idx : usize,
 }
 
 impl MessageManager 
@@ -67,6 +67,7 @@ impl MessageManager
             rb: ring_t,
             msg_state: MessageState::Init,
             current_msg_idx: 0,
+            current_payload_idx: 0,
         }
     }
 
@@ -92,30 +93,28 @@ impl MessageManager
                     ETX => { /* End of packet */
                         self.msg_state = MessageState::End;
                     }
-                    DELIM => { // state change
-
+                    DELIM => { // state change - how? based on type
+                        self.msg_state = MessageState::Payload;
                     }
                     _ => {
                         /* Run through Msg state machine */
                         match self.msg_state {
                             MessageState::Init => {
-                                asm::bkpt();
                                 // if current_msg_idx + 1 > msgs.len(), cant go
                                 self.msg_state = MessageState::Type;
                             }
                             MessageState::Type => {
                                 self.determine_type(byte);
                             }
-                            MessageState::Title => {
-
-                            }
                             MessageState::Payload => {
-                                
+                                self.msg_pool[self.current_msg_idx].payload[self.current_payload_idx] = byte;
+                                self.current_payload_idx += 1;
                             }
                             MessageState::End => {
                                 /* Finalize messge then reset state machine ready for next msg*/
                                 self.msg_state = MessageState::Init;
                                 self.current_msg_idx += 1;
+                                self.current_payload_idx = 0;
                             }
                             _ => {
                                 // do nothing, useless bytes
