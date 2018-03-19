@@ -99,15 +99,15 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     channels.6.listen(Event::TransferComplete);
 
     /* Define out block of message - surely there must be a nice way to to this? */
-    let msgs: [msgmgr::Message; 8] = [ 
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[0] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[1] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[2] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[3] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[4] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[5] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[6] },
-        Message { msg_type: msgmgr::MessageType::Unknown, payload: r.MSG_PAYLOADS[7] },
+    let msgs: [msgmgr::Message; 8] = [
+        Message::new(r.MSG_PAYLOADS[0]), 
+        Message::new(r.MSG_PAYLOADS[1]), 
+        Message::new(r.MSG_PAYLOADS[2]), 
+        Message::new(r.MSG_PAYLOADS[3]), 
+        Message::new(r.MSG_PAYLOADS[4]), 
+        Message::new(r.MSG_PAYLOADS[5]), 
+        Message::new(r.MSG_PAYLOADS[6]), 
+        Message::new(r.MSG_PAYLOADS[7]), 
     ]; 
 
     let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
@@ -152,10 +152,9 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     //     mgr.print_rb(out);
     // });
     
-    mgr.peek_payload(0, |payload| {
-        if payload.len() > 0 {
-            iprintln!(out, "We have data in the payload!");
-            iprintln!(out, "Here it is: ");
+    mgr.peek_payload(0, |payload, len| {
+        if len > 0 {
+            iprintln!(out, "New Message[{}]: ", len);
             for byte in payload {
                 iprint!(out, "{}", *byte as char);
             }

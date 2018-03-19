@@ -22,10 +22,11 @@ pub enum MessageType {
 }
 
 enum MessageState {
+    Wait, /* Waiting for data */
     Init,
     Type,
     Payload,
-    End
+    End,
 }
 
 const STX: u8 = 2;
@@ -34,8 +35,9 @@ const DELIM: u8 = 31; // Unit Separator
 
 // #[derive(Copy)]
 pub struct Message {
-    pub msg_type: MessageType,
-    pub payload: [u8; 256],
+    msg_type: MessageType,
+    payload: [u8; 256],
+    payload_idx: usize,
 }
 
 impl Message {
@@ -43,6 +45,7 @@ impl Message {
         Message {
             msg_type: MessageType::Unknown,
             payload: rx_buffers,
+            payload_idx: 0,
         }
     }
 
@@ -56,7 +59,6 @@ pub struct MessageManager {
     rb: &'static mut RingBuffer<u8, [u8; 128]>,
     msg_state: MessageState,
     current_msg_idx : usize,
-    current_payload_idx : usize,
 }
 
 impl MessageManager 
@@ -67,7 +69,6 @@ impl MessageManager
             rb: ring_t,
             msg_state: MessageState::Init,
             current_msg_idx: 0,
-            current_payload_idx: 0,
         }
     }
 
@@ -107,14 +108,14 @@ impl MessageManager
                                 self.determine_type(byte);
                             }
                             MessageState::Payload => {
-                                self.msg_pool[self.current_msg_idx].payload[self.current_payload_idx] = byte;
-                                self.current_payload_idx += 1;
+                                let mut msg = &mut self.msg_pool[self.current_msg_idx];
+                                msg.payload[msg.payload_idx] = byte;
+                                msg.payload_idx += 1;
                             }
                             MessageState::End => {
                                 /* Finalize messge then reset state machine ready for next msg*/
-                                self.msg_state = MessageState::Init;
+                                self.msg_state = MessageState::Wait;
                                 self.current_msg_idx += 1;
-                                self.current_payload_idx = 0;
                             }
                             _ => {
                                 // do nothing, useless bytes
@@ -150,9 +151,9 @@ impl MessageManager
 
     // takes a closure to execute on the buffer
     pub fn peek_payload<F>(&mut self, index: usize, f: F)
-    where F: FnOnce(&[u8]) {
+    where F: FnOnce(&[u8], usize) {
         let msg = &self.msg_pool[index];
-        f(&msg.payload);
+        f(&msg.payload, msg.payload_idx);
     }
 
     
