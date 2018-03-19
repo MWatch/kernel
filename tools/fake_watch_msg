@@ -1,0 +1,42 @@
+#!/bin/bash
+
+#
+#	This script should 1:1 match the serial strings sent by the app
+#
+
+readonly STX="\x02"
+readonly ETX="\x03"
+readonly DELIM="\x1F"
+
+while getopts d:t:p: option
+do
+ case "${option}"
+  in
+   t) TYPE=${OPTARG};;
+   d) SER_DEV=${OPTARG};;
+   p) PAYLOAD=${OPTARG};;
+esac
+done
+
+if [ -z "$SER_DEV" ]; then
+    echo "Missing -d, specify a serial device!"
+    exit 1
+fi
+
+if [ -z "$TYPE" ]; then 
+    echo "Missing -t, Missing type field!"
+    exit 1
+fi
+
+if [ -z "$PAYLOAD" ]; then
+    echo "WARN payload is empty. "
+fi
+
+echo "Sending :$PAYLOAD: of type $TYPE to $SER_DEV"
+
+
+echo -ne "$STX$TYPE$DELIM$PAYLOAD$ETX" > $SER_DEV
+
+
+
+

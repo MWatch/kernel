@@ -152,7 +152,9 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     //     mgr.print_rb(out);
     // });
     
-    mgr.peek_payload(0, |payload, len| {
+    mgr.peek_message(0, |msg| {
+        let payload: &[u8] = &msg.payload;
+        let len = msg.payload_idx;
         if len > 0 {
             iprintln!(out, "New Message[{}]: ", len);
             for byte in payload {

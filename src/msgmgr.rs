@@ -12,13 +12,14 @@ use cortex_m::asm;
     Message is a type
  */
 
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
-    Unknown = 0, /* NULL */
-    Notification = 78,    /* 'N' as a u8, NOTIFICATION i.e FB Msg */
-    Weather = 87,/* 'W' as a u8, Weather packet */
-    Date = 68,   /* 'D' as a u8, Date packet */
-    Music = 77,  /* 'M' as a u8, Spotify controls */
+    Unknown, /* NULL */
+    Notification,
+    Weather,
+    Date,
+    Music,
 }
 
 enum MessageState {
@@ -35,9 +36,9 @@ const DELIM: u8 = 31; // Unit Separator
 
 // #[derive(Copy)]
 pub struct Message {
-    msg_type: MessageType,
-    payload: [u8; 256],
-    payload_idx: usize,
+    pub msg_type: MessageType,
+    pub payload: [u8; 256],
+    pub payload_idx: usize,
 }
 
 impl Message {
@@ -58,7 +59,7 @@ pub struct MessageManager {
     msg_pool : [Message; 8],
     rb: &'static mut RingBuffer<u8, [u8; 128]>,
     msg_state: MessageState,
-    current_msg_idx : usize,
+    msg_idx : usize,
 }
 
 impl MessageManager 
@@ -68,7 +69,7 @@ impl MessageManager
             msg_pool: msgs,
             rb: ring_t,
             msg_state: MessageState::Init,
-            current_msg_idx: 0,
+            msg_idx: 0,
         }
     }
 
@@ -101,21 +102,21 @@ impl MessageManager
                         /* Run through Msg state machine */
                         match self.msg_state {
                             MessageState::Init => {
-                                // if current_msg_idx + 1 > msgs.len(), cant go
+                                // if msg_idx + 1 > msgs.len(), cant go
                                 self.msg_state = MessageState::Type;
                             }
                             MessageState::Type => {
                                 self.determine_type(byte);
                             }
                             MessageState::Payload => {
-                                let mut msg = &mut self.msg_pool[self.current_msg_idx];
+                                let mut msg = &mut self.msg_pool[self.msg_idx];
                                 msg.payload[msg.payload_idx] = byte;
                                 msg.payload_idx += 1;
                             }
                             MessageState::End => {
                                 /* Finalize messge then reset state machine ready for next msg*/
                                 self.msg_state = MessageState::Wait;
-                                self.current_msg_idx += 1;
+                                self.msg_idx += 1;
                             }
                             _ => {
                                 // do nothing, useless bytes
@@ -128,11 +129,11 @@ impl MessageManager
     }
 
     fn determine_type(&mut self, type_byte: u8){
-        self.msg_pool[self.current_msg_idx].msg_type = match type_byte {
-            Notification => MessageType::Notification,
-            Weather => MessageType::Weather,
-            Date => MessageType::Date,   
-            Music => MessageType::Music,
+        self.msg_pool[self.msg_idx].msg_type = match type_byte {
+            78 => MessageType::Notification, /* 'N' as a u8, NOTIFICATION i.e FB Msg */
+            87 => MessageType::Weather, /* 'W' as a u8, Weather packet */
+            68 => MessageType::Date,   /* 'D' as a u8, Date packet */
+            77 => MessageType::Music, /* 'M' as a u8, Spotify controls */
             _ => MessageType::Unknown
         }
     }
@@ -150,10 +151,10 @@ impl MessageManager
     }
 
     // takes a closure to execute on the buffer
-    pub fn peek_payload<F>(&mut self, index: usize, f: F)
-    where F: FnOnce(&[u8], usize) {
+    pub fn peek_message<F>(&mut self, index: usize, f: F)
+    where F: FnOnce(&Message) {
         let msg = &self.msg_pool[index];
-        f(&msg.payload, msg.payload_idx);
+        f(&msg);
     }
 
     
