@@ -151,17 +151,22 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
     // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
     //     mgr.print_rb(out);
     // });
-    
-    mgr.peek_message(0, |msg| {
-        let payload: &[u8] = &msg.payload;
-        let len = msg.payload_idx;
-        if len > 0 {
-            iprintln!(out, "New Message[{}]: ", len);
-            for byte in payload {
-                iprint!(out, "{}", *byte as char);
+    let msg_count = mgr.msg_count();
+
+    for i in 0..msg_count {
+        mgr.peek_message(i, |msg| {
+            let payload: &[u8] = &msg.payload;
+            let len = msg.payload_idx;
+            if len > 0 {
+                iprintln!(out, "MSG[{}]: ", i);
+                for byte in payload {
+                    iprint!(out, "{}", *byte as char);
+                }
+                iprintln!(out, "");
             }
-            iprintln!(out, "");
-        }
-        // Payload is in the variable payload
-    });
+            // Payload is in the variable payload
+        });
+    }
+
+
 }

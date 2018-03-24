@@ -93,7 +93,9 @@ impl MessageManager
                         self.msg_state = MessageState::Init;
                     }
                     ETX => { /* End of packet */
-                        self.msg_state = MessageState::End;
+                        /* Finalize messge then reset state machine ready for next msg*/
+                        self.msg_state = MessageState::Wait;
+                        self.msg_idx += 1;
                     }
                     DELIM => { // state change - how? based on type
                         self.msg_state = MessageState::Payload;
@@ -113,10 +115,8 @@ impl MessageManager
                                 msg.payload[msg.payload_idx] = byte;
                                 msg.payload_idx += 1;
                             }
-                            MessageState::End => {
-                                /* Finalize messge then reset state machine ready for next msg*/
-                                self.msg_state = MessageState::Wait;
-                                self.msg_idx += 1;
+                            MessageState::Wait => {
+                                
                             }
                             _ => {
                                 // do nothing, useless bytes
@@ -157,5 +157,12 @@ impl MessageManager
         f(&msg);
     }
 
+    pub fn latest(&self) -> usize {
+        self.msg_idx
+    }
+
+    pub fn msg_count(&self) -> usize {
+        self.msg_idx + 1
+    }
     
 }
