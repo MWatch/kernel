@@ -90,12 +90,16 @@ impl MessageManager
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
-                        self.msg_state = MessageState::Init;
+                        self.msg_state = MessageState::Init; // activate processing 
                     }
                     ETX => { /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.msg_state = MessageState::Wait;
                         self.msg_idx += 1;
+                        if self.msg_idx > self.msg_pool.len() {
+                            /* buffer is full, wrap around */        
+                            self.msg_idx = 0;
+                        }
                     }
                     DELIM => { // state change - how? based on type
                         self.msg_state = MessageState::Payload;
