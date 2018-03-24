@@ -1,4 +1,4 @@
-target remote :3333
+# target remote :3333
 
 # stop asking to quit and just quit!
 define hook-quit
