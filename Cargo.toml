@@ -33,19 +33,20 @@ cortex-m = "0.4.3"
 cortex-m-semihosting = "0.2.0"
 cortex-m-rtfm = { git = "https://github.com/japaric/cortex-m-rtfm" }
 heapless = "0.2.4"
+panic-abort = "0.1.1"
 
 [dependencies.embedded-hal]
 features = ["unproven"]
-version = "0.1.0"
+version = "0.1.2"
 
 [dependencies.stm32f103xx-hal]
-git = "https://github.com/japaric/stm32f103xx-hal"
-version = "0.1.0"
+path = "/home/mabez/development/rust/embedded/stm32f103xx-hal-mabez"
+# git = "https://github.com/japaric/stm32f103xx-hal"
+# version = "0.1.0"
 
 [dependencies.stm32f103xx]
 version = "0.8.0"
 features = ["rt"]
 
 [dependencies.cortex-m-rt]
-version = "0.3.12"
-features = ["abort-on-panic"]
+version = "0.4.0"

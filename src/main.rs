@@ -2,7 +2,9 @@
 #![feature(proc_macro)]
 #![deny(unsafe_code)]
 // #![deny(warnings)]
+#![feature(lang_items)]
 #![no_std]
+extern crate panic_abort;
 #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
@@ -12,6 +14,7 @@ extern crate heapless;
 use hal::dma::{CircBuffer, Event, dma1};
 use hal::prelude::*;
 use hal::serial::Serial;
+use hal::i2c::{I2c, Mode};
 use hal::stm32f103xx;
 use rtfm::{app, Threshold};
 use heapless::RingBuffer;
@@ -76,6 +79,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let mut afio = p.device.AFIO.constrain(&mut rcc.apb2);
 
     let mut gpioa = p.device.GPIOA.split(&mut rcc.apb2);
+    let mut gpiob = p.device.GPIOB.split(&mut rcc.apb2);
 
     /* USART2 Pins */
     let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
@@ -111,7 +115,15 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     ]; 
 
     let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
+    let mode = Mode::Standard { frequency: 100.khz().0 };
+    let sclk = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
+    let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
+
+    let mut i2c = I2c::i2c1(p.device.I2C1, (sclk, sda), &mut afio.mapr, mode, clocks, &mut rcc.apb1);
     
+    let byte = [0xFF];
+    i2c.write(0x3C, &byte).unwrap();
+
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 

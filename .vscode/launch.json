@@ -10,7 +10,7 @@
             "request": "attach",
             "name": "STM32F1",
             "gdbpath" : "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
-            "executable": "/home/mabez/development/mabez-watch-rust/target/thumbv7m-none-eabi/debug/mabez_watch",
+            "executable": "${workspaceRoot}/target/thumbv7m-none-eabi/debug/mabez_watch",
             "target": ":3333",
             "remote": true,
             "cwd": "${workspaceRoot}",
