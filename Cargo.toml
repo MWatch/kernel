@@ -40,12 +40,13 @@ features = ["unproven"]
 version = "0.1.2"
 
 [dependencies.stm32f103xx-hal]
-path = "/home/mabez/development/rust/embedded/stm32f103xx-hal-mabez"
-# git = "https://github.com/japaric/stm32f103xx-hal"
+# path = "/home/mabez/development/rust/embedded/stm32f103xx-hal-mabez"
+git = "https://github.com/japaric/stm32f103xx-hal"
+rev = "330c904473dc3a34ef2864166dcbe658992d652a"
 # version = "0.1.0"
 
 [dependencies.stm32f103xx]
-version = "0.8.0"
+version = "0.9.0"
 features = ["rt"]
 
 [dependencies.cortex-m-rt]

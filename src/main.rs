@@ -1,4 +1,3 @@
-
 #![feature(proc_macro)]
 #![deny(unsafe_code)]
 // #![deny(warnings)]
@@ -8,24 +7,24 @@ extern crate panic_abort;
 #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
-extern crate stm32f103xx_hal as hal;
 extern crate heapless;
+extern crate stm32f103xx_hal as hal;
 
-use hal::dma::{CircBuffer, Event, dma1};
+use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
 use hal::serial::Serial;
-use hal::i2c::{I2c, Mode};
+// use hal::i2c::{I2c, Mode};
+use cortex_m::asm;
 use hal::stm32f103xx;
-use rtfm::{app, Threshold};
 use heapless::RingBuffer;
 use rtfm::atomic;
-use cortex_m::asm;
+use rtfm::{app, Threshold};
 
 /* Our includes */
 mod msgmgr;
 
-use msgmgr::MessageManager;
 use msgmgr::Message;
+use msgmgr::MessageManager;
 
 const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
 const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
@@ -60,7 +59,6 @@ app! {
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
-
     let mut itm = p.core.ITM;
     iprintln!(&mut itm.stim[0], "Hello, world!");
 
@@ -98,38 +96,38 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let (_tx, rx) = serial.split();
 
     let mut channels = p.device.DMA1.split(&mut rcc.ahb);
-    
+
     channels.6.listen(Event::HalfTransfer);
     channels.6.listen(Event::TransferComplete);
 
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
-        Message::new(r.MSG_PAYLOADS[0]), 
-        Message::new(r.MSG_PAYLOADS[1]), 
-        Message::new(r.MSG_PAYLOADS[2]), 
-        Message::new(r.MSG_PAYLOADS[3]), 
-        Message::new(r.MSG_PAYLOADS[4]), 
-        Message::new(r.MSG_PAYLOADS[5]), 
-        Message::new(r.MSG_PAYLOADS[6]), 
-        Message::new(r.MSG_PAYLOADS[7]), 
-    ]; 
+        Message::new(r.MSG_PAYLOADS[0]),
+        Message::new(r.MSG_PAYLOADS[1]),
+        Message::new(r.MSG_PAYLOADS[2]),
+        Message::new(r.MSG_PAYLOADS[3]),
+        Message::new(r.MSG_PAYLOADS[4]),
+        Message::new(r.MSG_PAYLOADS[5]),
+        Message::new(r.MSG_PAYLOADS[6]),
+        Message::new(r.MSG_PAYLOADS[7]),
+    ];
 
     let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
-    let mode = Mode::Standard { frequency: 100.khz().0 };
-    let sclk = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
-    let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
+    // let mode = Mode::Standard { frequency: 100.khz().0 };
+    // let sclk = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
+    // let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
 
-    let mut i2c = I2c::i2c1(p.device.I2C1, (sclk, sda), &mut afio.mapr, mode, clocks, &mut rcc.apb1);
-    
-    let byte = [0xFF];
-    i2c.write(0x3C, &byte).unwrap();
+    // let mut i2c = I2c::i2c1(p.device.I2C1, (sclk, sda), &mut afio.mapr, mode, clocks, &mut rcc.apb1);
+
+    // let byte = [0xFF];
+    // i2c.write(0x3C, &byte).unwrap();
 
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
-        STDOUT : itm,
+        STDOUT: itm,
         MMGR: mmgr,
     }
 }
@@ -145,24 +143,22 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     r.CB
-        .peek(|buf, _half| {
-            match mgr.write(buf) {
-                Ok(_) => {},
-                Err(e) => {
-                    iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
-                }
+        .peek(|buf, _half| match mgr.write(buf) {
+            Ok(_) => {}
+            Err(e) => {
+                iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
             }
         })
         .unwrap();
 }
 
-fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
+fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     mgr.process(); // TODO IMPLEMENT - probably can be interrupted
-    // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
-    //     mgr.print_rb(out);
-    // });
+                   // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
+                   //     mgr.print_rb(out);
+                   // });
     let msg_count = mgr.msg_count();
 
     for i in 0..msg_count {
@@ -179,6 +175,4 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources){
             // Payload is in the variable payload
         });
     }
-
-
 }
