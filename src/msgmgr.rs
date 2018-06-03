@@ -84,9 +84,7 @@ impl MessageManager
     }
 
     pub fn process(&mut self){
-        if self.rb.is_empty() {
-            // Nothing todo!
-        } else {
+        if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
@@ -129,7 +127,7 @@ impl MessageManager
                     }
                 }
             }
-        }
+        } 
     }
 
     fn determine_type(&mut self, type_byte: u8){
