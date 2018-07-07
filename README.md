@@ -4,6 +4,10 @@
 
 # [Documentation](https://github/MabezDev)
 
+# Building
+
+Currently buildable on the toolchain `nightly-2018-05-05`.
+
 # License
 
 Licensed under either of

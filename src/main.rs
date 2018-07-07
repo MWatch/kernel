@@ -143,10 +143,12 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     r.CB
-        .peek(|buf, _half| match mgr.write(buf) {
-            Ok(_) => {}
-            Err(e) => {
-                iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
+        .peek(|buf, _half| {
+            match mgr.write(buf) {
+                Ok(_) => {}
+                Err(e) => {
+                    iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
+                }
             }
         })
         .unwrap();
@@ -166,11 +168,11 @@ fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources) {
             let payload: &[u8] = &msg.payload;
             let len = msg.payload_idx;
             if len > 0 {
-                iprintln!(out, "MSG[{}]: ", i);
-                for byte in payload {
-                    iprint!(out, "{}", *byte as char);
-                }
-                iprintln!(out, "");
+                iprintln!(out, "MSG[{}] ", i);
+                // for byte in payload {
+                //     iprint!(out, "{}", *byte as char);
+                // }
+                // iprintln!(out, "");
             }
             // Payload is in the variable payload
         });
