@@ -1,5 +1,11 @@
-#![feature(proc_macro)]
+#![feature(use_extern_macros)]
+#![feature(proc_macro_gen)]
+#![feature(proc_macro_mod)]
+#![feature(proc_macro_span)]
+#![feature(proc_macro_diagnostic)]
+#![feature(proc_macro_raw_ident)]
 #![deny(unsafe_code)]
+#![feature(extern_prelude)]
 // #![deny(warnings)]
 #![feature(lang_items)]
 #![no_std]
@@ -8,14 +14,14 @@ extern crate panic_abort;
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate heapless;
-extern crate stm32f103xx_hal as hal;
+extern crate stm32l432xx_hal as hal;
 
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
 use hal::serial::Serial;
 // use hal::i2c::{I2c, Mode};
 use cortex_m::asm;
-use hal::stm32f103xx;
+use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use rtfm::atomic;
 use rtfm::{app, Threshold};
@@ -31,15 +37,15 @@ const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
 const MSG_COUNT: usize = 8; /* Number of message to store */
 
 app! {
-    device: stm32f103xx,
+    device: stm32l4x2,
 
     resources: {
-        static BUFFER: [[u8; CB_HALF_LEN]; 2] = [[0; CB_HALF_LEN]; 2];
-        static CB: CircBuffer<[u8; CB_HALF_LEN], dma1::C6>;
         static STDOUT: cortex_m::peripheral::ITM;
-        static MSG_PAYLOADS: [[u8; MSG_PAYLOAD_SIZE]; MSG_COUNT] = [[0; MSG_PAYLOAD_SIZE]; MSG_COUNT];
+        static BUFFER: [[u8; 64]; 2] = [[0; 64]; 2];
+        static CB: CircBuffer<[u8; 64], dma1::C5>;
+        static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
-        static RB: RingBuffer<u8, [u8; 128]> = RingBuffer::new();
+        static RB: heapless::RingBuffer<u8, [u8; 128]> = heapless::RingBuffer::new();
     },
 
     init: {
@@ -47,7 +53,7 @@ app! {
     },
 
     tasks: {
-        DMA1_CHANNEL6: {
+        DMA1_CH5: {
             path: rx,
             resources: [CB, STDOUT, MMGR],
         },
@@ -69,36 +75,24 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    let mut flash = p.device.FLASH.constrain();
-    let mut rcc = p.device.RCC.constrain();
+    let p = stm32l4x2::Peripherals::take().unwrap();
 
+    let mut flash = p.FLASH.constrain();
+    let mut rcc = p.RCC.constrain();
+    let mut gpioa = p.GPIOA.split(&mut rcc.ahb2);
+    let mut channels = p.DMA1.split(&mut rcc.ahb1);
+    
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
-    let mut afio = p.device.AFIO.constrain(&mut rcc.apb2);
+    
+    let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    
+    let serial = Serial::usart1(p.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
+    let (mut tx, mut rx) = serial.split();
 
-    let mut gpioa = p.device.GPIOA.split(&mut rcc.apb2);
-    let mut gpiob = p.device.GPIOB.split(&mut rcc.apb2);
-
-    /* USART2 Pins */
-    let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-    let rx = gpioa.pa3;
-
-    /* USART 2 initialization */
-    let serial = Serial::usart2(
-        p.device.USART2,
-        (tx, rx),
-        &mut afio.mapr,
-        9_600.bps(),
-        clocks,
-        &mut rcc.apb1,
-    );
-
-    let (_tx, rx) = serial.split();
-
-    let mut channels = p.device.DMA1.split(&mut rcc.ahb);
-
-    channels.6.listen(Event::HalfTransfer);
-    channels.6.listen(Event::TransferComplete);
+    channels.5.listen(Event::HalfTransfer);
+    channels.5.listen(Event::TransferComplete);
 
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
@@ -126,7 +120,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let mmgr = MessageManager::new(msgs, rb);
 
     init::LateResources {
-        CB: rx.circ_read(channels.6, r.BUFFER),
+        CB: rx.circ_read(channels.5, r.BUFFER),
         STDOUT: itm,
         MMGR: mmgr,
     }
@@ -139,7 +133,7 @@ fn idle() -> ! {
 }
 /// Example Incoming payload
 /// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
-fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
+fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     r.CB

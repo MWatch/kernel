@@ -1,0 +1,815 @@
+#![feature(prelude_import)]
+#![no_std]
+#![feature(use_extern_macros)]
+#![feature(proc_macro_gen)]
+#![feature(proc_macro_mod)]
+#![feature(proc_macro_span)]
+#![feature(proc_macro_diagnostic)]
+#![feature(proc_macro_raw_ident)]
+#![deny(unsafe_code)]
+// #![deny(warnings)]
+#![feature(lang_items)]
+#![no_std]
+#[prelude_import]
+use core::prelude::v1::*;
+#[macro_use]
+extern crate core;
+#[macro_use]
+extern crate compiler_builtins;
+extern crate panic_abort;
+#[macro_use]
+extern crate cortex_m;
+extern crate cortex_m_rtfm as rtfm;
+extern crate heapless;
+extern crate stm32l432xx_hal as hal;
+
+use hal::dma::{dma1, CircBuffer, Event};
+use hal::prelude::*;
+use hal::serial::Serial;
+// use hal::i2c::{I2c, Mode};
+use cortex_m::asm;
+use hal::stm32l4::stm32l4x2;
+use heapless::RingBuffer;
+use rtfm::atomic;
+use rtfm::{app, Threshold};
+
+/* Our includes */
+mod msgmgr {
+
+
+    /* Buffer size of DMA Half */
+    /* Body Of payload */
+    /* Number of message to store */
+
+
+
+
+
+
+    /* Enable SYS_TICK IT */
+    // 1_000_000 / 80_000_000, where 80_000_000 is HCLK
+
+
+
+
+
+
+
+
+    /* Define out block of message - surely there must be a nice way to to this? */
+
+    /* Static RB for Msg recieving */
+    // let mode = Mode::Standard { frequency: 100.khz().0 };
+    // let sclk = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
+    // let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
+
+    // let mut i2c = I2c::i2c1(p.device.I2C1, (sclk, sda), &mut afio.mapr, mode, clocks, &mut rcc.apb1);
+
+    // let byte = [0xFF];
+    // i2c.write(0x3C, &byte).unwrap();
+
+    /* Pass messages to the Message Manager */
+
+
+    /* Wait for interrupts */
+
+    // TODO IMPLEMENT - probably can be interrupted
+    // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
+    //     mgr.print_rb(out);
+    // });
+
+
+    // for byte in payload {
+    //     iprint!(out, "{}", *byte as char);
+    // }
+    // iprintln!(out, "");
+    // Payload is in the variable payload
+    extern crate heapless;
+    extern crate cortex_m;
+    extern crate cortex_m_rtfm as rtfm;
+    use heapless::RingBuffer;
+    use heapless::BufferFullError;
+    use cortex_m::asm;
+    #[rustc_copy_clone_marker]
+    pub enum MessageType { Unknown, Notification, Weather, Date, Music, }
+    #[automatically_derived]
+    #[allow(unused_qualifications)]
+    impl ::core::marker::Copy for MessageType { }
+    #[automatically_derived]
+    #[allow(unused_qualifications)]
+    impl ::core::clone::Clone for MessageType {
+        #[inline]
+        fn clone(&self) -> MessageType { { *self } }
+    }
+    #[automatically_derived]
+    #[allow(unused_qualifications)]
+    impl ::core::cmp::PartialEq for MessageType {
+        #[inline]
+        fn eq(&self, other: &MessageType) -> bool {
+            {
+                let __self_vi =
+                    unsafe { ::core::intrinsics::discriminant_value(&*self) }
+                        as isize;
+                let __arg_1_vi =
+                    unsafe { ::core::intrinsics::discriminant_value(&*other) }
+                        as isize;
+                if true && __self_vi == __arg_1_vi {
+                    match (&*self, &*other) { _ => true, }
+                } else { false }
+            }
+        }
+    }
+    #[automatically_derived]
+    #[allow(unused_qualifications)]
+    impl ::core::fmt::Debug for MessageType {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            match (&*self,) {
+                (&MessageType::Unknown,) => {
+                    let mut debug_trait_builder = f.debug_tuple("Unknown");
+                    debug_trait_builder.finish()
+                }
+                (&MessageType::Notification,) => {
+                    let mut debug_trait_builder =
+                        f.debug_tuple("Notification");
+                    debug_trait_builder.finish()
+                }
+                (&MessageType::Weather,) => {
+                    let mut debug_trait_builder = f.debug_tuple("Weather");
+                    debug_trait_builder.finish()
+                }
+                (&MessageType::Date,) => {
+                    let mut debug_trait_builder = f.debug_tuple("Date");
+                    debug_trait_builder.finish()
+                }
+                (&MessageType::Music,) => {
+                    let mut debug_trait_builder = f.debug_tuple("Music");
+                    debug_trait_builder.finish()
+                }
+            }
+        }
+    }
+    enum MessageState { Wait, Init, Type, Payload, End, }
+    const STX: u8 = 2;
+    const ETX: u8 = 3;
+    const DELIM: u8 = 31;
+    pub struct Message {
+        pub msg_type: MessageType,
+        pub payload: [u8; 256],
+        pub payload_idx: usize,
+    }
+    impl Message {
+        pub fn new(rx_buffers: [u8; 256]) -> Self {
+            Message{msg_type: MessageType::Unknown,
+                    payload: rx_buffers,
+                    payload_idx: 0,}
+        }
+        pub fn get_type(self) -> MessageType { self.msg_type }
+    }
+    pub struct MessageManager {
+        msg_pool: [Message; 8],
+        rb: &'static mut RingBuffer<u8, [u8; 128]>,
+        msg_state: MessageState,
+        msg_idx: usize,
+    }
+    impl MessageManager {
+        pub fn new(msgs: [Message; 8],
+                   ring_t: &'static mut RingBuffer<u8, [u8; 128]>) -> Self {
+            MessageManager{msg_pool: msgs,
+                           rb: ring_t,
+                           msg_state: MessageState::Init,
+                           msg_idx: 0,}
+        }
+        pub fn write(&mut self, data: &[u8]) -> Result<(), BufferFullError> {
+            for byte in data { self.rb.enqueue(*byte)?; }
+            Ok(())
+        }
+        pub fn process(&mut self) {
+            if !self.rb.is_empty() {
+                while let Some(byte) = self.rb.dequeue() {
+                    match byte {
+                        STX => { self.msg_state = MessageState::Init; }
+                        ETX => {
+                            self.msg_state = MessageState::Wait;
+                            self.msg_idx += 1;
+                            if self.msg_idx > self.msg_pool.len() {
+                                self.msg_idx = 0;
+                            }
+                        }
+                        DELIM => { self.msg_state = MessageState::Payload; }
+                        _ => {
+                            match self.msg_state {
+                                MessageState::Init => {
+                                    self.msg_state = MessageState::Type;
+                                }
+                                MessageState::Type => {
+                                    self.determine_type(byte);
+                                }
+                                MessageState::Payload => {
+                                    let mut msg =
+                                        &mut self.msg_pool[self.msg_idx];
+                                    msg.payload[msg.payload_idx] = byte;
+                                    msg.payload_idx += 1;
+                                }
+                                MessageState::Wait => { }
+                                _ => { }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        fn determine_type(&mut self, type_byte: u8) {
+            self.msg_pool[self.msg_idx].msg_type =
+                match type_byte {
+                    78 => MessageType::Notification,
+                    87 => MessageType::Weather,
+                    68 => MessageType::Date,
+                    77 => MessageType::Music,
+                    _ => MessageType::Unknown,
+                }
+        }
+        pub fn print_rb(&mut self,
+                        itm: &mut cortex_m::peripheral::itm::Stim) {
+            if self.rb.is_empty() {
+            } else {
+                ::itm::write_str(itm, "RB Contents: \n");
+                while let Some(byte) = self.rb.dequeue() {
+                    ::itm::write_fmt(itm,
+                                     ::core::fmt::Arguments::new_v1_formatted(&[""],
+                                                                              &match (&(byte
+                                                                                            as
+                                                                                            char),)
+                                                                                   {
+                                                                                   (arg0,)
+                                                                                   =>
+                                                                                   [::core::fmt::ArgumentV1::new(arg0,
+                                                                                                                 ::core::fmt::Display::fmt)],
+                                                                               },
+                                                                              &[::core::fmt::rt::v1::Argument{position:
+                                                                                                                  ::core::fmt::rt::v1::Position::At(0usize),
+                                                                                                              format:
+                                                                                                                  ::core::fmt::rt::v1::FormatSpec{fill:
+                                                                                                                                                      ' ',
+                                                                                                                                                  align:
+                                                                                                                                                      ::core::fmt::rt::v1::Alignment::Unknown,
+                                                                                                                                                  flags:
+                                                                                                                                                      0u32,
+                                                                                                                                                  precision:
+                                                                                                                                                      ::core::fmt::rt::v1::Count::Implied,
+                                                                                                                                                  width:
+                                                                                                                                                      ::core::fmt::rt::v1::Count::Implied,},}]));
+                }
+                ::itm::write_str(itm, "\n");
+            }
+        }
+        pub fn peek_message<F>(&mut self, index: usize, f: F) where
+         F: FnOnce(&Message) {
+            let msg = &self.msg_pool[index];
+            f(&msg);
+        }
+        pub fn latest(&self) -> usize { self.msg_idx }
+        pub fn msg_count(&self) -> usize { self.msg_idx + 1 }
+    }
+}
+use msgmgr::Message;
+use msgmgr::MessageManager;
+const CB_HALF_LEN: usize = 64;
+const MSG_PAYLOAD_SIZE: usize = 256;
+const MSG_COUNT: usize = 8;
+#[allow(unsafe_code)]
+unsafe impl rtfm::Resource for SYS_TICK::MMGR {
+    type
+    Data
+    =
+    MessageManager;
+    fn borrow<'cs>(&'cs self, t: &'cs Threshold) -> &'cs Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &MMGR.some }
+    }
+    fn borrow_mut<'cs>(&'cs mut self, t: &'cs Threshold)
+     -> &'cs mut Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &mut MMGR.some }
+    }
+    fn claim<R, F>(&self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&MMGR.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+    fn claim_mut<R, F>(&mut self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&mut Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&mut MMGR.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+}
+#[allow(unsafe_code)]
+impl core::ops::Deref for SYS_TICK::MMGR {
+    type
+    Target
+    =
+    MessageManager;
+    fn deref(&self) -> &Self::Target { unsafe { &MMGR.some } }
+}
+#[allow(unsafe_code)]
+impl core::ops::DerefMut for SYS_TICK::MMGR {
+    fn deref_mut(&mut self) -> &mut Self::Target { unsafe { &mut MMGR.some } }
+}
+#[allow(unsafe_code)]
+unsafe impl rtfm::Resource for SYS_TICK::STDOUT {
+    type
+    Data
+    =
+    cortex_m::peripheral::ITM;
+    fn borrow<'cs>(&'cs self, t: &'cs Threshold) -> &'cs Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &STDOUT.some }
+    }
+    fn borrow_mut<'cs>(&'cs mut self, t: &'cs Threshold)
+     -> &'cs mut Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &mut STDOUT.some }
+    }
+    fn claim<R, F>(&self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&STDOUT.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+    fn claim_mut<R, F>(&mut self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&mut Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&mut STDOUT.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t,
+                        f)
+        }
+    }
+}
+#[allow(unsafe_code)]
+impl core::ops::Deref for SYS_TICK::STDOUT {
+    type
+    Target
+    =
+    cortex_m::peripheral::ITM;
+    fn deref(&self) -> &Self::Target { unsafe { &STDOUT.some } }
+}
+#[allow(unsafe_code)]
+impl core::ops::DerefMut for SYS_TICK::STDOUT {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut STDOUT.some }
+    }
+}
+#[allow(non_snake_case)]
+#[allow(unsafe_code)]
+#[export_name = "SYS_TICK"]
+pub unsafe extern "C" fn SYS_TICK() {
+    let f: fn(&mut rtfm::Threshold, SYS_TICK::Resources) = sys_tick;
+    f(&mut if 1u8 == 1 << stm32l4x2::NVIC_PRIO_BITS {
+               rtfm::Threshold::new(::core::u8::MAX)
+           } else { rtfm::Threshold::new(1u8) }, SYS_TICK::Resources::new())
+}
+#[allow(non_snake_case)]
+#[allow(unsafe_code)]
+mod SYS_TICK {
+    #[allow(unused_imports)]
+    use core::marker::PhantomData;
+    #[allow(dead_code)]
+    #[deny(const_err)]
+    pub const CHECK_PRIORITY: (u8, u8) =
+        (1u8 - 1, (1 << ::stm32l4x2::NVIC_PRIO_BITS) - 1u8);
+    #[allow(non_camel_case_types)]
+    pub struct MMGR {
+        _0: PhantomData<*const ()>,
+    }
+    #[allow(non_camel_case_types)]
+    pub struct STDOUT {
+        _0: PhantomData<*const ()>,
+    }
+    #[allow(non_snake_case)]
+    pub struct Resources {
+        pub MMGR: MMGR,
+        pub STDOUT: STDOUT,
+    }
+    #[allow(unsafe_code)]
+    impl Resources {
+        pub unsafe fn new() -> Self {
+            Resources{MMGR: MMGR{_0: PhantomData,},
+                      STDOUT: STDOUT{_0: PhantomData,},}
+        }
+    }
+}
+#[allow(unsafe_code)]
+unsafe impl rtfm::Resource for DMA1_CHANNEL5::STDOUT {
+    type
+    Data
+    =
+    cortex_m::peripheral::ITM;
+    fn borrow<'cs>(&'cs self, t: &'cs Threshold) -> &'cs Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &STDOUT.some }
+    }
+    fn borrow_mut<'cs>(&'cs mut self, t: &'cs Threshold)
+     -> &'cs mut Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &mut STDOUT.some }
+    }
+    fn claim<R, F>(&self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&STDOUT.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+    fn claim_mut<R, F>(&mut self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&mut Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&mut STDOUT.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t,
+                        f)
+        }
+    }
+}
+#[allow(unsafe_code)]
+impl core::ops::Deref for DMA1_CHANNEL5::STDOUT {
+    type
+    Target
+    =
+    cortex_m::peripheral::ITM;
+    fn deref(&self) -> &Self::Target { unsafe { &STDOUT.some } }
+}
+#[allow(unsafe_code)]
+impl core::ops::DerefMut for DMA1_CHANNEL5::STDOUT {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut STDOUT.some }
+    }
+}
+#[allow(unsafe_code)]
+unsafe impl rtfm::Resource for DMA1_CHANNEL5::MMGR {
+    type
+    Data
+    =
+    MessageManager;
+    fn borrow<'cs>(&'cs self, t: &'cs Threshold) -> &'cs Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &MMGR.some }
+    }
+    fn borrow_mut<'cs>(&'cs mut self, t: &'cs Threshold)
+     -> &'cs mut Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &mut MMGR.some }
+    }
+    fn claim<R, F>(&self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&MMGR.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+    fn claim_mut<R, F>(&mut self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&mut Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&mut MMGR.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+}
+#[allow(unsafe_code)]
+impl core::ops::Deref for DMA1_CHANNEL5::MMGR {
+    type
+    Target
+    =
+    MessageManager;
+    fn deref(&self) -> &Self::Target { unsafe { &MMGR.some } }
+}
+#[allow(unsafe_code)]
+impl core::ops::DerefMut for DMA1_CHANNEL5::MMGR {
+    fn deref_mut(&mut self) -> &mut Self::Target { unsafe { &mut MMGR.some } }
+}
+#[allow(unsafe_code)]
+unsafe impl rtfm::Resource for DMA1_CHANNEL5::CB {
+    type Data = CircBuffer<[u8; CB_HALF_LEN], dma1::C5>;
+    fn borrow<'cs>(&'cs self, t: &'cs Threshold) -> &'cs Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &CB.some }
+    }
+    fn borrow_mut<'cs>(&'cs mut self, t: &'cs Threshold)
+     -> &'cs mut Self::Data {
+        if !(t.value() >= 1u8) {
+            {
+                ::panicking::panic(&("assertion failed: t.value() >= 1u8",
+                                     "src/main.rs", 38u32, 1u32))
+            }
+        };
+        unsafe { &mut CB.some }
+    }
+    fn claim<R, F>(&self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&Self::Data, &mut Threshold) -> R {
+        unsafe { rtfm::claim(&CB.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f) }
+    }
+    fn claim_mut<R, F>(&mut self, t: &mut Threshold, f: F) -> R where
+     F: FnOnce(&mut Self::Data, &mut Threshold) -> R {
+        unsafe {
+            rtfm::claim(&mut CB.some, 1u8, stm32l4x2::NVIC_PRIO_BITS, t, f)
+        }
+    }
+}
+#[allow(unsafe_code)]
+impl core::ops::Deref for DMA1_CHANNEL5::CB {
+    type
+    Target
+    =
+    CircBuffer<[u8; CB_HALF_LEN], dma1::C5>;
+    fn deref(&self) -> &Self::Target { unsafe { &CB.some } }
+}
+#[allow(unsafe_code)]
+impl core::ops::DerefMut for DMA1_CHANNEL5::CB {
+    fn deref_mut(&mut self) -> &mut Self::Target { unsafe { &mut CB.some } }
+}
+#[allow(non_snake_case)]
+#[allow(unsafe_code)]
+#[export_name = "DMA1_CHANNEL5"]
+pub unsafe extern "C" fn DMA1_CHANNEL5() {
+    let f: fn(&mut rtfm::Threshold, DMA1_CHANNEL5::Resources) = rx;
+    f(&mut if 1u8 == 1 << stm32l4x2::NVIC_PRIO_BITS {
+               rtfm::Threshold::new(::core::u8::MAX)
+           } else { rtfm::Threshold::new(1u8) },
+      DMA1_CHANNEL5::Resources::new())
+}
+#[allow(non_snake_case)]
+#[allow(unsafe_code)]
+mod DMA1_CHANNEL5 {
+    #[allow(unused_imports)]
+    use core::marker::PhantomData;
+    #[allow(dead_code)]
+    #[deny(const_err)]
+    pub const CHECK_PRIORITY: (u8, u8) =
+        (1u8 - 1, (1 << ::stm32l4x2::NVIC_PRIO_BITS) - 1u8);
+    #[allow(non_camel_case_types)]
+    pub struct STDOUT {
+        _0: PhantomData<*const ()>,
+    }
+    #[allow(non_camel_case_types)]
+    pub struct MMGR {
+        _0: PhantomData<*const ()>,
+    }
+    #[allow(non_camel_case_types)]
+    pub struct CB {
+        _0: PhantomData<*const ()>,
+    }
+    #[allow(non_snake_case)]
+    pub struct Resources {
+        pub STDOUT: STDOUT,
+        pub MMGR: MMGR,
+        pub CB: CB,
+    }
+    #[allow(unsafe_code)]
+    impl Resources {
+        pub unsafe fn new() -> Self {
+            Resources{STDOUT: STDOUT{_0: PhantomData,},
+                      MMGR: MMGR{_0: PhantomData,},
+                      CB: CB{_0: PhantomData,},}
+        }
+    }
+}
+#[allow(non_camel_case_types)]
+#[allow(non_snake_case)]
+pub struct _initResources {
+    pub BUFFER: &'static mut [[u8; CB_HALF_LEN]; 2],
+    pub MSG_PAYLOADS: &'static mut [[u8; MSG_PAYLOAD_SIZE]; MSG_COUNT],
+    pub RB: &'static mut RingBuffer<u8, [u8; 128]>,
+}
+#[allow(non_camel_case_types)]
+#[allow(non_snake_case)]
+pub struct _initLateResources {
+    pub CB: CircBuffer<[u8; CB_HALF_LEN], dma1::C5>,
+    pub MMGR: MessageManager,
+    pub STDOUT: cortex_m::peripheral::ITM,
+}
+#[allow(unsafe_code)]
+mod init {
+    pub struct Peripherals {
+        pub core: ::stm32l4x2::CorePeripherals,
+        pub device: ::stm32l4x2::Peripherals,
+    }
+    pub use ::_initResources as Resources;
+    #[allow(unsafe_code)]
+    impl Resources<> {
+        pub unsafe fn new() -> Self {
+            Resources{BUFFER:
+                          {
+                              static mut BUFFER: [[u8; CB_HALF_LEN]; 2] =
+                                  [[0; CB_HALF_LEN]; 2];
+                              &mut BUFFER
+                          },
+                      MSG_PAYLOADS:
+                          {
+                              static mut MSG_PAYLOADS:
+                                     [[u8; MSG_PAYLOAD_SIZE]; MSG_COUNT] =
+                                  [[0; MSG_PAYLOAD_SIZE]; MSG_COUNT];
+                              &mut MSG_PAYLOADS
+                          },
+                      RB:
+                          {
+                              static mut RB: RingBuffer<u8, [u8; 128]> =
+                                  RingBuffer::new();
+                              &mut RB
+                          },}
+        }
+    }
+    pub use ::_initLateResources as LateResources;
+}
+static mut STDOUT: rtfm::UntaggedOption<cortex_m::peripheral::ITM> =
+    rtfm::UntaggedOption{none: (),};
+static mut MMGR: rtfm::UntaggedOption<MessageManager> =
+    rtfm::UntaggedOption{none: (),};
+static mut CB: rtfm::UntaggedOption<CircBuffer<[u8; CB_HALF_LEN], dma1::C5>> =
+    rtfm::UntaggedOption{none: (),};
+#[allow(unsafe_code)]
+fn main() {
+    #![allow(path_statements)]
+    SYS_TICK::CHECK_PRIORITY;
+    DMA1_CHANNEL5::CHECK_PRIORITY;
+    let init:
+            fn(init::Peripherals, init::Resources) -> ::init::LateResources =
+        init;
+    rtfm::atomic(unsafe { &mut rtfm::Threshold::new(0) },
+                 |_t|
+                     unsafe {
+                         let _late_resources =
+                             init(init::Peripherals{core:
+                                                        ::stm32l4x2::CorePeripherals::steal(),
+                                                    device:
+                                                        ::stm32l4x2::Peripherals::steal(),},
+                                  init::Resources::new());
+                         CB = rtfm::UntaggedOption{some: _late_resources.CB,};
+                         MMGR =
+                             rtfm::UntaggedOption{some:
+                                                      _late_resources.MMGR,};
+                         STDOUT =
+                             rtfm::UntaggedOption{some:
+                                                      _late_resources.STDOUT,};
+                         let scb = &*stm32l4x2::SCB::ptr();
+                         let prio_bits = stm32l4x2::NVIC_PRIO_BITS;
+                         let hw = ((1 << prio_bits) - 1u8) << (8 - prio_bits);
+                         scb.shpr[15usize - 4].write(hw);
+                         use stm32l4x2::Interrupt;
+                         let mut nvic: stm32l4x2::NVIC =
+                             core::mem::transmute(());
+                         let prio_bits = stm32l4x2::NVIC_PRIO_BITS;
+                         let hw = ((1 << prio_bits) - 1u8) << (8 - prio_bits);
+                         nvic.set_priority(Interrupt::DMA1_CHANNEL5, hw);
+                         nvic.enable(Interrupt::DMA1_CHANNEL5);
+                     });
+    let idle: fn() -> ! = idle;
+    idle();
+}
+fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
+    let mut itm = p.core.ITM;
+    ::itm::write_str(&mut itm.stim[0], "Hello, world!\n");
+    let mut syst = p.core.SYST;
+    syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+    syst.set_reload(1000000);
+    syst.enable_interrupt();
+    syst.enable_counter();
+    let p = stm32l4x2::Peripherals::take().unwrap();
+    let mut flash = p.FLASH.constrain();
+    let mut rcc = p.RCC.constrain();
+    let mut gpioa = p.GPIOA.split(&mut rcc.ahb2);
+    let channels = p.DMA1.split(&mut rcc.ahb1);
+    let clocks = rcc.cfgr.freeze(&mut flash.acr);
+    let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    let serial =
+        Serial::usart1(p.USART1, (tx, rx), 9600.bps(), clocks, &mut rcc.apb2);
+    let (mut tx, mut rx) = serial.split();
+    channels.5.listen(Event::HalfTransfer);
+    channels.5.listen(Event::TransferComplete);
+    let msgs: [msgmgr::Message; 8] =
+        [Message::new(r.MSG_PAYLOADS[0]), Message::new(r.MSG_PAYLOADS[1]),
+         Message::new(r.MSG_PAYLOADS[2]), Message::new(r.MSG_PAYLOADS[3]),
+         Message::new(r.MSG_PAYLOADS[4]), Message::new(r.MSG_PAYLOADS[5]),
+         Message::new(r.MSG_PAYLOADS[6]), Message::new(r.MSG_PAYLOADS[7])];
+    let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB;
+    let mmgr = MessageManager::new(msgs, rb);
+    init::LateResources{CB: rx.circ_read(channels.5, r.BUFFER),
+                        STDOUT: itm,
+                        MMGR: mmgr,}
+}
+fn idle() -> ! { loop  { rtfm::wfi(); } }
+/// Example Incoming payload
+/// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
+fn rx(_t: &mut Threshold, mut r: DMA1_CHANNEL6::Resources) {
+    let out = &mut r.STDOUT.stim[0];
+    let mut mgr = r.MMGR;
+    r.CB.peek(|buf, _half|
+                  {
+                      match mgr.write(buf) {
+                          Ok(_) => { }
+                          Err(e) => {
+                              ::itm::write_fmt(out,
+                                               ::core::fmt::Arguments::new_v1_formatted(&["Failed to write to RingBuffer: ",
+                                                                                          "\n"],
+                                                                                        &match (&e,)
+                                                                                             {
+                                                                                             (arg0,)
+                                                                                             =>
+                                                                                             [::core::fmt::ArgumentV1::new(arg0,
+                                                                                                                           ::core::fmt::Debug::fmt)],
+                                                                                         },
+                                                                                        &[::core::fmt::rt::v1::Argument{position:
+                                                                                                                            ::core::fmt::rt::v1::Position::At(0usize),
+                                                                                                                        format:
+                                                                                                                            ::core::fmt::rt::v1::FormatSpec{fill:
+                                                                                                                                                                ' ',
+                                                                                                                                                            align:
+                                                                                                                                                                ::core::fmt::rt::v1::Alignment::Unknown,
+                                                                                                                                                            flags:
+                                                                                                                                                                0u32,
+                                                                                                                                                            precision:
+                                                                                                                                                                ::core::fmt::rt::v1::Count::Implied,
+                                                                                                                                                            width:
+                                                                                                                                                                ::core::fmt::rt::v1::Count::Implied,},}]));
+                          }
+                      }
+                  }).unwrap();
+}
+fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources) {
+    let out = &mut r.STDOUT.stim[0];
+    let mut mgr = r.MMGR;
+    mgr.process();
+    let msg_count = mgr.msg_count();
+    for i in 0..msg_count {
+        mgr.peek_message(i,
+                         |msg|
+                             {
+                                 let payload: &[u8] = &msg.payload;
+                                 let len = msg.payload_idx;
+                                 if len > 0 {
+                                     ::itm::write_fmt(out,
+                                                      ::core::fmt::Arguments::new_v1_formatted(&["MSG[",
+                                                                                                 "] \n"],
+                                                                                               &match (&i,)
+                                                                                                    {
+                                                                                                    (arg0,)
+                                                                                                    =>
+                                                                                                    [::core::fmt::ArgumentV1::new(arg0,
+                                                                                                                                  ::core::fmt::Display::fmt)],
+                                                                                                },
+                                                                                               &[::core::fmt::rt::v1::Argument{position:
+                                                                                                                                   ::core::fmt::rt::v1::Position::At(0usize),
+                                                                                                                               format:
+                                                                                                                                   ::core::fmt::rt::v1::FormatSpec{fill:
+                                                                                                                                                                       ' ',
+                                                                                                                                                                   align:
+                                                                                                                                                                       ::core::fmt::rt::v1::Alignment::Unknown,
+                                                                                                                                                                   flags:
+                                                                                                                                                                       0u32,
+                                                                                                                                                                   precision:
+                                                                                                                                                                       ::core::fmt::rt::v1::Count::Implied,
+                                                                                                                                                                   width:
+                                                                                                                                                                       ::core::fmt::rt::v1::Count::Implied,},}]));
+                                 }
+                             });
+    }
+}
