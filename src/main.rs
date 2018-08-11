@@ -10,6 +10,7 @@
 // #![feature(lang_items)]
 #![no_std]
 #![no_main]
+
 extern crate panic_abort;
 #[macro_use]
 extern crate cortex_m;
@@ -37,9 +38,9 @@ mod msgmgr;
 use msgmgr::Message;
 use msgmgr::MessageManager;
 
-const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
-const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
-const MSG_COUNT: usize = 8; /* Number of message to store */
+// const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
+// const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
+// const MSG_COUNT: usize = 8; /* Number of message to store */
 
 entry!(main);
 
@@ -49,6 +50,7 @@ fn hard_fault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
+// TODO this catches systick, RTFM needs to strong link against it
 exception!(*, default_handler);
 
 fn default_handler(irqn: i16) {
