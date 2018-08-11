@@ -7,8 +7,9 @@
 #![deny(unsafe_code)]
 #![feature(extern_prelude)]
 // #![deny(warnings)]
-#![feature(lang_items)]
+// #![feature(lang_items)]
 #![no_std]
+#![no_main]
 extern crate panic_abort;
 #[macro_use]
 extern crate cortex_m;
@@ -16,6 +17,10 @@ extern crate cortex_m_rtfm as rtfm;
 extern crate heapless;
 extern crate stm32l432xx_hal as hal;
 
+#[macro_use(entry, exception)]
+extern crate cortex_m_rt as rt;
+
+use rt::ExceptionFrame;
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
 use hal::serial::Serial;
@@ -35,6 +40,20 @@ use msgmgr::MessageManager;
 const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
 const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
 const MSG_COUNT: usize = 8; /* Number of message to store */
+
+entry!(main);
+
+exception!(HardFault, hard_fault);
+
+fn hard_fault(ef: &ExceptionFrame) -> ! {
+    panic!("{:#?}", ef);
+}
+
+exception!(*, default_handler);
+
+fn default_handler(irqn: i16) {
+    panic!("Unhandled exception (IRQn = {})", irqn);
+}
 
 app! {
     device: stm32l4x2,
@@ -75,12 +94,12 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    let p = stm32l4x2::Peripherals::take().unwrap();
+    // let p = stm32l4x2::Peripherals::take().unwrap();
 
-    let mut flash = p.FLASH.constrain();
-    let mut rcc = p.RCC.constrain();
-    let mut gpioa = p.GPIOA.split(&mut rcc.ahb2);
-    let mut channels = p.DMA1.split(&mut rcc.ahb1);
+    let mut flash = p.device.FLASH.constrain();
+    let mut rcc = p.device.RCC.constrain();
+    let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
+    let mut channels = p.device.DMA1.split(&mut rcc.ahb1);
     
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -88,7 +107,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     
-    let serial = Serial::usart1(p.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
+    let serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
     let (mut tx, mut rx) = serial.split();
 
     channels.5.listen(Event::HalfTransfer);
