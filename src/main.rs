@@ -25,6 +25,7 @@ use rt::ExceptionFrame;
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
 use hal::serial::Serial;
+use hal::timer::{Timer, Event as TimerEvent};
 // use hal::i2c::{I2c, Mode};
 use cortex_m::asm;
 use hal::stm32l4::stm32l4x2;
@@ -67,6 +68,7 @@ app! {
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
         static RB: heapless::RingBuffer<u8, [u8; 128]> = heapless::RingBuffer::new();
+        // static TICK : hal::timer::Timer<hal::stm32l4::stm32l4x2::TIM2>;
     },
 
     init: {
@@ -78,7 +80,7 @@ app! {
             path: rx,
             resources: [CB, STDOUT, MMGR],
         },
-        SYS_TICK: {
+        TIM2: {
             path: sys_tick,
             resources: [STDOUT, MMGR],
         },
@@ -90,11 +92,11 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     iprintln!(&mut itm.stim[0], "Hello, world!");
 
     /* Enable SYS_TICK IT */
-    let mut syst = p.core.SYST;
-    syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    syst.set_reload(1_000_000); // 1_000_000 / 80_000_000, where 80_000_000 is HCLK
-    syst.enable_interrupt();
-    syst.enable_counter();
+    // let mut syst = p.core.SYST;
+    // syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+    // syst.set_reload(1_000_000); // 1_000_000 / 80_000_000, where 80_000_000 is HCLK
+    // syst.enable_interrupt();
+    // syst.enable_counter();
 
     // let p = stm32l4x2::Peripherals::take().unwrap();
 
@@ -128,22 +130,18 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     ];
 
     let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
-    // let mode = Mode::Standard { frequency: 100.khz().0 };
-    // let sclk = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
-    // let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
-
-    // let mut i2c = I2c::i2c1(p.device.I2C1, (sclk, sda), &mut afio.mapr, mode, clocks, &mut rcc.apb1);
-
-    // let byte = [0xFF];
-    // i2c.write(0x3C, &byte).unwrap();
 
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
+    let mut timer = Timer::tim2(p.device.TIM2, 1.hz(), clocks, &mut rcc.apb1r1);
+    timer.listen(TimerEvent::TimeOut);
+    // timer.start(1.hz());
+
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
         STDOUT: itm,
-        MMGR: mmgr,
+        MMGR: mmgr
     }
 }
 
@@ -169,7 +167,7 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
         .unwrap();
 }
 
-fn sys_tick(_t: &mut Threshold, mut r: SYS_TICK::Resources) {
+fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     let out = &mut r.STDOUT.stim[0];
     let mut mgr = r.MMGR;
     mgr.process(); // TODO IMPLEMENT - probably can be interrupted
