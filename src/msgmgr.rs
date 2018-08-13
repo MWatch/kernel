@@ -118,9 +118,6 @@ impl MessageManager
                                 msg.payload_idx += 1;
                             }
                             MessageState::Wait => {
-                                
-                            }
-                            _ => {
                                 // do nothing, useless bytes
                             }
                         }

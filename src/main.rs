@@ -177,7 +177,8 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
                 }
                 
                 Ok( (len, ()) )
-            });
+            })
+            .unwrap();
 
     }
 }
