@@ -94,7 +94,7 @@ impl MessageManager
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.msg_state = MessageState::Wait;
                         self.msg_idx += 1;
-                        if self.msg_idx > self.msg_pool.len() {
+                        if self.msg_count() > self.msg_pool.len() {
                             /* buffer is full, wrap around */        
                             self.msg_idx = 0;
                         }

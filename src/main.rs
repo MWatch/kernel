@@ -4,17 +4,19 @@
 #![feature(proc_macro_span)]
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_raw_ident)]
-#![deny(unsafe_code)]
 #![feature(extern_prelude)]
+// #![deny(unsafe_code)]
 // #![deny(warnings)]
 // #![feature(lang_items)]
 #![no_std]
 #![no_main]
 
-extern crate panic_abort;
+// extern crate panic_abort;
+extern crate panic_semihosting;
 #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
+extern crate cortex_m_semihosting as sh;
 extern crate heapless;
 extern crate stm32l432xx_hal as hal;
 
@@ -24,24 +26,20 @@ extern crate cortex_m_rt as rt;
 use rt::ExceptionFrame;
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
-use hal::serial::Serial;
+use hal::serial::{Serial, Event as SerialEvent};
 use hal::timer::{Timer, Event as TimerEvent};
-// use hal::i2c::{I2c, Mode};
-use cortex_m::asm;
 use hal::stm32l4::stm32l4x2;
+use hal::stm32l4::stm32l4x2::USART1 as US1;
 use heapless::RingBuffer;
-use rtfm::atomic;
 use rtfm::{app, Threshold};
+use core::fmt::Write;
+use sh::hio;
 
 /* Our includes */
 mod msgmgr;
 
 use msgmgr::Message;
 use msgmgr::MessageManager;
-
-// const CB_HALF_LEN: usize = 64; /* Buffer size of DMA Half */
-// const MSG_PAYLOAD_SIZE: usize = 256; /* Body Of payload */
-// const MSG_COUNT: usize = 8; /* Number of message to store */
 
 entry!(main);
 
@@ -62,13 +60,13 @@ app! {
     device: stm32l4x2,
 
     resources: {
-        static STDOUT: cortex_m::peripheral::ITM;
+        static STDOUT: sh::hio::HStdout;
         static BUFFER: [[u8; 64]; 2] = [[0; 64]; 2];
         static CB: CircBuffer<[u8; 64], dma1::C5>;
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
         static RB: heapless::RingBuffer<u8, [u8; 128]> = heapless::RingBuffer::new();
-        // static TICK : hal::timer::Timer<hal::stm32l4::stm32l4x2::TIM2>;
+        static USART1_TX: hal::serial::Tx<hal::stm32l4::stm32l4x2::USART1>;
     },
 
     init: {
@@ -84,21 +82,16 @@ app! {
             path: sys_tick,
             resources: [STDOUT, MMGR],
         },
+        USART1: {
+            path: rx_idle,
+            resources: [STDOUT, CB, MMGR, USART1_TX],
+        },
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
-    let mut itm = p.core.ITM;
-    iprintln!(&mut itm.stim[0], "Hello, world!");
 
-    /* Enable SYS_TICK IT */
-    // let mut syst = p.core.SYST;
-    // syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-    // syst.set_reload(1_000_000); // 1_000_000 / 80_000_000, where 80_000_000 is HCLK
-    // syst.enable_interrupt();
-    // syst.enable_counter();
-
-    // let p = stm32l4x2::Peripherals::take().unwrap();
+    let mut hstdout = hio::hstdout().unwrap();
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
@@ -107,16 +100,16 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
-    
     let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     
-    let serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
+    let mut serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
+    serial.listen(SerialEvent::Idle); // Listen to Idle Line detection
     let (mut tx, mut rx) = serial.split();
 
     channels.5.listen(Event::HalfTransfer);
     channels.5.listen(Event::TransferComplete);
-
+    
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
         Message::new(r.MSG_PAYLOADS[0]),
@@ -134,14 +127,16 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut timer = Timer::tim2(p.device.TIM2, 1.hz(), clocks, &mut rcc.apb1r1);
-    timer.listen(TimerEvent::TimeOut);
-    // timer.start(1.hz());
+    let mut systick = Timer::tim2(p.device.TIM2, 10.hz(), clocks, &mut rcc.apb1r1);
+    systick.listen(TimerEvent::TimeOut);
+
+    writeln!(hstdout, "Init Complete!");
 
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
-        STDOUT: itm,
-        MMGR: mmgr
+        STDOUT: hstdout,
+        MMGR: mmgr,
+        USART1_TX: tx
     }
 }
 
@@ -153,41 +148,70 @@ fn idle() -> ! {
 /// Example Incoming payload
 /// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
 fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
-    let out = &mut r.STDOUT.stim[0];
+    let out = &mut r.STDOUT; // .stim[0];
     let mut mgr = r.MMGR;
     r.CB
         .peek(|buf, _half| {
             match mgr.write(buf) {
                 Ok(_) => {}
                 Err(e) => {
-                    iprintln!(out, "Failed to write to RingBuffer: {:?}", e);
+                    writeln!(out, "Failed to write to RingBuffer: {:?}", e);
                 }
             }
         })
         .unwrap();
 }
 
-fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
-    let out = &mut r.STDOUT.stim[0];
-    let mut mgr = r.MMGR;
-    mgr.process(); // TODO IMPLEMENT - probably can be interrupted
-                   // atomic(_t, |_cs| { // dont interrrupt the printint process, so we run it atomically
-                   //     mgr.print_rb(out);
-                   // });
-    let msg_count = mgr.msg_count();
+fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 
-    for i in 0..msg_count {
-        mgr.peek_message(i, |msg| {
-            let payload: &[u8] = &msg.payload;
-            let len = msg.payload_idx;
-            if len > 0 {
-                iprintln!(out, "MSG[{}] ", i);
-                // for byte in payload {
-                //     iprint!(out, "{}", *byte as char);
-                // }
-                // iprintln!(out, "");
-            }
-            // Payload is in the variable payload
+    let isr = unsafe { &(*US1::ptr()).isr.read() };
+    if isr.idle().bit_is_set() {
+        let icr = unsafe { &(*US1::ptr()).icr };
+        icr.write(|w| {
+            w.idlecf()
+            .set_bit()
         });
+
+        let mut mgr = r.MMGR;
+        let status = r.CB
+            .partial_peek(|buf, _half| {
+                let len = buf.len();
+                if len > 0 {
+                    match mgr.write(buf) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            panic!("Failed to write to RingBuffer: {:?}", e);
+                        }
+                    }
+                }
+                
+                Ok( (len, ()) )
+            });
+        match status {
+            Ok(_) => {},
+            Err(e) => panic!("Partial peek failed")
+        }
     }
+}
+
+fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
+    let out = &mut r.STDOUT; // .stim[0]
+    let mut mgr = r.MMGR;
+    mgr.process();
+    let msg_count = mgr.msg_count();
+    writeln!(out, "MSGS[{}] ", msg_count);
+    // for i in 0..msg_count {
+    //     mgr.peek_message(i, |msg| {
+    //         let payload: &[u8] = &msg.payload;
+    //         let len = msg.payload_idx;
+    //         if len > 0 {
+    //             writeln!(out, "MSG[{}] ", i);
+    //             // for byte in payload {
+    //             //     iprint!(out, "{}", *byte as char);
+    //             // }
+    //             // iprintln!(out, "");
+    //         }
+    //         // Payload is in the variable payload
+    //     });
+    // }
 }

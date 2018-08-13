@@ -26,10 +26,13 @@ cortex-m-rtfm = { git = "https://github.com/mabezdev/cortex-m-rtfm" }
 # cortex-m-rtfm = { path = "../../util/cortex-m-rtfm" }
 heapless = "0.2.4" # "0.3.6"
 panic-semihosting = "0.3.0"
-panic-abort = "0.2.0"
+# panic-abort = "0.2.0"
 
 [dependencies.stm32l432xx-hal]
-version = "0.1.0"
+# version = "0.1.0"
+# git = "https://github.com/mabezdev/stm32l432xx-hal"
+# branch = "dma-circ-fixes"
+path = "../../hal/stm32l432xx-hal"
 
 [dependencies.stm32l4]
 version = "0.2.1"
