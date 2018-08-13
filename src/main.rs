@@ -29,7 +29,6 @@ use hal::prelude::*;
 use hal::serial::{Serial, Event as SerialEvent};
 use hal::timer::{Timer, Event as TimerEvent};
 use hal::stm32l4::stm32l4x2;
-use hal::stm32l4::stm32l4x2::USART1 as US1;
 use heapless::RingBuffer;
 use rtfm::{app, Threshold};
 use core::fmt::Write;
@@ -66,7 +65,7 @@ app! {
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
         static RB: heapless::RingBuffer<u8, [u8; 128]> = heapless::RingBuffer::new();
-        static USART1_TX: hal::serial::Tx<hal::stm32l4::stm32l4x2::USART1>;
+        static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
     },
 
     init: {
@@ -74,17 +73,17 @@ app! {
     },
 
     tasks: {
-        DMA1_CH5: {
+        DMA1_CH5: { /* DMA channel for Usart1 RX */
             path: rx,
             resources: [CB, STDOUT, MMGR],
+        },
+        USART1: { /* Global usart1 it, uses for idle line detection */
+            path: rx_idle,
+            resources: [STDOUT, CB, MMGR, USART1_RX],
         },
         TIM2: {
             path: sys_tick,
             resources: [STDOUT, MMGR],
-        },
-        USART1: {
-            path: rx_idle,
-            resources: [STDOUT, CB, MMGR, USART1_TX],
         },
     }
 }
@@ -105,7 +104,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     
     let mut serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
     serial.listen(SerialEvent::Idle); // Listen to Idle Line detection
-    let (mut tx, mut rx) = serial.split();
+    let (_, rx) = serial.split();
 
     channels.5.listen(Event::HalfTransfer);
     channels.5.listen(Event::TransferComplete);
@@ -127,7 +126,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut systick = Timer::tim2(p.device.TIM2, 10.hz(), clocks, &mut rcc.apb1r1);
+    let mut systick = Timer::tim2(p.device.TIM2, 1.khz(), clocks, &mut rcc.apb1r1);
     systick.listen(TimerEvent::TimeOut);
 
     writeln!(hstdout, "Init Complete!");
@@ -136,7 +135,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
         STDOUT: hstdout,
         MMGR: mmgr,
-        USART1_TX: tx
+        USART1_RX: rx
     }
 }
 
@@ -148,14 +147,13 @@ fn idle() -> ! {
 /// Example Incoming payload
 /// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
 fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
-    let out = &mut r.STDOUT; // .stim[0];
     let mut mgr = r.MMGR;
     r.CB
         .peek(|buf, _half| {
             match mgr.write(buf) {
                 Ok(_) => {}
                 Err(e) => {
-                    writeln!(out, "Failed to write to RingBuffer: {:?}", e);
+                    panic!("Failed to write to RingBuffer: {:?}", e);
                 }
             }
         })
@@ -163,17 +161,10 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
 }
 
 fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
-
-    let isr = unsafe { &(*US1::ptr()).isr.read() };
-    if isr.idle().bit_is_set() {
-        let icr = unsafe { &(*US1::ptr()).icr };
-        icr.write(|w| {
-            w.idlecf()
-            .set_bit()
-        });
+    if r.USART1_RX.is_idle(true) {
 
         let mut mgr = r.MMGR;
-        let status = r.CB
+        r.CB
             .partial_peek(|buf, _half| {
                 let len = buf.len();
                 if len > 0 {
@@ -187,10 +178,7 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
                 
                 Ok( (len, ()) )
             });
-        match status {
-            Ok(_) => {},
-            Err(e) => panic!("Partial peek failed")
-        }
+
     }
 }
 

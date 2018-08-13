@@ -6,7 +6,6 @@ extern crate cortex_m_rtfm as rtfm;
 
 use heapless::RingBuffer;
 use heapless::BufferFullError;
-use cortex_m::asm;
 
 /* 
     Message is a type
@@ -22,12 +21,13 @@ pub enum MessageType {
     Music,
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum MessageState {
     Wait, /* Waiting for data */
     Init,
     Type,
     Payload,
-    End,
+    // End,
 }
 
 const STX: u8 = 2;
