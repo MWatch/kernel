@@ -5,7 +5,7 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_raw_ident)]
 #![feature(extern_prelude)]
-// #![deny(unsafe_code)]
+#![deny(unsafe_code)]
 // #![deny(warnings)]
 // #![feature(lang_items)]
 #![no_std]
@@ -18,6 +18,8 @@ extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate cortex_m_semihosting as sh;
 extern crate heapless;
+extern crate ssd1351;
+extern crate embedded_graphics;
 extern crate stm32l432xx_hal as hal;
 
 #[macro_use(entry, exception)]
@@ -28,17 +30,34 @@ use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
 use hal::serial::{Serial, Event as SerialEvent};
 use hal::timer::{Timer, Event as TimerEvent};
+use hal::delay::Delay;
+use hal::spi::Spi;
+use hal::rtc::Rtc;
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
+use heapless::String;
+use heapless::consts::*;
 use rtfm::{app, Threshold};
+
 use core::fmt::Write;
 use sh::hio;
+
+use ssd1351::builder::Builder;
+use ssd1351::mode::{GraphicsMode};
+use ssd1351::prelude::*;
+
+use embedded_graphics::prelude::*;
+use embedded_graphics::fonts::Font12x16;
+use embedded_graphics::fonts::Font6x12;
 
 /* Our includes */
 mod msgmgr;
 
 use msgmgr::Message;
 use msgmgr::MessageManager;
+
+/// Type Alias to use in resource definitions
+type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::AF5>, hal::gpio::gpioa::PA6<hal::gpio::AF5>, hal::gpio::gpioa::PA7<hal::gpio::AF5>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
 
 entry!(main);
 
@@ -64,8 +83,10 @@ app! {
         static CB: CircBuffer<[u8; 64], dma1::C5>;
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
         static MMGR: MessageManager;
-        static RB: heapless::RingBuffer<u8, [u8; 128]> = heapless::RingBuffer::new();
+        static RB: heapless::RingBuffer<u8, heapless::consts::U128> = heapless::RingBuffer::new();
         static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
+        static DISPLAY: Ssd1351;
+        static RTC: hal::rtc::Rtc;
     },
 
     init: {
@@ -83,7 +104,7 @@ app! {
         },
         TIM2: {
             path: sys_tick,
-            resources: [STDOUT, MMGR],
+            resources: [STDOUT, MMGR, DISPLAY, RTC],
         },
     }
 }
@@ -94,11 +115,45 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
+    // let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.freeze(&mut flash.acr);
+    
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
+    let mut gpiob = p.device.GPIOB.split(&mut rcc.ahb2);
     let mut channels = p.device.DMA1.split(&mut rcc.ahb1);
     
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
+    let mut pwr = p.device.PWR.constrain(&mut rcc.apb1r1);
+    let rtc = Rtc::rtc(p.device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
+
+    /* Ssd1351 Display */
+    let mut delay = Delay::new(p.core.SYST, clocks);
+    let mut rst = gpioa
+        .pa8
+        .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper);
+
+    let dc = gpiob
+        .pb1
+        .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
+
+    let sck = gpioa.pa5.into_af5(&mut gpioa.moder, &mut gpioa.afrl);
+    let miso = gpioa.pa6.into_af5(&mut gpioa.moder, &mut gpioa.afrl);
+    let mosi = gpioa.pa7.into_af5(&mut gpioa.moder, &mut gpioa.afrl);
+
+    let spi = Spi::spi1(
+        p.device.SPI1,
+        (sck, miso, mosi),
+        SSD1351_SPI_MODE,
+        2.mhz(),
+        clocks,
+        &mut rcc.apb2,
+    );
+
+    let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc).into();
+    display.reset(&mut rst, &mut delay);
+    display.init().unwrap();
+
+    /* Serial with DMA */
     let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     
@@ -108,6 +163,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     channels.5.listen(Event::HalfTransfer);
     channels.5.listen(Event::TransferComplete);
+    
+    let rb: &'static mut RingBuffer<u8, U128> = r.RB; /* Static RB for Msg recieving */
     
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
@@ -121,7 +178,6 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         Message::new(r.MSG_PAYLOADS[7]),
     ];
 
-    let rb: &'static mut RingBuffer<u8, [u8; 128]> = r.RB; /* Static RB for Msg recieving */
 
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
@@ -135,7 +191,9 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
         STDOUT: hstdout,
         MMGR: mmgr,
-        USART1_RX: rx
+        USART1_RX: rx,
+        DISPLAY: display,
+        RTC: rtc
     }
 }
 
@@ -150,12 +208,7 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
     let mut mgr = r.MMGR;
     r.CB
         .peek(|buf, _half| {
-            match mgr.write(buf) {
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Failed to write to RingBuffer: {:?}", e);
-                }
-            }
+            mgr.write(buf);
         })
         .unwrap();
 }
@@ -168,12 +221,7 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
             .partial_peek(|buf, _half| {
                 let len = buf.len();
                 if len > 0 {
-                    match mgr.write(buf) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            panic!("Failed to write to RingBuffer: {:?}", e);
-                        }
-                    }
+                    mgr.write(buf);
                 }
                 
                 Ok( (len, ()) )
@@ -184,11 +232,10 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 }
 
 fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
-    let out = &mut r.STDOUT; // .stim[0]
     let mut mgr = r.MMGR;
     mgr.process();
     let msg_count = mgr.msg_count();
-    writeln!(out, "MSGS[{}] ", msg_count);
+    // writeln!(out, "MSGS[{}] ", msg_count);
     // for i in 0..msg_count {
     //     mgr.peek_message(i, |msg| {
     //         let payload: &[u8] = &msg.payload;
@@ -203,4 +250,19 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     //         // Payload is in the variable payload
     //     });
     // }
+
+    let mut buffer: String<U16> = String::new();
+    let time = r.RTC.get_time();
+    let date = r.RTC.get_date();
+    {
+        write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
+        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(10, 40)).into_iter());
+        buffer.clear(); // reset the buffer
+        write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
+        buffer.clear(); // reset the buffer
+        write!(buffer, "{:02}", msg_count).unwrap();
+        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
+        buffer.clear(); // reset the buffer
+    }
 }

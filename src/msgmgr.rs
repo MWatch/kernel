@@ -5,7 +5,7 @@ extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 
 use heapless::RingBuffer;
-use heapless::BufferFullError;
+use heapless::consts::*;
 
 /* 
     Message is a type
@@ -57,14 +57,14 @@ impl Message {
 
 pub struct MessageManager {
     msg_pool : [Message; 8],
-    rb: &'static mut RingBuffer<u8, [u8; 128]>,
+    rb: &'static mut RingBuffer<u8, U128>,
     msg_state: MessageState,
     msg_idx : usize,
 }
 
 impl MessageManager 
 {
-    pub fn new(msgs: [Message; 8], ring_t: &'static mut RingBuffer<u8, [u8; 128]>) -> Self {
+    pub fn new(msgs: [Message; 8], ring_t: &'static mut RingBuffer<u8, U128>) -> Self {
         MessageManager {
             msg_pool: msgs,
             rb: ring_t,
@@ -76,11 +76,11 @@ impl MessageManager
     /* 
 
      */
-    pub fn write(&mut self, data: &[u8]) -> Result<(), BufferFullError>{
+    pub fn write(&mut self, data: &[u8]){
         for byte in data {
-            self.rb.enqueue(*byte)?;
+            // this is safe because we are only storing bytes, which do not need destructors called on them
+            self.rb.enqueue_unchecked(*byte); // although we wont know if we have overwritten previous data
         }
-        Ok(())
     }
 
     pub fn process(&mut self){
