@@ -33,8 +33,6 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
-use hal::pwr::Pwr;
-use hal::datetime::{Date, Time};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
@@ -117,19 +115,19 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
-    // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+    // let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
     let mut gpiob = p.device.GPIOB.split(&mut rcc.ahb2);
     let mut channels = p.device.DMA1.split(&mut rcc.ahb1);
     
-    let mut delay = Delay::new(p.core.SYST, clocks);
 
     let mut pwr = p.device.PWR.constrain(&mut rcc.apb1r1);
     let rtc = Rtc::rtc(p.device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
 
     /* Ssd1351 Display */
+    let mut delay = Delay::new(p.core.SYST, clocks);
     let mut rst = gpioa
         .pa8
         .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper);
@@ -234,7 +232,6 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 }
 
 fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
-    let out = &mut r.STDOUT; // .stim[0]
     let mut mgr = r.MMGR;
     mgr.process();
     let msg_count = mgr.msg_count();
@@ -253,6 +250,7 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     //         // Payload is in the variable payload
     //     });
     // }
+
     let mut buffer: String<U16> = String::new();
     let time = r.RTC.get_time();
     let date = r.RTC.get_date();
