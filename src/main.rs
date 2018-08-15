@@ -1,13 +1,10 @@
 #![feature(use_extern_macros)]
-#![feature(proc_macro_gen)]
-#![feature(proc_macro_mod)]
-#![feature(proc_macro_span)]
-#![feature(proc_macro_diagnostic)]
-#![feature(proc_macro_raw_ident)]
 #![feature(extern_prelude)]
+#![feature(proc_macro_gen)]
+
 #![deny(unsafe_code)]
-// #![deny(warnings)]
-// #![feature(lang_items)]
+#![deny(warnings)]
+
 #![no_std]
 #![no_main]
 
@@ -40,7 +37,6 @@ use heapless::consts::*;
 use rtfm::{app, Threshold};
 
 use core::fmt::Write;
-use sh::hio;
 
 use ssd1351::builder::Builder;
 use ssd1351::mode::{GraphicsMode};
@@ -78,7 +74,7 @@ app! {
     device: stm32l4x2,
 
     resources: {
-        static STDOUT: sh::hio::HStdout;
+        // static STDOUT: sh::hio::HStdout;
         static BUFFER: [[u8; 64]; 2] = [[0; 64]; 2];
         static CB: CircBuffer<[u8; 64], dma1::C5>;
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
@@ -96,22 +92,22 @@ app! {
     tasks: {
         DMA1_CH5: { /* DMA channel for Usart1 RX */
             path: rx,
-            resources: [CB, STDOUT, MMGR],
+            resources: [CB, MMGR],
         },
         USART1: { /* Global usart1 it, uses for idle line detection */
             path: rx_idle,
-            resources: [STDOUT, CB, MMGR, USART1_RX],
+            resources: [CB, MMGR, USART1_RX],
         },
         TIM2: {
             path: sys_tick,
-            resources: [STDOUT, MMGR, DISPLAY, RTC],
+            resources: [MMGR, DISPLAY, RTC], // STDOUT
         },
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
-    let mut hstdout = hio::hstdout().unwrap();
+    // let hstdout = hio::hstdout().unwrap();
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
@@ -185,11 +181,11 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let mut systick = Timer::tim2(p.device.TIM2, 1.khz(), clocks, &mut rcc.apb1r1);
     systick.listen(TimerEvent::TimeOut);
 
-    writeln!(hstdout, "Init Complete!");
+    // writeln!(hstdout, "Init Complete!");
 
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
-        STDOUT: hstdout,
+        // STDOUT: hstdout,
         MMGR: mmgr,
         USART1_RX: rx,
         DISPLAY: display,
