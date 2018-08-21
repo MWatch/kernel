@@ -6,7 +6,7 @@
 
 # Building
 
-Currently buildable on the toolchain `nightly-2018-05-05`.
+Currently buildable on the toolchain `rustc 1.30.0-nightly (73c78734b 2018-08-05)`.
 
 # License
 

@@ -9,11 +9,11 @@
 #![no_main]
 
 // extern crate panic_abort;
-extern crate panic_semihosting;
 #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 extern crate cortex_m_semihosting as sh;
+extern crate panic_semihosting;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
@@ -30,6 +30,7 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
+use hal::tsc::{Tsc, /* Event as TscEvent */};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
@@ -53,8 +54,7 @@ use msgmgr::Message;
 use msgmgr::MessageManager;
 
 /// Type Alias to use in resource definitions
-type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::AF5>, hal::gpio::gpioa::PA6<hal::gpio::AF5>, hal::gpio::gpioa::PA7<hal::gpio::AF5>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
-
+type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
 entry!(main);
 
 exception!(HardFault, hard_fault);
@@ -83,6 +83,10 @@ app! {
         static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
         static DISPLAY: Ssd1351;
         static RTC: hal::rtc::Rtc;
+        static TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
+        static OK_BUTTON: hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
+        static STATUS_LED: hal::gpio::gpiob::PB3<hal::gpio::Output<hal::gpio::PushPull>>;
+        static TOUCH_THRESHOLD: u16;
     },
 
     init: {
@@ -100,8 +104,12 @@ app! {
         },
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC], // STDOUT
+            resources: [MMGR, DISPLAY, RTC, OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED],
         },
+        TSC: {
+            path: touch,
+            resources: [TOUCH]
+        }
     }
 }
 
@@ -159,6 +167,17 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     channels.5.listen(Event::HalfTransfer);
     channels.5.listen(Event::TransferComplete);
+
+    // Touch sense controller
+    let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+    let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+    let tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1);
+    let baseline = tsc.acquire(&mut ok_button).unwrap();
+    let threshold = (baseline / 100) * 60;
+    // tsc.listen(TscEvent::EndOfAcquisition); // enable interrupts
+
+    //status LED
+    let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
     
     let rb: &'static mut RingBuffer<u8, U128> = r.RB; /* Static RB for Msg recieving */
     
@@ -189,13 +208,17 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         MMGR: mmgr,
         USART1_RX: rx,
         DISPLAY: display,
-        RTC: rtc
+        RTC: rtc,
+        TOUCH: tsc,
+        OK_BUTTON: ok_button,
+        STATUS_LED: led,
+        TOUCH_THRESHOLD: threshold
     }
 }
 
 fn idle() -> ! {
     loop {
-        rtfm::wfi(); /* Wait for interrupts */
+        rtfm::wfi(); /* Wait for interrupts - sleep mode */
     }
 }
 /// Example Incoming payload
@@ -261,4 +284,17 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
         r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
         buffer.clear(); // reset the buffer
     }
+
+
+    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
+    let threshold: u16 = *r.TOUCH_THRESHOLD;
+    if reading < threshold {
+        r.STATUS_LED.set_high();
+    } else {
+        r.STATUS_LED.set_low();
+    }
+}
+
+fn touch(_t: &mut Threshold, mut _r: TSC::Resources) {
+    // r.TOUCH;
 }
