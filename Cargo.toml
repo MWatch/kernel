@@ -14,7 +14,8 @@ cortex-m = "0.5.2"
 cortex-m-rt = "0.5.1"
 cortex-m-semihosting = "0.3.0"
 cortex-m-rtfm = { git = "https://github.com/mabezdev/cortex-m-rtfm" }
-heapless = "0.3.6"
+# cortex-m-rtfm = { path = "../../util/cortex-m-rtfm" }
+heapless = "0.3.7"
 panic-semihosting = "0.3.0"
 embedded-graphics = "0.3.0"
 

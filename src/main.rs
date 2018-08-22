@@ -1,4 +1,3 @@
-#![feature(use_extern_macros)]
 #![feature(extern_prelude)]
 #![feature(proc_macro_gen)]
 
@@ -8,7 +7,6 @@
 #![no_std]
 #![no_main]
 
-// extern crate panic_abort;
 #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
@@ -197,14 +195,13 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut systick = Timer::tim2(p.device.TIM2, 1.khz(), clocks, &mut rcc.apb1r1);
+    let mut systick = Timer::tim2(p.device.TIM2, 2.hz(), clocks, &mut rcc.apb1r1);
     systick.listen(TimerEvent::TimeOut);
 
     // writeln!(hstdout, "Init Complete!");
 
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
-        // STDOUT: hstdout,
         MMGR: mmgr,
         USART1_RX: rx,
         DISPLAY: display,
