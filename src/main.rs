@@ -170,9 +170,17 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
     let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
     let tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1);
-    let baseline = tsc.acquire(&mut ok_button).unwrap();
-    let threshold = (baseline / 100) * 60;
-    // tsc.listen(TscEvent::EndOfAcquisition); // enable interrupts
+    
+    // Acquire for rough estimate of capacitance
+    const NUM_SAMPLES: u16 = 10;
+    let mut baseline = 0;
+    for _ in 0..NUM_SAMPLES {
+        baseline += tsc.acquire(&mut ok_button).unwrap();
+    }
+    let threshold = ((baseline / NUM_SAMPLES) / 100) * 75;
+    // enable interrupts
+    // tsc.listen(TscEvent::EndOfAcquisition); 
+    // tsc.listen(TscEvent::MaxCount); 
 
     //status LED
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
@@ -195,7 +203,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut systick = Timer::tim2(p.device.TIM2, 2.hz(), clocks, &mut rcc.apb1r1);
+    let mut systick = Timer::tim2(p.device.TIM2, 60.hz(), clocks, &mut rcc.apb1r1); // 60hz ~ 60fps
     systick.listen(TimerEvent::TimeOut);
 
     // writeln!(hstdout, "Init Complete!");
@@ -250,7 +258,7 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     let mut mgr = r.MMGR;
     mgr.process();
-    let msg_count = mgr.msg_count();
+    let _msg_count = mgr.msg_count();
     // writeln!(out, "MSGS[{}] ", msg_count);
     // for i in 0..msg_count {
     //     mgr.peek_message(i, |msg| {
@@ -267,6 +275,14 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     //     });
     // }
 
+    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
+    let threshold: u16 = *r.TOUCH_THRESHOLD;
+    if reading < threshold {
+        r.STATUS_LED.set_high();
+    } else {
+        r.STATUS_LED.set_low();
+    }
+
     let mut buffer: String<U16> = String::new();
     let time = r.RTC.get_time();
     let date = r.RTC.get_date();
@@ -277,18 +293,17 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
         write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
         r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
         buffer.clear(); // reset the buffer
-        write!(buffer, "{:02}", msg_count).unwrap();
-        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
+
+        // write!(buffer, "{:02}", msg_count).unwrap();
+        // r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
+        // buffer.clear(); // reset the buffer
+        
+        write!(buffer, "T:{:05}", threshold).unwrap();
+        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
         buffer.clear(); // reset the buffer
-    }
-
-
-    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
-    let threshold: u16 = *r.TOUCH_THRESHOLD;
-    if reading < threshold {
-        r.STATUS_LED.set_high();
-    } else {
-        r.STATUS_LED.set_low();
+        write!(buffer, "R:{:05}", reading).unwrap();
+        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 110)).into_iter());
+        buffer.clear(); // reset the buffer
     }
 }
 

@@ -32,6 +32,7 @@
             "name": "Release",
             // "gdbpath" : "/home/mabez/programs/gcc-arm-none-eabi-5_4-2016q3/bin/arm-none-eabi-gdb",
             "gdbpath": "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
+            // "gdbpath": "/usr/bin/arm-none-eabi-gdb",
             "debugger_args": [
                 "-nx" // dont use the .gdbinit file
             ],
