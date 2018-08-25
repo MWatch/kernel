@@ -28,7 +28,7 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
-use hal::tsc::{Tsc, /* Event as TscEvent */};
+use hal::tsc::{Tsc};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
@@ -93,7 +93,7 @@ app! {
 
     tasks: {
         DMA1_CH5: { /* DMA channel for Usart1 RX */
-            path: rx,
+            path: rx_full,
             resources: [CB, MMGR],
         },
         USART1: { /* Global usart1 it, uses for idle line detection */
@@ -102,18 +102,16 @@ app! {
         },
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC, OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED],
+            resources: [MMGR, DISPLAY, RTC],
         },
-        TSC: {
+        TIM7: {
             path: touch,
-            resources: [TOUCH]
+            resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED]
         }
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
-
-    // let hstdout = hio::hstdout().unwrap();
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
@@ -178,9 +176,6 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         baseline += tsc.acquire(&mut ok_button).unwrap();
     }
     let threshold = ((baseline / NUM_SAMPLES) / 100) * 75;
-    // enable interrupts
-    // tsc.listen(TscEvent::EndOfAcquisition); 
-    // tsc.listen(TscEvent::MaxCount); 
 
     //status LED
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
@@ -206,7 +201,9 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let mut systick = Timer::tim2(p.device.TIM2, 60.hz(), clocks, &mut rcc.apb1r1); // 60hz ~ 60fps
     systick.listen(TimerEvent::TimeOut);
 
-    // writeln!(hstdout, "Init Complete!");
+    // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
+    let mut input = Timer::tim7(p.device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
+    input.listen(TimerEvent::TimeOut);
 
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
@@ -226,9 +223,10 @@ fn idle() -> ! {
         rtfm::wfi(); /* Wait for interrupts - sleep mode */
     }
 }
-/// Example Incoming payload
-/// echo -ne '\x02N\x1FBodyHere!\x03' > /dev/ttyUSB0
-fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
+
+/// Handles a full or hal full dma buffer of serial data,
+/// and writes it into the MessageManager rb
+fn rx_full(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
     let mut mgr = r.MMGR;
     r.CB
         .peek(|buf, _half| {
@@ -237,6 +235,8 @@ fn rx(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
         .unwrap();
 }
 
+/// Handles the intermediate state where the DMA has data in it but
+/// not enough to trigger a half or full dma complete
 fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
     if r.USART1_RX.is_idle(true) {
 
@@ -258,31 +258,8 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     let mut mgr = r.MMGR;
     mgr.process();
-    let _msg_count = mgr.msg_count();
-    // writeln!(out, "MSGS[{}] ", msg_count);
-    // for i in 0..msg_count {
-    //     mgr.peek_message(i, |msg| {
-    //         let payload: &[u8] = &msg.payload;
-    //         let len = msg.payload_idx;
-    //         if len > 0 {
-    //             writeln!(out, "MSG[{}] ", i);
-    //             // for byte in payload {
-    //             //     iprint!(out, "{}", *byte as char);
-    //             // }
-    //             // iprintln!(out, "");
-    //         }
-    //         // Payload is in the variable payload
-    //     });
-    // }
-
-    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
-    let threshold: u16 = *r.TOUCH_THRESHOLD;
-    if reading < threshold {
-        r.STATUS_LED.set_high();
-    } else {
-        r.STATUS_LED.set_low();
-    }
-
+    let msg_count = mgr.msg_count();
+    
     let mut buffer: String<U16> = String::new();
     let time = r.RTC.get_time();
     let date = r.RTC.get_date();
@@ -293,20 +270,19 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
         write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
         r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
         buffer.clear(); // reset the buffer
-
-        // write!(buffer, "{:02}", msg_count).unwrap();
-        // r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
-        // buffer.clear(); // reset the buffer
-        
-        write!(buffer, "T:{:05}", threshold).unwrap();
-        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
-        buffer.clear(); // reset the buffer
-        write!(buffer, "R:{:05}", reading).unwrap();
-        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 110)).into_iter());
+        write!(buffer, "{:02}", msg_count).unwrap();
+        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
         buffer.clear(); // reset the buffer
     }
 }
 
-fn touch(_t: &mut Threshold, mut _r: TSC::Resources) {
-    // r.TOUCH;
+/// Input 'loop' - polls the TSC touch pins
+fn touch(_t: &mut Threshold, mut r: TIM7::Resources) {
+    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
+    let threshold: u16 = *r.TOUCH_THRESHOLD;
+    if reading < threshold {
+        r.STATUS_LED.set_high();
+    } else {
+        r.STATUS_LED.set_low();
+    }
 }
