@@ -28,7 +28,7 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
-use hal::tsc::{Tsc};
+use hal::tsc::{Tsc, Event as TscEvent};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
@@ -53,6 +53,7 @@ use msgmgr::MessageManager;
 
 /// Type Alias to use in resource definitions
 type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
+
 entry!(main);
 
 exception!(HardFault, hard_fault);
@@ -104,7 +105,8 @@ app! {
             path: sys_tick,
             resources: [MMGR, DISPLAY, RTC],
         },
-        TIM7: {
+        TSC: {
+            priority: 2, /* Input should always preempt other tasks */
             path: touch,
             resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED]
         }
@@ -164,10 +166,10 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     channels.5.listen(Event::HalfTransfer);
     channels.5.listen(Event::TransferComplete);
 
-    // Touch sense controller
+    /* Touch sense controller */
     let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
     let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-    let tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1);
+    let mut tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1);
     
     // Acquire for rough estimate of capacitance
     const NUM_SAMPLES: u16 = 10;
@@ -177,10 +179,11 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     }
     let threshold = ((baseline / NUM_SAMPLES) / 100) * 75;
 
-    //status LED
+    /* status LED */
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
     
-    let rb: &'static mut RingBuffer<u8, U128> = r.RB; /* Static RB for Msg recieving */
+    /* Static RB for Msg recieving */
+    let rb: &'static mut RingBuffer<u8, U128> = r.RB;
     
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
@@ -202,8 +205,13 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     systick.listen(TimerEvent::TimeOut);
 
     // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-    let mut input = Timer::tim7(p.device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
-    input.listen(TimerEvent::TimeOut);
+    // let mut input = Timer::tim7(p.device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
+    // input.listen(TimerEvent::TimeOut);
+
+    tsc.listen(TscEvent::EndOfAcquisition);
+    // tsc.listen(TscEvent::MaxCountError); // TODO
+    // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
+    rtfm::set_pending(stm32l4x2::Interrupt::TSC);
 
     init::LateResources {
         CB: rx.circ_read(channels.5, r.BUFFER),
@@ -276,13 +284,14 @@ fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
     }
 }
 
-/// Input 'loop' - polls the TSC touch pins
-fn touch(_t: &mut Threshold, mut r: TIM7::Resources) {
-    let reading = r.TOUCH.acquire(&mut *r.OK_BUTTON).unwrap();
-    let threshold: u16 = *r.TOUCH_THRESHOLD;
-    if reading < threshold {
+
+fn touch(_t: &mut Threshold, mut r: TSC::Resources) {
+    // let reading = r.TOUCH.read_unchecked();
+    let reading = r.TOUCH.read(&mut *r.OK_BUTTON).unwrap();
+    if reading < *r.TOUCH_THRESHOLD {
         r.STATUS_LED.set_high();
     } else {
         r.STATUS_LED.set_low();
     }
+    r.TOUCH.start(&mut *r.OK_BUTTON);
 }
