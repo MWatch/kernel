@@ -10,8 +10,8 @@ repository = "https://github.com/mabezdev/mabez_watch_rust"
 
 [dependencies]
 nb = "0.1.1"
-cortex-m = "0.5.2"
-cortex-m-rt = "0.5.1"
+cortex-m = "0.5.6"
+cortex-m-rt = "0.5.3"
 cortex-m-semihosting = "0.3.0"
 cortex-m-rtfm = { git = "https://github.com/mabezdev/cortex-m-rtfm" }
 # cortex-m-rtfm = { path = "../../util/cortex-m-rtfm" }
