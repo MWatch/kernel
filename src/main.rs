@@ -33,7 +33,7 @@ use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
 use heapless::consts::*;
-use rtfm::{app, Threshold};
+use rtfm::{app, Threshold, Resource};
 
 use core::fmt::Write;
 
@@ -93,17 +93,19 @@ app! {
     },
 
     tasks: {
+        TIM2: {
+            path: sys_tick,
+            resources: [MMGR, DISPLAY, RTC],
+        },
         DMA1_CH5: { /* DMA channel for Usart1 RX */
+            priority: 2,
             path: rx_full,
             resources: [CB, MMGR],
         },
         USART1: { /* Global usart1 it, uses for idle line detection */
+            priority: 2,
             path: rx_idle,
             resources: [CB, MMGR, USART1_RX],
-        },
-        TIM2: {
-            path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC],
         },
         TSC: {
             priority: 2, /* Input should always preempt other tasks */
@@ -263,10 +265,12 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
     }
 }
 
-fn sys_tick(_t: &mut Threshold, mut r: TIM2::Resources) {
-    let mut mgr = r.MMGR;
-    mgr.process();
-    let msg_count = mgr.msg_count();
+fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
+    let msg_count = r.MMGR.claim_mut(t, | mgr, _t| {
+        mgr.process();
+        mgr.msg_count()
+    });
+    
     
     let mut buffer: String<U16> = String::new();
     let time = r.RTC.get_time();

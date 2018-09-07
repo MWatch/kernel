@@ -88,7 +88,9 @@ impl MessageManager
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
-                        self.msg_state = MessageState::Init; // activate processing 
+                        self.msg_state = MessageState::Init; // activate processing
+                        let mut msg = &mut self.msg_pool[self.msg_idx];
+                        msg.payload_idx = 0; // if we are reusing buffer - set the index back to zero 
                     }
                     ETX => { /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
