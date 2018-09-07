@@ -34,7 +34,6 @@ const STX: u8 = 2;
 const ETX: u8 = 3;
 const DELIM: u8 = 31; // Unit Separator
 
-// #[derive(Copy)]
 pub struct Message {
     pub msg_type: MessageType,
     pub payload: [u8; 256],

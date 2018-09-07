@@ -86,6 +86,8 @@ app! {
         static OK_BUTTON: hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
         static STATUS_LED: hal::gpio::gpiob::PB3<hal::gpio::Output<hal::gpio::PushPull>>;
         static TOUCH_THRESHOLD: u16;
+        static TOUCHED: bool = false;
+        static WAS_TOUCHED: bool = false;
     },
 
     init: {
@@ -95,7 +97,7 @@ app! {
     tasks: {
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC],
+            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED],
         },
         DMA1_CH5: { /* DMA channel for Usart1 RX */
             priority: 2,
@@ -110,7 +112,7 @@ app! {
         TSC: {
             priority: 2, /* Input should always preempt other tasks */
             path: touch,
-            resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED]
+            resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED, TOUCHED]
         }
     }
 }
@@ -148,7 +150,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        2.mhz(),
+        4.mhz(),
         clocks,
         &mut rcc.apb2,
     );
@@ -203,7 +205,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut systick = Timer::tim2(p.device.TIM2, 60.hz(), clocks, &mut rcc.apb1r1); // 60hz ~ 60fps
+    let mut systick = Timer::tim2(p.device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
     systick.listen(TimerEvent::TimeOut);
 
     // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
@@ -266,16 +268,26 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 }
 
 fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
-    let msg_count = r.MMGR.claim_mut(t, | mgr, _t| {
-        mgr.process();
-        mgr.msg_count()
+    let mut mgr = r.MMGR;
+    let current_touched = r.TOUCHED.claim(t, | val, _| *val);
+    let mut buffer: String<U256> = String::new();
+
+    let msg_count = mgr.claim_mut(t, | m, _t| {
+        m.process();
+        m.msg_count()
     });
     
-    
-    let mut buffer: String<U16> = String::new();
     let time = r.RTC.get_time();
     let date = r.RTC.get_date();
-    {
+
+    
+    // clears the screen 
+    if current_touched != *r.WAS_TOUCHED {
+        r.DISPLAY.clear();
+        *r.WAS_TOUCHED = current_touched;
+    }
+
+    if !current_touched {
         write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
         r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(10, 40)).into_iter());
         buffer.clear(); // reset the buffer
@@ -285,6 +297,15 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         write!(buffer, "{:02}", msg_count).unwrap();
         r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
         buffer.clear(); // reset the buffer
+    } else {
+        mgr.claim_mut(t, | m, _t| {
+            m.peek_message(0, |msg| {
+                for c in 0..msg.payload_idx {
+                    buffer.push(msg.payload[c] as char).unwrap();
+                }
+            });
+        });
+        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(0, 0)).into_iter());
     }
 }
 
@@ -294,8 +315,10 @@ fn touch(_t: &mut Threshold, mut r: TSC::Resources) {
     let reading = r.TOUCH.read(&mut *r.OK_BUTTON).unwrap();
     if reading < *r.TOUCH_THRESHOLD {
         r.STATUS_LED.set_high();
+        *r.TOUCHED = true;
     } else {
         r.STATUS_LED.set_low();
+        *r.TOUCHED = false;
     }
     r.TOUCH.start(&mut *r.OK_BUTTON);
 }
