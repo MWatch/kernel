@@ -150,7 +150,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        4.mhz(),
+        4.mhz(), // TODO increase this when off the breadboard!
         clocks,
         &mut rcc.apb2,
     );
