@@ -95,7 +95,7 @@ impl MessageManager
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.msg_state = MessageState::Wait;
                         self.msg_idx += 1;
-                        if self.msg_count() > self.msg_pool.len() {
+                        if self.msg_count() + 1 > self.msg_pool.len() {
                             /* buffer is full, wrap around */        
                             self.msg_idx = 0;
                         }
@@ -157,12 +157,8 @@ impl MessageManager
         f(&msg);
     }
 
-    pub fn latest(&self) -> usize {
-        self.msg_idx
-    }
-
     pub fn msg_count(&self) -> usize {
-        self.msg_idx + 1
+        self.msg_idx
     }
     
 }

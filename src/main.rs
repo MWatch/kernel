@@ -269,6 +269,7 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 
 fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     let mut mgr = r.MMGR;
+    let mut display = r.DISPLAY;
     let current_touched = r.TOUCHED.claim(t, | val, _| *val);
     let mut buffer: String<U256> = String::new();
 
@@ -283,29 +284,34 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     
     // clears the screen 
     if current_touched != *r.WAS_TOUCHED {
-        r.DISPLAY.clear();
+        display.clear();
         *r.WAS_TOUCHED = current_touched;
     }
 
     if !current_touched {
         write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
-        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(10, 40)).into_iter());
+        display.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(10, 40)).into_iter());
         buffer.clear(); // reset the buffer
         write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
+        display.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
         buffer.clear(); // reset the buffer
         write!(buffer, "{:02}", msg_count).unwrap();
-        r.DISPLAY.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
+        display.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
         buffer.clear(); // reset the buffer
     } else {
-        mgr.claim_mut(t, | m, _t| {
-            m.peek_message(0, |msg| {
-                for c in 0..msg.payload_idx {
-                    buffer.push(msg.payload[c] as char).unwrap();
-                }
-            });
+        mgr.claim_mut(t, |m, _t| {
+            // for i in 0..msg_count {
+                let i = 0;
+                m.peek_message(i, |msg| {
+                    write!(buffer, "[{}]: ", i + 1);
+                    for c in 0..msg.payload_idx {
+                        buffer.push(msg.payload[c] as char).unwrap();
+                    }
+                    display.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(0, (i * 12) as i32 + 2)).into_iter());
+                    buffer.clear();
+                });
+            // }
         });
-        r.DISPLAY.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(0, 0)).into_iter());
     }
 }
 
