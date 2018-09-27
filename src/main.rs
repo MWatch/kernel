@@ -1,4 +1,3 @@
-#![feature(extern_prelude)]
 #![feature(proc_macro_gen)]
 
 #![deny(unsafe_code)]
@@ -20,6 +19,7 @@ extern crate stm32l432xx_hal as hal;
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
 
+use embedded_graphics::Drawing;
 use rt::ExceptionFrame;
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
@@ -54,19 +54,14 @@ use msgmgr::MessageManager;
 /// Type Alias to use in resource definitions
 type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
 
-entry!(main);
-
-exception!(HardFault, hard_fault);
-
-fn hard_fault(ef: &ExceptionFrame) -> ! {
-    panic!("{:#?}", ef);
+#[entry]
+fn main() -> ! {
+    rtfm_main()
 }
 
-// TODO this catches systick, RTFM needs to strong link against it
-exception!(*, default_handler);
-
-fn default_handler(irqn: i16) {
-    panic!("Unhandled exception (IRQn = {})", irqn);
+#[exception]
+fn HardFault(ef: &ExceptionFrame) -> ! {
+    panic!("{:#?}", ef);
 }
 
 app! {
@@ -250,16 +245,14 @@ fn rx_full(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
 /// Handles the intermediate state where the DMA has data in it but
 /// not enough to trigger a half or full dma complete
 fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
+    let mut mgr = r.MMGR;
     if r.USART1_RX.is_idle(true) {
-
-        let mut mgr = r.MMGR;
         r.CB
             .partial_peek(|buf, _half| {
                 let len = buf.len();
                 if len > 0 {
                     mgr.write(buf);
                 }
-                
                 Ok( (len, ()) )
             })
             .unwrap();
@@ -290,13 +283,22 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
 
     if !current_touched {
         write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
-        display.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(10, 40)).into_iter());
+        display.draw(Font12x16::render_str(buffer.as_str())
+            .translate(Coord::new(10, 40))
+            .with_stroke(Some(0xF818_u16.into()))
+            .into_iter());
         buffer.clear(); // reset the buffer
         write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-        display.draw(Font6x12::render_str(buffer.as_str(), 0x880B_u16.into()).translate(Coord::new(24, 60)).into_iter());
+        display.draw(Font6x12::render_str(buffer.as_str())
+            .translate(Coord::new(24, 60))
+            .with_stroke(Some(0x880B_u16.into()))
+            .into_iter());
         buffer.clear(); // reset the buffer
         write!(buffer, "{:02}", msg_count).unwrap();
-        display.draw(Font12x16::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(46, 96)).into_iter());
+        display.draw(Font12x16::render_str(buffer.as_str())
+            .translate(Coord::new(46, 96))
+            .with_stroke(Some(0xF818_u16.into()))
+            .into_iter());
         buffer.clear(); // reset the buffer
     } else {
         mgr.claim_mut(t, |m, _t| {
@@ -307,7 +309,10 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                     for c in 0..msg.payload_idx {
                         buffer.push(msg.payload[c] as char).unwrap();
                     }
-                    display.draw(Font6x12::render_str(buffer.as_str(), 0xF818_u16.into()).translate(Coord::new(0, (i * 12) as i32 + 2)).into_iter());
+                    display.draw(Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, (i * 12) as i32 + 2))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter());
                     buffer.clear();
                 });
             // }

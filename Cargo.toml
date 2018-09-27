@@ -10,17 +10,17 @@ repository = "https://github.com/mabezdev/mabez_watch_rust"
 
 [dependencies]
 nb = "0.1.1"
-cortex-m = "0.5.6"
-cortex-m-rt = "0.5.3"
-cortex-m-semihosting = "0.3.0"
+cortex-m = "0.5.7"
+cortex-m-rt = "0.6.4"
+cortex-m-semihosting = "0.3.1"
 cortex-m-rtfm = { git = "https://github.com/mabezdev/cortex-m-rtfm" }
 # cortex-m-rtfm = { path = "../../util/cortex-m-rtfm" }
 heapless = "0.3.7"
-panic-semihosting = "0.3.0"
-embedded-graphics = "0.3.0"
+panic-semihosting = "0.5.0"
+embedded-graphics = "0.4.0"
 
 [dependencies.ssd1351]
-version = "0.1.0"
+version = "0.1.1"
 features = ["embedded-graphics"]
 
 [dependencies.stm32l432xx-hal]
@@ -30,7 +30,7 @@ version = "0.2.2"
 # path = "../../hal/stm32l432xx-hal"
 
 [dependencies.stm32l4]
-version = "0.2.1"
+version = "0.2.3"
 features = ["stm32l4x2", "rt"]
 
 [profile.dev]
