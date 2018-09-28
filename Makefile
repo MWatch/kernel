@@ -20,3 +20,6 @@ release:
 debug:
 	cargo build
 
+clean:
+	cargo clean
+

@@ -6,7 +6,8 @@
 
 # Building
 
-Currently buildable on the toolchain `rustc 1.30.0-nightly (5c875d938 2018-09-24)`.
+- Requires the `thumbv7em-none-eabi` target to be installed, use `rustup target add thumbv7em-none-eabi` to do so.
+- Requires `cargo-binutils` for extra features, such as generating a stripped binary. Note: The `llvm-tools-preview` component must be installed with `rustup component add llvm-tools-preview` for it to work.
 
 # License
 
