@@ -1,5 +1,3 @@
-#![feature(proc_macro_gen)]
-
 #![deny(unsafe_code)]
 #![deny(warnings)]
 
@@ -68,7 +66,6 @@ app! {
     device: stm32l4x2,
 
     resources: {
-        // static STDOUT: sh::hio::HStdout;
         static BUFFER: [[u8; 64]; 2] = [[0; 64]; 2];
         static CB: CircBuffer<[u8; 64], dma1::C5>;
         static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
