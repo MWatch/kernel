@@ -17,7 +17,6 @@ extern crate stm32l432xx_hal as hal;
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
 
-use embedded_graphics::Drawing;
 use rt::ExceptionFrame;
 use hal::dma::{dma1, CircBuffer, Event};
 use hal::prelude::*;
@@ -39,18 +38,20 @@ use ssd1351::builder::Builder;
 use ssd1351::mode::{GraphicsMode};
 use ssd1351::prelude::*;
 
+use embedded_graphics::Drawing;
 use embedded_graphics::prelude::*;
-use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
+use embedded_graphics::fonts::Font12x16;
 
 /* Our includes */
 mod msgmgr;
+mod view;
 
 use msgmgr::Message;
 use msgmgr::MessageManager;
 
 /// Type Alias to use in resource definitions
-type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
+pub type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
 
 #[entry]
 fn main() -> ! {
