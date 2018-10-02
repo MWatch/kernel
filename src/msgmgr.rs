@@ -130,10 +130,10 @@ impl MessageManager
 
     fn determine_type(&mut self, type_byte: u8){
         self.msg_pool[self.msg_idx].msg_type = match type_byte {
-            78 => MessageType::Notification, /* 'N' as a u8, NOTIFICATION i.e FB Msg */
-            87 => MessageType::Weather, /* 'W' as a u8, Weather packet */
-            68 => MessageType::Date,   /* 'D' as a u8, Date packet */
-            77 => MessageType::Music, /* 'M' as a u8, Spotify controls */
+            b'N' => MessageType::Notification, /* NOTIFICATION i.e FB Msg */
+            b'W' => MessageType::Weather, /* Weather packet */
+            b'D' => MessageType::Date,   /* Date packet */
+            b'M' => MessageType::Music, /* Spotify controls */
             _ => MessageType::Unknown
         }
     }
