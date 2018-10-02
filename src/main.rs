@@ -62,13 +62,16 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
+const BUFFER_SIZE: usize = 64;
+const PAYLOAD_SIZE: usize = 256;
+
 app! {
     device: stm32l4x2,
 
     resources: {
-        static BUFFER: [[u8; 64]; 2] = [[0; 64]; 2];
-        static CB: CircBuffer<[u8; 64], dma1::C5>;
-        static MSG_PAYLOADS: [[u8; 256]; 8] = [[0; 256]; 8];
+        static BUFFER: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2];
+        static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C5>;
+        static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
         static RB: heapless::RingBuffer<u8, heapless::consts::U128> = heapless::RingBuffer::new();
         static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
@@ -126,9 +129,9 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     /* Ssd1351 Display */
     let mut delay = Delay::new(p.core.SYST, clocks);
-    let mut rst = gpioa
-        .pa8
-        .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper);
+    let mut rst = gpiob
+        .pb0
+        .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
 
     let dc = gpiob
         .pb1
