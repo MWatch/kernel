@@ -3,3 +3,4 @@
 Cargo.lock
 target/
 itm.fifo
+core # when gdb crashes

@@ -24,7 +24,7 @@ version = "0.1.1"
 features = ["embedded-graphics"]
 
 [dependencies.stm32l432xx-hal]
-version = "0.2.2"
+version = "0.2.3"
 # path = "../../hal/stm32l432xx-hal"
 
 [dependencies.stm32l4]

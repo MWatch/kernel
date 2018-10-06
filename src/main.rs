@@ -26,7 +26,7 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
-use hal::tsc::{Tsc, Event as TscEvent};
+use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
 use heapless::String;
@@ -116,8 +116,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    // let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
+    // let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
     let mut gpiob = p.device.GPIOB.split(&mut rcc.ahb2);
@@ -145,7 +145,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        4.mhz(), // TODO increase this when off the breadboard!
+        2.mhz(), // TODO increase this when off the breadboard!
         clocks,
         &mut rcc.apb2,
     );
@@ -168,15 +168,20 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Touch sense controller */
     let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
     let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-    let mut tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1);
+    // let mut tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1, None);
+    let tsc_config = TscConfig {
+        clock_prescale: Some(TscClockPrescaler::HclkDiv32),
+        max_count_error: None
+    };
+    let mut tsc = Tsc::tsc(p.device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
     
     // Acquire for rough estimate of capacitance
-    const NUM_SAMPLES: u16 = 10;
+    const NUM_SAMPLES: u16 = 25;
     let mut baseline = 0;
     for _ in 0..NUM_SAMPLES {
         baseline += tsc.acquire(&mut ok_button).unwrap();
     }
-    let threshold = ((baseline / NUM_SAMPLES) / 100) * 75;
+    let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
 
     /* status LED */
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
@@ -256,7 +261,6 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
                 Ok( (len, ()) )
             })
             .unwrap();
-
     }
 }
 
@@ -324,7 +328,8 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
 fn touch(_t: &mut Threshold, mut r: TSC::Resources) {
     // let reading = r.TOUCH.read_unchecked();
     let reading = r.TOUCH.read(&mut *r.OK_BUTTON).unwrap();
-    if reading < *r.TOUCH_THRESHOLD {
+    let threshold = *r.TOUCH_THRESHOLD;
+    if reading < threshold {
         r.STATUS_LED.set_high();
         *r.TOUCHED = true;
     } else {
