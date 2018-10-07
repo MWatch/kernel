@@ -62,7 +62,7 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-const BUFFER_SIZE: usize = 64;
+const BUFFER_SIZE: usize = 128;
 const PAYLOAD_SIZE: usize = 256;
 
 app! {
@@ -73,7 +73,7 @@ app! {
         static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C5>;
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
-        static RB: heapless::RingBuffer<u8, heapless::consts::U128> = heapless::RingBuffer::new();
+        static RB: heapless::RingBuffer<u8, heapless::consts::U256> = heapless::RingBuffer::new();
         static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
         static DISPLAY: Ssd1351;
         static RTC: hal::rtc::Rtc;
@@ -186,7 +186,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
     
     /* Static RB for Msg recieving */
-    let rb: &'static mut RingBuffer<u8, U128> = r.RB;
+    let rb: &'static mut RingBuffer<u8, U256> = r.RB;
     
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [
@@ -204,7 +204,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* Pass messages to the Message Manager */
     let mmgr = MessageManager::new(msgs, rb);
 
-    let mut systick = Timer::tim2(p.device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
+    let mut systick = Timer::tim2(p.device.TIM2, 10.hz(), clocks, &mut rcc.apb1r1);
     systick.listen(TimerEvent::TimeOut);
 
     // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
@@ -305,8 +305,7 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         buffer.clear(); // reset the buffer
     } else {
         mgr.claim_mut(t, |m, _t| {
-            // for i in 0..msg_count {
-                let i = 0;
+            for i in 0..msg_count {
                 m.peek_message(i, |msg| {
                     write!(buffer, "[{}]: ", i + 1);
                     for c in 0..msg.payload_idx {
@@ -318,7 +317,7 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                         .into_iter());
                     buffer.clear();
                 });
-            // }
+            }
         });
     }
 }

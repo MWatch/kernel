@@ -7,11 +7,6 @@ extern crate cortex_m_rtfm as rtfm;
 use heapless::RingBuffer;
 use heapless::consts::*;
 
-/* 
-    Message is a type
- */
-
-
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
     Unknown, /* NULL */
@@ -27,7 +22,6 @@ enum MessageState {
     Init,
     Type,
     Payload,
-    // End,
 }
 
 const STX: u8 = 2;
@@ -56,14 +50,14 @@ impl Message {
 
 pub struct MessageManager {
     msg_pool : [Message; 8],
-    rb: &'static mut RingBuffer<u8, U128>,
+    rb: &'static mut RingBuffer<u8, U256>,
     msg_state: MessageState,
     msg_idx : usize,
 }
 
 impl MessageManager 
 {
-    pub fn new(msgs: [Message; 8], ring_t: &'static mut RingBuffer<u8, U128>) -> Self {
+    pub fn new(msgs: [Message; 8], ring_t: &'static mut RingBuffer<u8, U256>) -> Self {
         MessageManager {
             msg_pool: msgs,
             rb: ring_t,
@@ -150,7 +144,7 @@ impl MessageManager
         }
     }
 
-    // takes a closure to execute on the buffer
+    /// takes a closure to execute on the buffer
     pub fn peek_message<F>(&mut self, index: usize, f: F)
     where F: FnOnce(&Message) {
         let msg = &self.msg_pool[index];
