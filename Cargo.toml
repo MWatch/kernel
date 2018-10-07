@@ -20,7 +20,7 @@ panic-semihosting = "0.5.0"
 embedded-graphics = "0.4.0"
 
 [dependencies.ssd1351]
-version = "0.1.1"
+version = "0.1.2"
 features = ["embedded-graphics"]
 
 [dependencies.stm32l432xx-hal]
