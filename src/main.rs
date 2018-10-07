@@ -26,6 +26,7 @@ use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::rtc::Rtc;
+use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use hal::stm32l4::stm32l4x2;
 use heapless::RingBuffer;
@@ -126,6 +127,9 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut pwr = p.device.PWR.constrain(&mut rcc.apb1r1);
     let rtc = Rtc::rtc(p.device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
+
+    let date = Date::new(1.day(), 07.date(), 10.month(), 2018.year());
+    rtc.set_date(&date);
 
     /* Ssd1351 Display */
     let mut delay = Delay::new(p.core.SYST, clocks);
@@ -305,18 +309,25 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         buffer.clear(); // reset the buffer
     } else {
         mgr.claim_mut(t, |m, _t| {
-            for i in 0..msg_count {
-                m.peek_message(i, |msg| {
-                    write!(buffer, "[{}]: ", i + 1);
-                    for c in 0..msg.payload_idx {
-                        buffer.push(msg.payload[c] as char).unwrap();
-                    }
-                    display.draw(Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, (i * 12) as i32 + 2))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter());
-                    buffer.clear();
-                });
+            if msg_count > 0 {
+                for i in 0..msg_count {
+                    m.peek_message(i, |msg| {
+                        write!(buffer, "[{}]: ", i + 1);
+                        for c in 0..msg.payload_idx {
+                            buffer.push(msg.payload[c] as char).unwrap();
+                        }
+                        display.draw(Font6x12::render_str(buffer.as_str())
+                            .translate(Coord::new(0, (i * 12) as i32 + 2))
+                            .with_stroke(Some(0xF818_u16.into()))
+                            .into_iter());
+                        buffer.clear();
+                    });
+                }
+            } else {
+                display.draw(Font6x12::render_str("No messages.")
+                    .translate(Coord::new(0, 12))
+                    .with_stroke(Some(0xF818_u16.into()))
+                    .into_iter());
             }
         });
     }
