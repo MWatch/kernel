@@ -9,7 +9,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/mabezdev/mabez_watch_rust"
 
 [dependencies]
-nb = "0.1.1"
 cortex-m = "0.5.7"
 cortex-m-rt = "0.6.4"
 cortex-m-semihosting = "0.3.1"
@@ -30,6 +29,12 @@ version = "0.2.3"
 [dependencies.stm32l4]
 version = "0.2.3"
 features = ["stm32l4x2", "rt"]
+
+# ready for rust 2018
+[[bin]]
+name = "mabez_watch"
+test = false
+bench = false
 
 [profile.dev]
 codegen-units = 1
