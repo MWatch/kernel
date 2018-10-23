@@ -1,4 +1,3 @@
-#![deny(unsafe_code)]
 #![deny(warnings)]
 
 #![no_std]
@@ -29,7 +28,7 @@ use hal::rtc::Rtc;
 use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use hal::stm32l4::stm32l4x2;
-use heapless::RingBuffer;
+use heapless::spsc::Queue;
 use heapless::String;
 use heapless::consts::*;
 use rtfm::{app, Threshold, Resource};
@@ -74,7 +73,7 @@ app! {
         static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C5>;
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
-        static RB: heapless::RingBuffer<u8, heapless::consts::U256> = heapless::RingBuffer::new();
+        static RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
         static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
         static DISPLAY: Ssd1351;
         static RTC: hal::rtc::Rtc;
@@ -190,7 +189,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
     
     /* Static RB for Msg recieving */
-    let rb: &'static mut RingBuffer<u8, U256> = r.RB;
+    let rb: &'static mut Queue<u8, U256> = r.RB;
     
     /* Define out block of message - surely there must be a nice way to to this? */
     let msgs: [msgmgr::Message; 8] = [

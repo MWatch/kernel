@@ -4,7 +4,7 @@ extern crate heapless;
 extern crate cortex_m;
 extern crate cortex_m_rtfm as rtfm;
 
-use heapless::RingBuffer;
+use heapless::spsc::Queue;
 use heapless::consts::*;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -50,14 +50,14 @@ impl Message {
 
 pub struct MessageManager {
     msg_pool : [Message; 8],
-    rb: &'static mut RingBuffer<u8, U256>,
+    rb: &'static mut Queue<u8, U256>,
     msg_state: MessageState,
     msg_idx : usize,
 }
 
 impl MessageManager 
 {
-    pub fn new(msgs: [Message; 8], ring_t: &'static mut RingBuffer<u8, U256>) -> Self {
+    pub fn new(msgs: [Message; 8], ring_t: &'static mut Queue<u8, U256>) -> Self {
         MessageManager {
             msg_pool: msgs,
             rb: ring_t,
@@ -72,7 +72,7 @@ impl MessageManager
     pub fn write(&mut self, data: &[u8]){
         for byte in data {
             // this is safe because we are only storing bytes, which do not need destructors called on them
-            self.rb.enqueue_unchecked(*byte); // although we wont know if we have overwritten previous data
+            unsafe { self.rb.enqueue_unchecked(*byte); } // although we wont know if we have overwritten previous data
         }
     }
 
