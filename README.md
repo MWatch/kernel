@@ -1,15 +1,28 @@
-# `mabez-watch`
+# `mwatch`
 
-> A Rust rewrite of a C(++? / Arduino) embedded watch
+> An embedded smartwatch written with Rust, using the RTFM framework for multithreading.
 
-# [Documentation](https://github/MabezDev)
+## Features
 
-# Building
+- Capacitive touch sense input control
+- Full 16bit colour OLED
+- Installable apps (see SDK section for more info)
+- Notification alerts via bluetooth
+
+## Developing applications for the `mwatch`
+
+The `mwatch` provides an SDK for developing applications that can be installed via the mobile app. More info about the SDK can be found in the [SDK repo](https://github.com/MWatch/mwatch-sdk).
+
+<!-- # [Documentation](https://github/MabezDev) -->
+
+
+
+## Building
 
 - Requires the `thumbv7em-none-eabi` target to be installed, use `rustup target add thumbv7em-none-eabi` to do so.
 - Requires `cargo-binutils` for extra features, such as generating a stripped binary. Note: The `llvm-tools-preview` component must be installed with `rustup component add llvm-tools-preview` for it to work.
 
-# License
+## License
 
 Licensed under either of
 
