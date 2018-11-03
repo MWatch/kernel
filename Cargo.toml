@@ -26,7 +26,7 @@ version = "0.4.0"
 features = ["const-fn"]
 
 [dependencies.stm32l432xx-hal]
-version = "0.2.4"
+version = "0.2.6"
 # path = "../../hal/stm32l432xx-hal"
 
 # ready for rust 2018
