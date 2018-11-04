@@ -6,7 +6,7 @@
 
 - Capacitive touch sense input control
 - Full 16bit colour OLED
-- Installable apps (see SDK section for more info)
+- Installable apps (see [SDK section](#developing-applications-for-the-mwatch) for more info)
 - Notification alerts via bluetooth
 
 ## Developing applications for the `mwatch`
