@@ -42,6 +42,7 @@ use ssd1351::prelude::*;
 use embedded_graphics::prelude::*;
 use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
+use embedded_graphics::image::Image16BPP;
 
 /* Our includes */
 mod msgmgr;
@@ -83,6 +84,7 @@ app! {
         static TOUCH_THRESHOLD: u16;
         static TOUCHED: bool = false;
         static WAS_TOUCHED: bool = false;
+        static STATE: u8 = 0;
     },
 
     init: {
@@ -92,7 +94,7 @@ app! {
     tasks: {
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED],
+            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE],
         },
         DMA1_CH5: { /* DMA channel for Usart1 RX */
             priority: 2,
@@ -269,7 +271,6 @@ fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
 fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     let mut mgr = r.MMGR;
     let mut display = r.DISPLAY;
-    let current_touched = r.TOUCHED.claim(t, | val, _| *val);
     let mut buffer: String<U256> = String::new();
 
     let msg_count = mgr.claim_mut(t, | m, _t| {
@@ -280,55 +281,72 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     let time = r.RTC.get_time();
     let date = r.RTC.get_date();
 
-    
-    // clears the screen 
+    let current_touched = r.TOUCHED.claim(t, | val, _| *val);
     if current_touched != *r.WAS_TOUCHED {
-        display.clear();
         *r.WAS_TOUCHED = current_touched;
+        if current_touched == true {
+            display.clear();
+            *r.STATE += 1;
+            if *r.STATE > 2 {
+                *r.STATE = 0;
+            }
+        }
     }
 
-    if !current_touched {
-        write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
-        display.draw(Font12x16::render_str(buffer.as_str())
-            .translate(Coord::new(10, 40))
-            .with_stroke(Some(0xF818_u16.into()))
-            .into_iter());
-        buffer.clear(); // reset the buffer
-        write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-        display.draw(Font6x12::render_str(buffer.as_str())
-            .translate(Coord::new(24, 60))
-            .with_stroke(Some(0x880B_u16.into()))
-            .into_iter());
-        buffer.clear(); // reset the buffer
-        write!(buffer, "{:02}", msg_count).unwrap();
-        display.draw(Font12x16::render_str(buffer.as_str())
-            .translate(Coord::new(46, 96))
-            .with_stroke(Some(0xF818_u16.into()))
-            .into_iter());
-        buffer.clear(); // reset the buffer
-    } else {
-        mgr.claim_mut(t, |m, _t| {
-            if msg_count > 0 {
-                for i in 0..msg_count {
-                    m.peek_message(i, |msg| {
-                        write!(buffer, "[{}]: ", i + 1);
-                        for c in 0..msg.payload_idx {
-                            buffer.push(msg.payload[c] as char).unwrap();
-                        }
-                        display.draw(Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(0, (i * 12) as i32 + 2))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter());
-                        buffer.clear();
-                    });
+    match *r.STATE {
+        // HOME PAGE
+        0 => {
+            write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
+            display.draw(Font12x16::render_str(buffer.as_str())
+                .translate(Coord::new(10, 40))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+            buffer.clear(); // reset the buffer
+            write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+            display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(24, 60))
+                .with_stroke(Some(0x880B_u16.into()))
+                .into_iter());
+            buffer.clear(); // reset the buffer
+            write!(buffer, "{:02}", msg_count).unwrap();
+            display.draw(Font12x16::render_str(buffer.as_str())
+                .translate(Coord::new(46, 96))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+            buffer.clear(); // reset the buffer
+        },
+        // MESSAGE LIST
+        1 => {
+            mgr.claim_mut(t, |m, _t| {
+                if msg_count > 0 {
+                    for i in 0..msg_count {
+                        m.peek_message(i, |msg| {
+                            write!(buffer, "[{}]: ", i + 1);
+                            for c in 0..msg.payload_idx {
+                                buffer.push(msg.payload[c] as char).unwrap();
+                            }
+                            display.draw(Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(0, (i * 12) as i32 + 2))
+                                .with_stroke(Some(0xF818_u16.into()))
+                                .into_iter());
+                            buffer.clear();
+                        });
+                    }
+                } else {
+                    display.draw(Font6x12::render_str("No messages.")
+                        .translate(Coord::new(0, 12))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter());
                 }
-            } else {
-                display.draw(Font6x12::render_str("No messages.")
-                    .translate(Coord::new(0, 12))
-                    .with_stroke(Some(0xF818_u16.into()))
-                    .into_iter());
-            }
-        });
+            });
+        },
+        // MWATCH LOGO
+        2 => {
+            display.draw(Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
+                .translate(Coord::new(32,32))
+                .into_iter());
+        },
+        _ => panic!("Unknown state")
     }
 }
 
