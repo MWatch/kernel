@@ -287,7 +287,7 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         if current_touched == true {
             display.clear();
             *r.STATE += 1;
-            if *r.STATE > 2 {
+            if *r.STATE > 3 {
                 *r.STATE = 0;
             }
         }
@@ -343,6 +343,12 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         // MWATCH LOGO
         2 => {
             display.draw(Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
+                .translate(Coord::new(32,32))
+                .into_iter());
+        },
+        // UOP LOGO
+        3 => {
+            display.draw(Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
                 .translate(Coord::new(32,32))
                 .into_iter());
         },
