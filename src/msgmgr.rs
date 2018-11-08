@@ -2,10 +2,10 @@
 
 extern crate heapless;
 extern crate cortex_m;
-extern crate cortex_m_rtfm as rtfm;
 
 use heapless::spsc::Queue;
 use heapless::consts::*;
+use cortex_m::{iprintln, iprint};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
