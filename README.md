@@ -2,6 +2,8 @@
 
 > An embedded smartwatch written with Rust, using the RTFM framework for multithreading.
 
+![Logo](https://i.imgur.com/T3HADuB.jpg)
+
 ## Features
 
 - Capacitive touch sense input control
