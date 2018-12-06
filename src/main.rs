@@ -71,11 +71,11 @@ app! {
 
     resources: {
         static BUFFER: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2];
-        static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C5>;
+        static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C6>;
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
         static RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
-        static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART1>;
+        static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>;
         static DISPLAY: Ssd1351;
         static RTC: hal::rtc::Rtc;
         static TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
@@ -96,7 +96,7 @@ app! {
             path: sys_tick,
             resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE],
         },
-        DMA1_CH5: { /* DMA channel for Usart1 RX */
+        DMA1_CH6: { /* DMA channel for Usart1 RX */
             priority: 2,
             path: rx_full,
             resources: [CB, MMGR],
@@ -160,15 +160,20 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     display.init().unwrap();
 
     /* Serial with DMA */
-    let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-    let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    // usart 1
+    // let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    // let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    // let mut serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
     
-    let mut serial = Serial::usart1(p.device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
+    let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
+    let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
+    
+    let mut serial = Serial::usart2(p.device.USART2, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb1r1);
     serial.listen(SerialEvent::Idle); // Listen to Idle Line detection
     let (_, rx) = serial.split(); // TODO use tx for transmition
 
-    channels.5.listen(Event::HalfTransfer);
-    channels.5.listen(Event::TransferComplete);
+    channels.6.listen(Event::HalfTransfer);
+    channels.6.listen(Event::TransferComplete);
 
     /* Touch sense controller */
     let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -222,7 +227,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     rtfm::set_pending(stm32l4x2::Interrupt::TSC);
 
     init::LateResources {
-        CB: rx.circ_read(channels.5, r.BUFFER),
+        CB: rx.circ_read(channels.6, r.BUFFER),
         MMGR: mmgr,
         USART1_RX: rx,
         DISPLAY: display,
@@ -242,7 +247,7 @@ fn idle() -> ! {
 
 /// Handles a full or hal full dma buffer of serial data,
 /// and writes it into the MessageManager rb
-fn rx_full(_t: &mut Threshold, mut r: DMA1_CH5::Resources) {
+fn rx_full(_t: &mut Threshold, mut r: DMA1_CH6::Resources) {
     let mut mgr = r.MMGR;
     r.CB
         .peek(|buf, _half| {
