@@ -18,7 +18,9 @@ panic-semihosting = "0.5.0"
 embedded-graphics = "0.4.4"
 
 [dependencies.ssd1351]
-version = "0.1.4"
+# git = "https://github.com/mabezdev/ssd1351"
+# path = "../ssd1351"
+version = "0.1.6"
 features = ["embedded-graphics"]
 
 [dependencies.heapless]

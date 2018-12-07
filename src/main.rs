@@ -38,6 +38,7 @@ use core::fmt::Write;
 use ssd1351::builder::Builder;
 use ssd1351::mode::{GraphicsMode};
 use ssd1351::prelude::*;
+use ssd1351::properties::DisplayRotation;
 
 use embedded_graphics::prelude::*;
 use embedded_graphics::fonts::Font12x16;
@@ -158,6 +159,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc).into();
     display.reset(&mut rst, &mut delay);
     display.init().unwrap();
+    display.set_rotation(DisplayRotation::Rotate0).unwrap();
 
     /* Serial with DMA */
     // usart 1
