@@ -20,7 +20,9 @@
             "cwd": "${workspaceRoot}",
             "autorun": [
                 "set print asm-demangle on",
-                "monitor arm semihosting enable",
+                // "monitor arm semihosting enable",
+                "monitor tpiu config internal itm.fifo uart off 32000000",
+                "monitor itm port 0 on",
                 "load",
                 "break main",
                 "step"
@@ -42,7 +44,9 @@
             "cwd": "${workspaceRoot}",
             "autorun": [
                 "set print asm-demangle on",
-                "monitor arm semihosting enable",
+                // "monitor arm semihosting enable",
+                "monitor tpiu config internal itm.fifo uart off 32000000",
+                "monitor itm port 0 on",
                 "load",
                 "break main",
                 "step"
