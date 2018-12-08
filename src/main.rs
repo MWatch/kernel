@@ -11,7 +11,8 @@ extern crate panic_semihosting;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
-extern crate stm32l432xx_hal as hal;
+extern crate stm32l4xx_hal as hal;
+extern crate max17048;
 
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
@@ -24,6 +25,7 @@ use hal::serial::{Serial, Event as SerialEvent};
 use hal::timer::{Timer, Event as TimerEvent};
 use hal::delay::Delay;
 use hal::spi::Spi;
+use hal::i2c::I2c;
 use hal::rtc::Rtc;
 use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
@@ -44,6 +46,7 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::image::Image16BPP;
+use max17048::Max17048;
 
 /* Our includes */
 mod msgmgr;
@@ -86,6 +89,7 @@ app! {
         static TOUCHED: bool = false;
         static WAS_TOUCHED: bool = false;
         static STATE: u8 = 0;
+        static BMS: max17048::Max17048<hal::i2c::I2c<hal::stm32::I2C1, (hal::gpio::gpioa::PA9<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>, hal::gpio::gpioa::PA10<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>)>>;
     },
 
     init: {
@@ -95,7 +99,7 @@ app! {
     tasks: {
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE],
+            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS],
         },
         DMA1_CH6: { /* DMA channel for Usart1 RX */
             priority: 2,
@@ -196,6 +200,19 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     /* status LED */
     let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
+
+    /* Fuel Guage */
+    let mut scl = gpioa.pa9.into_open_drain_output(&mut gpioa.moder, &mut gpioa.otyper);
+    scl.internal_pull_up(&mut gpioa.pupdr, true);
+    let scl = scl.into_af4(&mut gpioa.moder, &mut gpioa.afrh);
+
+    let mut sda = gpioa.pa10.into_open_drain_output(&mut gpioa.moder, &mut gpioa.otyper);
+    sda.internal_pull_up(&mut gpioa.pupdr, true);
+    let sda = sda.into_af4(&mut gpioa.moder, &mut gpioa.afrh);
+    
+    let i2c = I2c::i2c1(p.device.I2C1, (scl, sda), 100.khz(), clocks, &mut rcc.apb1r1);
+
+    let max17048 = Max17048::new(i2c);
     
     /* Static RB for Msg recieving */
     let rb: &'static mut Queue<u8, U256> = r.RB;
@@ -237,7 +254,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         TOUCH: tsc,
         OK_BUTTON: ok_button,
         STATUS_LED: led,
-        TOUCH_THRESHOLD: threshold
+        TOUCH_THRESHOLD: threshold,
+        BMS: max17048
     }
 }
 
@@ -318,6 +336,12 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
             write!(buffer, "{:02}", msg_count).unwrap();
             display.draw(Font12x16::render_str(buffer.as_str())
                 .translate(Coord::new(46, 96))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+            buffer.clear(); // reset the buffer
+            write!(buffer, "{:02}%", r.BMS.soc().unwrap()).unwrap();
+            display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(110, 12))
                 .with_stroke(Some(0xF818_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
