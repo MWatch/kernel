@@ -84,7 +84,8 @@ app! {
         static RTC: hal::rtc::Rtc;
         static TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
         static OK_BUTTON: hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
-        static STATUS_LED: hal::gpio::gpiob::PB3<hal::gpio::Output<hal::gpio::PushPull>>;
+        static CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
+        static STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
         static TOUCH_THRESHOLD: u16;
         static TOUCHED: bool = false;
         static WAS_TOUCHED: bool = false;
@@ -99,7 +100,7 @@ app! {
     tasks: {
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS],
+            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG],
         },
         DMA1_CH6: { /* DMA channel for Usart1 RX */
             priority: 2,
@@ -114,7 +115,7 @@ app! {
         TSC: {
             priority: 2, /* Input should always preempt other tasks */
             path: touch,
-            resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, STATUS_LED, TOUCHED]
+            resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED]
         }
     }
 }
@@ -198,8 +199,9 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     }
     let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
 
-    /* status LED */
-    let led = gpiob.pb3.into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
+    /* T4056 input pins */
+    let stdby = gpioa.pa11.into_pull_up_input(&mut gpioa.moder, &mut gpioa.pupdr);
+    let chrg = gpioa.pa12.into_pull_up_input(&mut gpioa.moder, &mut gpioa.pupdr);
 
     /* Fuel Guage */
     let mut scl = gpioa.pa9.into_open_drain_output(&mut gpioa.moder, &mut gpioa.otyper);
@@ -253,9 +255,10 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         RTC: rtc,
         TOUCH: tsc,
         OK_BUTTON: ok_button,
-        STATUS_LED: led,
         TOUCH_THRESHOLD: threshold,
-        BMS: max17048
+        BMS: max17048,
+        STDBY: stdby,
+        CHRG: chrg
     }
 }
 
@@ -312,7 +315,7 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
         if current_touched == true {
             display.clear();
             *r.STATE += 1;
-            if *r.STATE > 3 {
+            if *r.STATE > 4 {
                 *r.STATE = 0;
             }
         }
@@ -324,26 +327,60 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
             write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
             display.draw(Font12x16::render_str(buffer.as_str())
                 .translate(Coord::new(10, 40))
-                .with_stroke(Some(0xF818_u16.into()))
+                .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
             write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
             display.draw(Font6x12::render_str(buffer.as_str())
                 .translate(Coord::new(24, 60))
-                .with_stroke(Some(0x880B_u16.into()))
+                .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
             write!(buffer, "{:02}", msg_count).unwrap();
             display.draw(Font12x16::render_str(buffer.as_str())
                 .translate(Coord::new(46, 96))
-                .with_stroke(Some(0xF818_u16.into()))
+                .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
             write!(buffer, "{:02}%", r.BMS.soc().unwrap()).unwrap();
             display.draw(Font6x12::render_str(buffer.as_str())
                 .translate(Coord::new(110, 12))
-                .with_stroke(Some(0xF818_u16.into()))
+                .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
+            buffer.clear(); // reset the buffer
+            write!(buffer, "{:03.03}v", r.BMS.vcell().unwrap()).unwrap();
+            display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(0, 12))
+                .with_stroke(Some(0x2679_u16.into()))
+                .into_iter());
+            buffer.clear(); // reset the buffer
+            if r.CHRG.is_low() {
+                write!(buffer, "CHRG").unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(48, 12))
+                .with_stroke(Some(0x2679_u16.into()))
+                .into_iter());
+                buffer.clear(); // reset the buffer
+            } else if r.STDBY.is_high() {
+                write!(buffer, "STDBY").unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(48, 12))
+                .with_stroke(Some(0x2679_u16.into()))
+                .into_iter());
+                buffer.clear(); // reset the buffer
+            } else {
+                write!(buffer, "DONE").unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(48, 12))
+                .with_stroke(Some(0x2679_u16.into()))
+                .into_iter());
+                buffer.clear(); // reset the buffer
+            }
+            write!(buffer, "{:03}%/hr", r.BMS.charge_rate().unwrap()).unwrap();
+            display.draw(Font6x12::render_str(buffer.as_str())
+            .translate(Coord::new(32, 116))
+            .with_stroke(Some(0x2679_u16.into()))
+            .into_iter());
             buffer.clear(); // reset the buffer
         },
         // MESSAGE LIST
@@ -383,6 +420,12 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                 .translate(Coord::new(32,32))
                 .into_iter());
         },
+        // RPR LOGO
+        4 => {
+            display.draw(Image16BPP::new(include_bytes!("../data/rpr.raw"), 64, 39)
+                .translate(Coord::new(32,32))
+                .into_iter());
+        },
         _ => panic!("Unknown state")
     }
 }
@@ -393,10 +436,8 @@ fn touch(_t: &mut Threshold, mut r: TSC::Resources) {
     let reading = r.TOUCH.read(&mut *r.OK_BUTTON).unwrap();
     let threshold = *r.TOUCH_THRESHOLD;
     if reading < threshold {
-        r.STATUS_LED.set_high();
         *r.TOUCHED = true;
     } else {
-        r.STATUS_LED.set_low();
         *r.TOUCHED = false;
     }
     r.TOUCH.start(&mut *r.OK_BUTTON);
