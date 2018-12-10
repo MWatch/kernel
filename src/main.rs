@@ -11,7 +11,7 @@ extern crate panic_semihosting;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
-extern crate stm32l432xx_hal as hal;
+extern crate stm32l4xx_hal as hal;
 
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
@@ -27,7 +27,7 @@ use hal::spi::Spi;
 use hal::rtc::Rtc;
 use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
-use hal::stm32l4::stm32l4x2;
+use hal::stm32;
 use heapless::spsc::Queue;
 use heapless::String;
 use heapless::consts::*;
@@ -67,10 +67,10 @@ const BUFFER_SIZE: usize = 128;
 const PAYLOAD_SIZE: usize = 256;
 
 app! {
-    device: stm32l4x2,
+    device: stm32,
 
     resources: {
-        static BUFFER: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2];
+        static BUFFER: [u8; crate::BUFFER_SIZE] = [0; crate::BUFFER_SIZE];
         static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C5>;
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
@@ -219,10 +219,10 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     tsc.listen(TscEvent::EndOfAcquisition);
     // tsc.listen(TscEvent::MaxCountError); // TODO
     // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
-    rtfm::set_pending(stm32l4x2::Interrupt::TSC);
+    rtfm::set_pending(stm32::Interrupt::TSC);
 
     init::LateResources {
-        CB: rx.circ_read(channels.5, r.BUFFER),
+        CB: rx.circ_read(channels.5, *r.BUFFER),
         MMGR: mmgr,
         USART1_RX: rx,
         DISPLAY: display,
