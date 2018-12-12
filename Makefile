@@ -1,5 +1,6 @@
 openocd: 
-	openocd -f interface/stlink-v2-1.cfg -f target/stm32l4x.cfg
+	openocd -f interface/stlink-v2.cfg -f target/stm32l4x.cfg
+# openocd -f interface/stlink-v2-1.cfg -f target/stm32l4x.cfg
 
 flash: bin
 	st-flash write target/thumbv7em-none-eabi/release/mabez_watch.bin 0x8000000
