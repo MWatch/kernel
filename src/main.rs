@@ -124,7 +124,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(80.mhz()).pclk1(80.mhz()).pclk2(80.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.sysclk(32.mhz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
     // let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
@@ -156,7 +156,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        20.mhz(), // TODO increase this when off the breadboard!
+        16.mhz(),
         clocks,
         &mut rcc.apb2,
     );
