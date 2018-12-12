@@ -79,7 +79,7 @@ app! {
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
         static RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
-        static USART1_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>;
+        static USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>;
         static DISPLAY: Ssd1351;
         static RTC: hal::rtc::Rtc;
         static TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
@@ -107,10 +107,10 @@ app! {
             path: rx_full,
             resources: [CB, MMGR],
         },
-        USART1: { /* Global usart1 it, uses for idle line detection */
+        USART2: { /* Global usart1 it, uses for idle line detection */
             priority: 2,
             path: rx_idle,
-            resources: [CB, MMGR, USART1_RX],
+            resources: [CB, MMGR, USART2_RX],
         },
         TSC: {
             priority: 2, /* Input should always preempt other tasks */
@@ -175,7 +175,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
     let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
     
-    let mut serial = Serial::usart2(p.device.USART2, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb1r1);
+    let mut serial = Serial::usart2(p.device.USART2, (tx, rx), 115200.bps(), clocks, &mut rcc.apb1r1);
     serial.listen(SerialEvent::Idle); // Listen to Idle Line detection
     let (_, rx) = serial.split(); // TODO use tx for transmition
 
@@ -250,7 +250,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     init::LateResources {
         CB: rx.circ_read(channels.6, r.BUFFER),
         MMGR: mmgr,
-        USART1_RX: rx,
+        USART2_RX: rx,
         DISPLAY: display,
         RTC: rtc,
         TOUCH: tsc,
@@ -281,9 +281,9 @@ fn rx_full(_t: &mut Threshold, mut r: DMA1_CH6::Resources) {
 
 /// Handles the intermediate state where the DMA has data in it but
 /// not enough to trigger a half or full dma complete
-fn rx_idle(_t: &mut Threshold, mut r: USART1::Resources) {
+fn rx_idle(_t: &mut Threshold, mut r: USART2::Resources) {
     let mut mgr = r.MMGR;
-    if r.USART1_RX.is_idle(true) {
+    if r.USART2_RX.is_idle(true) {
         r.CB
             .partial_peek(|buf, _half| {
                 let len = buf.len();
@@ -342,7 +342,8 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                 .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
-            write!(buffer, "{:02}%", r.BMS.soc().unwrap()).unwrap();
+            let soc = bodged_soc(r.BMS.soc().unwrap());
+            write!(buffer, "{:02}%", soc).unwrap();
             display.draw(Font6x12::render_str(buffer.as_str())
                 .translate(Coord::new(110, 12))
                 .with_stroke(Some(0x2679_u16.into()))
@@ -430,6 +431,13 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     }
 }
 
+fn bodged_soc(raw: u16) -> u16 {
+    let rawf = raw as f32;
+    // let min = 0.0;
+    let max = 80.0;
+    let soc = rawf / max;
+    (soc * 100.0) as u16
+}
 
 fn touch(_t: &mut Threshold, mut r: TSC::Resources) {
     // let reading = r.TOUCH.read_unchecked();
