@@ -85,6 +85,7 @@ app! {
         static OK_BUTTON: hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
         static CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
         static STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
+        static BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>>;
         static TOUCH_THRESHOLD: u16;
         static TOUCHED: bool = false;
         static WAS_TOUCHED: bool = false;
@@ -99,7 +100,7 @@ app! {
     tasks: {
         TIM2: {
             path: sys_tick,
-            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG],
+            resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN],
         },
         DMA1_CH6: { /* DMA channel for Usart1 RX */
             priority: 2,
@@ -201,6 +202,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     /* T4056 input pins */
     let stdby = gpioa.pa11.into_pull_up_input(&mut gpioa.moder, &mut gpioa.pupdr);
     let chrg = gpioa.pa12.into_pull_up_input(&mut gpioa.moder, &mut gpioa.pupdr);
+    let bt_conn = gpioa.pa8.into_floating_input(&mut gpioa.moder, &mut gpioa.pupdr);
 
     /* Fuel Guage */
     let mut scl = gpioa.pa9.into_open_drain_output(&mut gpioa.moder, &mut gpioa.otyper);
@@ -258,7 +260,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         TOUCH_THRESHOLD: threshold,
         BMS: max17048,
         STDBY: stdby,
-        CHRG: chrg
+        CHRG: chrg,
+        BT_CONN: bt_conn
     }
 }
 
@@ -307,7 +310,7 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
     });
     
     let time = r.RTC.get_time();
-    let date = r.RTC.get_date();
+    let _date = r.RTC.get_date();
 
     let current_touched = r.TOUCHED.claim(t, | val, _| *val);
     if current_touched != *r.WAS_TOUCHED {
@@ -330,7 +333,8 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                 .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
             buffer.clear(); // reset the buffer
-            write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+            // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+            write!(buffer, "BT={}", r.BT_CONN.is_high()).unwrap();
             display.draw(Font6x12::render_str(buffer.as_str())
                 .translate(Coord::new(24, 60))
                 .with_stroke(Some(0x2679_u16.into()))
