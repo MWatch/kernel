@@ -13,6 +13,7 @@ extern crate ssd1351;
 extern crate embedded_graphics;
 extern crate stm32l4xx_hal as hal;
 extern crate max17048;
+extern crate hm11;
 
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
@@ -46,7 +47,10 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::image::Image16BPP;
+
 use max17048::Max17048;
+use hm11::Hm11;
+use hm11::command::Command;
 
 /* Our includes */
 mod msgmgr;
@@ -124,7 +128,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(32.mhz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.sysclk(48.mhz()).pclk1(48.mhz()).pclk2(48.mhz()).freeze(&mut flash.acr);
     // let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
@@ -156,7 +160,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        16.mhz(),
+        24.mhz(),
         clocks,
         &mut rcc.apb2,
     );
@@ -176,9 +180,20 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
     
     let mut serial = Serial::usart2(p.device.USART2, (tx, rx), 115200.bps(), clocks, &mut rcc.apb1r1);
-    serial.listen(SerialEvent::Idle); // Listen to Idle Line detection
-    let (_, rx) = serial.split(); // TODO use tx for transmition
+    serial.listen(SerialEvent::Idle); // Listen to Idle Line detection, IT not enable until after init is complete
+    let (tx, rx) = serial.split();
 
+    delay.delay_ms(50_u8); // allow module to boot
+    let mut hm11 = Hm11::new(tx, rx); // tx, rx into hm11 for configuration
+    hm11.send_with_delay(Command::Test, &mut delay).unwrap();
+    hm11.send_with_delay(Command::SetName("MWatch"), &mut delay).unwrap();
+    hm11.send_with_delay(Command::SystemLedMode(true), &mut delay).unwrap();
+    hm11.send_with_delay(Command::Reset, &mut delay).unwrap();
+    delay.delay_ms(50_u8); // allow module to reset
+    hm11.send_with_delay(Command::Test, &mut delay).unwrap(); // has the module come back up?
+    let (_, rx) = hm11.release();
+
+    
     channels.6.listen(Event::HalfTransfer);
     channels.6.listen(Event::TransferComplete);
 
