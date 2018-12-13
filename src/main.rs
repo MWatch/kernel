@@ -74,8 +74,7 @@ app! {
     device: stm32l4x2,
 
     resources: {
-        static BUFFER: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2];
-        static CB: CircBuffer<[u8; crate::BUFFER_SIZE], dma1::C6>;
+        static CB: CircBuffer<&'static mut [[u8; 128]; 2], dma1::C6>;
         static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
         static MMGR: MessageManager;
         static RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
@@ -94,7 +93,7 @@ app! {
     },
 
     init: {
-        resources: [BUFFER, MSG_PAYLOADS, RB],
+        resources: [MSG_PAYLOADS, RB],
     },
 
     tasks: {
@@ -246,9 +245,10 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     // tsc.listen(TscEvent::MaxCountError); // TODO
     // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
     rtfm::set_pending(stm32l4x2::Interrupt::TSC);
+    let buf = singleton!(: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2]).unwrap();
 
     init::LateResources {
-        CB: rx.circ_read(channels.6, r.BUFFER),
+        CB: rx.circ_read(channels.6, buf),
         MMGR: mmgr,
         USART2_RX: rx,
         DISPLAY: display,
@@ -362,6 +362,16 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                 .with_stroke(Some(0x2679_u16.into()))
                 .into_iter());
                 buffer.clear(); // reset the buffer
+                if let Some(soc_per_hr) = r.BMS.charge_rate().ok() {
+                    if soc_per_hr < 200.0 {
+                        write!(buffer, "{:03.1}%/hr", soc_per_hr).unwrap();
+                        display.draw(Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(32, 116))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter());
+                        buffer.clear(); // reset the buffer
+                    }
+                }
             } else if r.STDBY.is_high() {
                 write!(buffer, "STDBY").unwrap();
                 display.draw(Font6x12::render_str(buffer.as_str())
@@ -377,12 +387,6 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                 .into_iter());
                 buffer.clear(); // reset the buffer
             }
-            write!(buffer, "{:03}%/hr", r.BMS.charge_rate().unwrap()).unwrap();
-            display.draw(Font6x12::render_str(buffer.as_str())
-            .translate(Coord::new(32, 116))
-            .with_stroke(Some(0x2679_u16.into()))
-            .into_iter());
-            buffer.clear(); // reset the buffer
         },
         // MESSAGE LIST
         1 => {
@@ -435,8 +439,11 @@ fn bodged_soc(raw: u16) -> u16 {
     let rawf = raw as f32;
     // let min = 0.0;
     let max = 80.0;
-    let soc = rawf / max;
-    (soc * 100.0) as u16
+    let mut soc = ((rawf / max) * 100.0) as u16;
+    if soc > 100 {
+        soc = 100; // cap at 100
+    }
+    soc
 }
 
 fn touch(_t: &mut Threshold, mut r: TSC::Resources) {

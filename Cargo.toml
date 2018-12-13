@@ -29,7 +29,7 @@ version = "0.4.0"
 features = ["const-fn"]
 
 [dependencies.stm32l4xx-hal]
-version = "0.3.1"
+version = "0.3.2"
 # git = "https://github.com/mabezdev/stm32l4xx-hal"
 # path = "../../hal/stm32l432xx-hal"
 features = ["rt", "stm32l4x2"]
