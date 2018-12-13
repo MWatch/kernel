@@ -28,6 +28,7 @@ use hal::delay::Delay;
 use hal::spi::Spi;
 use hal::i2c::I2c;
 use hal::rtc::Rtc;
+use hal::rcc::PllConfig;
 use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use hal::stm32l4::stm32l4x2;
@@ -128,7 +129,13 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(48.mhz()).pclk1(48.mhz()).pclk2(48.mhz()).freeze(&mut flash.acr);
+    let _pll = PllConfig { // 48mhz pll config
+        m: 1,
+        n: 12,
+        r: 4
+    };
+    // let clocks = rcc.cfgr.sysclk_with_pll(48.mhz(), pll).pclk1(48.mhz()).pclk2(48.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.sysclk(32.mhz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
     // let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
@@ -160,7 +167,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        24.mhz(),
+        16.mhz(),
         clocks,
         &mut rcc.apb2,
     );
@@ -183,13 +190,13 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     serial.listen(SerialEvent::Idle); // Listen to Idle Line detection, IT not enable until after init is complete
     let (tx, rx) = serial.split();
 
-    delay.delay_ms(50_u8); // allow module to boot
+    delay.delay_ms(100_u8); // allow module to boot
     let mut hm11 = Hm11::new(tx, rx); // tx, rx into hm11 for configuration
     hm11.send_with_delay(Command::Test, &mut delay).unwrap();
     hm11.send_with_delay(Command::SetName("MWatch"), &mut delay).unwrap();
     hm11.send_with_delay(Command::SystemLedMode(true), &mut delay).unwrap();
     hm11.send_with_delay(Command::Reset, &mut delay).unwrap();
-    delay.delay_ms(50_u8); // allow module to reset
+    delay.delay_ms(100_u8); // allow module to reset
     hm11.send_with_delay(Command::Test, &mut delay).unwrap(); // has the module come back up?
     let (_, rx) = hm11.release();
 
