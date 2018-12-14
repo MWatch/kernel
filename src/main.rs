@@ -122,6 +122,10 @@ app! {
             priority: 2, /* Input should always preempt other tasks */
             path: touch,
             resources: [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED]
+        },
+        EXTI15_10: {
+            priority: 2,
+            path: alrt,
         }
     }
 }
@@ -233,6 +237,12 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     let i2c = I2c::i2c1(p.device.I2C1, (scl, sda), 100.khz(), clocks, &mut rcc.apb1r1);
 
     let max17048 = Max17048::new(i2c);
+
+    p.device.EXTI.imr1.write(|w| w.mr15().set_bit()); // unmask the interrupt (EXTI15)
+    let mut alrt = gpioa.pa15.into_open_drain_output(&mut gpioa.moder, &mut gpioa.otyper);
+    alrt.internal_pull_up(&mut gpioa.pupdr, true);
+    // alrt pin is PA15 - EXTI15
+    p.device.EXTI.ftsr1.write(|w| w.tr15().set_bit());
     
     /* Static RB for Msg recieving */
     let rb: &'static mut Queue<u8, U256> = r.RB;
@@ -285,6 +295,10 @@ fn idle() -> ! {
     loop {
         rtfm::wfi(); /* Wait for interrupts - sleep mode */
     }
+}
+
+fn alrt() {
+
 }
 
 /// Handles a full or hal full dma buffer of serial data,
