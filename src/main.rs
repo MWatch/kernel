@@ -55,6 +55,8 @@ use hm11::command::Command;
 /* Our includes */
 mod msgmgr;
 
+use msgmgr::MSG_SIZE;
+use msgmgr::MSG_COUNT;
 use msgmgr::Message;
 use msgmgr::MessageManager;
 
@@ -71,15 +73,15 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-const BUFFER_SIZE: usize = 128;
-const PAYLOAD_SIZE: usize = 256;
+const DMA_HAL_SIZE: usize = 64;
 
 app! {
     device: stm32l4x2,
 
     resources: {
-        static CB: CircBuffer<&'static mut [[u8; 128]; 2], dma1::C6>;
-        static MSG_PAYLOADS: [[u8; crate::PAYLOAD_SIZE]; 8] = [[0; crate::PAYLOAD_SIZE]; 8];
+        static DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
+        static CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6>;
+        static MSG_PAYLOADS: [[u8; crate::MSG_SIZE]; crate::MSG_COUNT] = [[0; crate::MSG_SIZE]; crate::MSG_COUNT];
         static MMGR: MessageManager;
         static RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
         static USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>;
@@ -90,15 +92,15 @@ app! {
         static CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
         static STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
         static BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>>;
+        static BMS: max17048::Max17048<hal::i2c::I2c<hal::stm32::I2C1, (hal::gpio::gpioa::PA9<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>, hal::gpio::gpioa::PA10<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>)>>;
         static TOUCH_THRESHOLD: u16;
         static TOUCHED: bool = false;
         static WAS_TOUCHED: bool = false;
         static STATE: u8 = 0;
-        static BMS: max17048::Max17048<hal::i2c::I2c<hal::stm32::I2C1, (hal::gpio::gpioa::PA9<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>, hal::gpio::gpioa::PA10<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>)>>;
     },
 
     init: {
-        resources: [MSG_PAYLOADS, RB],
+        resources: [DMA_BUFFER, MSG_PAYLOADS, RB],
     },
 
     tasks: {
@@ -128,7 +130,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
 
     let mut flash = p.device.FLASH.constrain();
     let mut rcc = p.device.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(48.mhz()).pclk1(48.mhz()).pclk2(48.mhz()).freeze(&mut flash.acr);
+    let clocks = rcc.cfgr.sysclk(32.mhz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
     // let clocks = rcc.cfgr.freeze(&mut flash.acr);
     
     let mut gpioa = p.device.GPIOA.split(&mut rcc.ahb2);
@@ -160,7 +162,7 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
         p.device.SPI1,
         (sck, miso, mosi),
         SSD1351_SPI_MODE,
-        24.mhz(),
+        16.mhz(),
         clocks,
         &mut rcc.apb2,
     );
@@ -183,13 +185,13 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     serial.listen(SerialEvent::Idle); // Listen to Idle Line detection, IT not enable until after init is complete
     let (tx, rx) = serial.split();
 
-    delay.delay_ms(50_u8); // allow module to boot
+    delay.delay_ms(100_u8); // allow module to boot
     let mut hm11 = Hm11::new(tx, rx); // tx, rx into hm11 for configuration
     hm11.send_with_delay(Command::Test, &mut delay).unwrap();
     hm11.send_with_delay(Command::SetName("MWatch"), &mut delay).unwrap();
     hm11.send_with_delay(Command::SystemLedMode(true), &mut delay).unwrap();
     hm11.send_with_delay(Command::Reset, &mut delay).unwrap();
-    delay.delay_ms(50_u8); // allow module to reset
+    delay.delay_ms(100_u8); // allow module to reset
     hm11.send_with_delay(Command::Test, &mut delay).unwrap(); // has the module come back up?
     let (_, rx) = hm11.release();
 
@@ -234,9 +236,8 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     
     /* Static RB for Msg recieving */
     let rb: &'static mut Queue<u8, U256> = r.RB;
-    
     /* Define out block of message - surely there must be a nice way to to this? */
-    let msgs: [msgmgr::Message; 8] = [
+    let msgs: [msgmgr::Message; MSG_COUNT] = [
         Message::new(r.MSG_PAYLOADS[0]),
         Message::new(r.MSG_PAYLOADS[1]),
         Message::new(r.MSG_PAYLOADS[2]),
@@ -262,10 +263,10 @@ fn init(p: init::Peripherals, r: init::Resources) -> init::LateResources {
     // tsc.listen(TscEvent::MaxCountError); // TODO
     // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
     rtfm::set_pending(stm32l4x2::Interrupt::TSC);
-    let buf = singleton!(: [[u8; crate::BUFFER_SIZE]; 2] = [[0; crate::BUFFER_SIZE]; 2]).unwrap();
+    let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = r.DMA_BUFFER;
 
     init::LateResources {
-        CB: rx.circ_read(channels.6, buf),
+        CB: rx.circ_read(channels.6, buffer),
         MMGR: mmgr,
         USART2_RX: rx,
         DISPLAY: display,
@@ -431,6 +432,13 @@ fn sys_tick(t: &mut Threshold, mut r: TIM2::Resources) {
                         .into_iter());
                 }
             });
+            let stack_space = get_free_stack();
+            write!(buffer, "{} bytes free",stack_space);
+            display.draw(Font6x12::render_str(buffer.as_str())
+            .translate(Coord::new(18, 116))
+            .with_stroke(Some(0xF818_u16.into()))
+            .into_iter());
+            buffer.clear();
         },
         // MWATCH LOGO
         2 => {
@@ -463,6 +471,19 @@ fn bodged_soc(raw: u16) -> u16 {
         soc = 100; // cap at 100
     }
     soc
+}
+
+fn get_free_stack() -> usize {
+    unsafe {
+        extern "C" {
+            static __ebss: u32;
+            static __sdata: u32;
+        }
+        let ebss = &__ebss as *const u32 as usize;
+        let start = &__sdata as *const u32 as usize;
+        let total = ebss - start;
+        (64 * 1024) - total
+    }
 }
 
 fn touch(_t: &mut Threshold, mut r: TSC::Resources) {

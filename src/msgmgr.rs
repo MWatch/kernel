@@ -7,6 +7,9 @@ extern crate cortex_m_rtfm as rtfm;
 use heapless::spsc::Queue;
 use heapless::consts::*;
 
+pub const MSG_SIZE: usize = 256;
+pub const MSG_COUNT: usize = 8;
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
     Unknown, /* NULL */
@@ -30,15 +33,15 @@ const DELIM: u8 = 31; // Unit Separator
 
 pub struct Message {
     pub msg_type: MessageType,
-    pub payload: [u8; 256],
+    pub payload: [u8; MSG_SIZE],
     pub payload_idx: usize,
 }
 
 impl Message {
-    pub fn new(rx_buffers: [u8; 256]) -> Self {
+    pub fn new(rx_buffer: [u8; MSG_SIZE]) -> Self {
         Message {
             msg_type: MessageType::Unknown,
-            payload: rx_buffers,
+            payload: rx_buffer,
             payload_idx: 0,
         }
     }
@@ -49,7 +52,7 @@ impl Message {
 }
 
 pub struct MessageManager {
-    msg_pool : [Message; 8],
+    msg_pool : [Message; MSG_COUNT],
     rb: &'static mut Queue<u8, U256>,
     msg_state: MessageState,
     msg_idx : usize,
@@ -57,7 +60,7 @@ pub struct MessageManager {
 
 impl MessageManager 
 {
-    pub fn new(msgs: [Message; 8], ring_t: &'static mut Queue<u8, U256>) -> Self {
+    pub fn new(msgs: [Message; MSG_COUNT], ring_t: &'static mut Queue<u8, U256>) -> Self {
         MessageManager {
             msg_pool: msgs,
             rb: ring_t,
