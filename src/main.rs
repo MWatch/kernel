@@ -46,6 +46,8 @@ use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::image::Image16BPP;
 
+use cortex_m::asm;
+use cortex_m::peripheral::DWT;
 use max17048::Max17048;
 use hm11::Hm11;
 use hm11::command::Command;
@@ -59,6 +61,7 @@ use msgmgr::Message;
 use msgmgr::MessageManager;
 
 const DMA_HAL_SIZE: usize = 64;
+const SYS_CLK: u32 = 32_000_000;
 
 /// Type Alias to use in resource definitions
 type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
@@ -84,12 +87,18 @@ const APP: () = {
     static mut TOUCHED: bool = false;
     static mut WAS_TOUCHED: bool = false;
     static mut STATE: u8 = 0;
+    static mut ITM: cortex_m::peripheral::ITM = ();
+    static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
+
+    static mut SLEEP: u32 = 0;
+    static mut CPU: f32 = 0.0;
+    static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
 
     #[init(resources = [RB, MSG_PAYLOADS, DMA_BUFFER])]
     fn init() {
         let mut flash = device.FLASH.constrain();
         let mut rcc = device.RCC.constrain();
-        let clocks = rcc.cfgr.sysclk(32.mhz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
+        let clocks = rcc.cfgr.sysclk(SYS_CLK.hz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
         
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
@@ -211,8 +220,15 @@ const APP: () = {
         /* Pass messages to the Message Manager */
         let mmgr = MessageManager::new(msgs, rb);
 
-        let mut systick = Timer::tim2(device.TIM2, 10.hz(), clocks, &mut rcc.apb1r1);
+        let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
+
+        let cpu = {
+            let mut cpu = Timer::tim7(device.TIM7, 1.hz(), clocks, &mut rcc.apb1r1);
+            cpu.listen(TimerEvent::TimeOut);
+            core.DWT.enable_cycle_counter();
+            cpu
+        };
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
         // let mut input = Timer::tim7(device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
@@ -237,18 +253,28 @@ const APP: () = {
         STDBY = stdby;
         CHRG = chrg;
         BT_CONN = bt_conn;
-        
+        ITM = core.ITM;
+        SYS_TICK = systick;
+        TIM7 = cpu;
     }
 
-    //     tasks: {
-    //         TIM2: {
-    //             path: sys_tick,
-    //             resources: [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN],
-    //         },
+    #[idle(resources = [SLEEP])]
+    fn idle() -> ! {
+        loop {
+            resources.SLEEP.lock(|sleep| {
+                let before = DWT::get_cycle_count();
+                asm::wfi();
+                let after = DWT::get_cycle_count();
+                *sleep += after.wrapping_sub(before);
+            });
+
+            // interrupts are serviced here
+        }
+    }
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
-    #[interrupt(resources = [CB, MMGR])]
+    #[interrupt(resources = [CB, MMGR], priority = 2)]
     fn DMA1_CH6() {
         let mut mgr = resources.MMGR;
         resources.CB
@@ -258,7 +284,7 @@ const APP: () = {
         .unwrap();
     }
 
-    #[interrupt(resources = [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED])]
+    #[interrupt(resources = [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED], priority = 2)]
     fn TSC() {
         // let reading = resources.TOUCH.read_unchecked();
         let reading = resources.TOUCH.read(&mut *resources.OK_BUTTON).unwrap();
@@ -273,7 +299,7 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(resources = [CB, MMGR, USART2_RX])]
+    #[interrupt(resources = [CB, MMGR, USART2_RX], priority = 2)]
     fn USART2() {
         let mut mgr = resources.MMGR;
         if resources.USART2_RX.is_idle(true) {
@@ -289,12 +315,22 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN])]
+    #[interrupt(resources = [ITM, TIM7, SLEEP, CPU])]
+    fn TIM7() {
+        // CPU_USE = (TOTAL - SLEEP) / TOTAL * 100.
+        let cpu = ((SYS_CLK - *resources.SLEEP) as f32 / SYS_CLK as f32) * 100.0;
+        #[cfg(feature = "cpu-itm")]
+        iprintln!(&mut resources.ITM.stim[0], "CPU: {}%", cpu);
+        *resources.SLEEP = 0;
+        *resources.CPU = cpu;
+        resources.TIM7.start(1.hz());
+    }
+
+    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK])]
     fn TIM2() {
         let mut mgr = resources.MMGR;
         let display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
-
         let msg_count = mgr.lock(|m| {
             m.process();
             m.msg_count()
@@ -435,6 +471,7 @@ const APP: () = {
             },
             _ => panic!("Unknown state")
         }
+        resources.SYS_TICK.start(4.hz());
     }    
 };
 
