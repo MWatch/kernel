@@ -170,11 +170,12 @@ const APP: () = {
         /* Touch sense controller */
         let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let tsc_config = TscConfig {
+        let _tsc_config = TscConfig {
             clock_prescale: Some(TscClockPrescaler::HclkDiv32),
             max_count_error: None
         };
-        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
+        // Some(tsc_config)
+        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, None);
         
         // Acquire for rough estimate of capacitance
         const NUM_SAMPLES: u16 = 25;
@@ -317,7 +318,7 @@ const APP: () = {
 
     #[interrupt(resources = [ITM, TIM7, SLEEP, CPU])]
     fn TIM7() {
-        // CPU_USE = (TOTAL - SLEEP) / TOTAL * 100.
+        // CPU_USE = ((TOTAL - SLEEP) / TOTAL) * 100.
         let cpu = ((SYS_CLK - *resources.SLEEP) as f32 / SYS_CLK as f32) * 100.0;
         #[cfg(feature = "cpu-itm")]
         iprintln!(&mut resources.ITM.stim[0], "CPU: {}%", cpu);
@@ -326,7 +327,7 @@ const APP: () = {
         resources.TIM7.start(1.hz());
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK])]
+    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU])]
     fn TIM2() {
         let mut mgr = resources.MMGR;
         let display = resources.DISPLAY;
@@ -443,13 +444,6 @@ const APP: () = {
                             .into_iter());
                     }
                 });
-                let stack_space = get_free_stack();
-                write!(buffer, "{} bytes free",stack_space).unwrap();
-                display.draw(Font6x12::render_str(buffer.as_str())
-                .translate(Coord::new(18, 116))
-                .with_stroke(Some(0xF818_u16.into()))
-                .into_iter());
-                buffer.clear();
             },
             // MWATCH LOGO
             2 => {
@@ -463,11 +457,30 @@ const APP: () = {
                     .translate(Coord::new(32,32))
                     .into_iter());
             },
-            // RPR LOGO
+            //  Sys info
             4 => {
-                display.draw(Image16BPP::new(include_bytes!("../data/rpr.raw"), 64, 39)
-                    .translate(Coord::new(32,32))
-                    .into_iter());
+                write!(buffer, "CPU").unwrap();
+                display.draw(Font12x16::render_str(buffer.as_str())
+                .translate(Coord::new(46, 16))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+                buffer.clear();
+                write!(buffer, "{:.02}%", *resources.CPU).unwrap();
+                display.draw(Font12x16::render_str(buffer.as_str())
+                .translate(Coord::new(28, 40))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+                buffer.clear();
+                let stack_space = get_free_stack();
+                write!(buffer, "{} bytes free",stack_space).unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(18, 116))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+                buffer.clear();
+                // display.draw(Image16BPP::new(include_bytes!("../data/rpr.raw"), 64, 39)
+                //     .translate(Coord::new(32,32))
+                //     .into_iter());
             },
             _ => panic!("Unknown state")
         }
