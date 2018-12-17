@@ -2,7 +2,7 @@
 
 extern crate heapless;
 extern crate cortex_m;
-extern crate cortex_m_rtfm as rtfm;
+extern crate rtfm;
 
 use heapless::spsc::Queue;
 use heapless::consts::*;
