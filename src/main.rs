@@ -62,6 +62,7 @@ use msgmgr::MessageManager;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
+const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
 /// Type Alias to use in resource definitions
 type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
@@ -225,7 +226,7 @@ const APP: () = {
         systick.listen(TimerEvent::TimeOut);
 
         let cpu = {
-            let mut cpu = Timer::tim7(device.TIM7, 1.hz(), clocks, &mut rcc.apb1r1);
+            let mut cpu = Timer::tim7(device.TIM7, CPU_USAGE_POLL_FREQ.hz(), clocks, &mut rcc.apb1r1);
             cpu.listen(TimerEvent::TimeOut);
             core.DWT.enable_cycle_counter();
             cpu
@@ -319,12 +320,13 @@ const APP: () = {
     #[interrupt(resources = [ITM, TIM7, SLEEP, CPU])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP) / TOTAL) * 100.
-        let cpu = ((SYS_CLK - *resources.SLEEP) as f32 / SYS_CLK as f32) * 100.0;
+        let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
+        let cpu = ((total - *resources.SLEEP) as f32 / total as f32) * 100.0;
         #[cfg(feature = "cpu-itm")]
         iprintln!(&mut resources.ITM.stim[0], "CPU: {}%", cpu);
         *resources.SLEEP = 0;
         *resources.CPU = cpu;
-        resources.TIM7.start(1.hz());
+        resources.TIM7.start(CPU_USAGE_POLL_FREQ.hz());
     }
 
     #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU])]

@@ -38,7 +38,7 @@ features = ["rt", "stm32l4x2"]
 
 
 [features]
-default = ["cpu-itm"]
+# default = ["cpu-itm"]
 cpu-itm = []
 
 # ready for rust 2018
