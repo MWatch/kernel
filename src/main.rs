@@ -6,8 +6,7 @@
 #[macro_use]
 extern crate cortex_m;
 extern crate rtfm;
-extern crate cortex_m_semihosting as sh;
-extern crate panic_semihosting;
+extern crate panic_itm;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
@@ -97,6 +96,8 @@ const APP: () = {
 
     #[init(resources = [RB, MSG_PAYLOADS, DMA_BUFFER])]
     fn init() {
+        core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
+        core.DWT.enable_cycle_counter();
         let mut flash = device.FLASH.constrain();
         let mut rcc = device.RCC.constrain();
         let clocks = rcc.cfgr.sysclk(SYS_CLK.hz()).pclk1(32.mhz()).pclk2(32.mhz()).freeze(&mut flash.acr);
@@ -225,12 +226,10 @@ const APP: () = {
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
 
-        let cpu = {
-            let mut cpu = Timer::tim7(device.TIM7, CPU_USAGE_POLL_FREQ.hz(), clocks, &mut rcc.apb1r1);
-            cpu.listen(TimerEvent::TimeOut);
-            core.DWT.enable_cycle_counter();
-            cpu
-        };
+        
+        let mut cpu = Timer::tim7(device.TIM7, CPU_USAGE_POLL_FREQ.hz(), clocks, &mut rcc.apb1r1);
+        cpu.listen(TimerEvent::TimeOut);
+        
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
         // let mut input = Timer::tim7(device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
@@ -326,7 +325,8 @@ const APP: () = {
         iprintln!(&mut resources.ITM.stim[0], "CPU: {}%", cpu);
         *resources.SLEEP = 0;
         *resources.CPU = cpu;
-        resources.TIM7.start(CPU_USAGE_POLL_FREQ.hz());
+        // resources.TIM7.start(CPU_USAGE_POLL_FREQ.hz());
+        resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
     #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU])]
@@ -486,7 +486,7 @@ const APP: () = {
             },
             _ => panic!("Unknown state")
         }
-        resources.SYS_TICK.start(4.hz());
+        resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }    
 };
 

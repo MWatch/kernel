@@ -11,18 +11,17 @@ repository = "https://github.com/mabezdev/mabez_watch_rust"
 [dependencies]
 cortex-m = "0.5.7"
 cortex-m-rt = "0.6.7"
-cortex-m-semihosting = "0.3.1"
 cortex-m-rtfm = { version = "0.4.0-beta.3" } # , features = ["timer-queue"]
 # cortex-m-rtfm = { git = "https://github.com/mabezdev/cortex-m-rtfm" }
 # cortex-m-rtfm = { path = "../../util/cortex-m-rtfm" }
-panic-semihosting = "0.5.0"
+panic-itm = "0.4.0"
 embedded-graphics = "0.4.4"
 max17048 = "0.1.0"
 hm11 = "0.2.0"
 
 [dependencies.ssd1351]
 # git = "https://github.com/mabezdev/ssd1351"
-# path = "../ssd1351"
+# path = "../../drivers/ssd1351"
 version = "0.1.6"
 features = ["embedded-graphics"]
 
@@ -38,10 +37,8 @@ features = ["rt", "stm32l4x2"]
 
 
 [features]
-# default = ["cpu-itm"]
 cpu-itm = []
 
-# ready for rust 2018
 [[bin]]
 name = "mabez_watch"
 test = false
