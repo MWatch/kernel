@@ -67,6 +67,10 @@ const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
 type BatteryManagementIC = max17048::Max17048<hal::i2c::I2c<hal::stm32::I2C1, (hal::gpio::gpioa::PA9<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>, hal::gpio::gpioa::PA10<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>)>>;
 
+type RightButton = hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
+type MiddleButton = hal::gpio::gpiob::PB6<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
+type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
+
 #[app(device = crate::stm32l4x2)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
@@ -76,7 +80,9 @@ const APP: () = {
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
     static mut TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>> = ();
-    static mut OK_BUTTON: hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>> = ();
+    static mut RIGHT_BUTTON: RightButton = ();
+    static mut MIDDLE_BUTTON: MiddleButton = ();
+    static mut LEFT_BUTTON: LeftButton = ();
     static mut CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>> = ();
     static mut STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>> = ();
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
@@ -90,9 +96,11 @@ const APP: () = {
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
 
-    static mut SLEEP: u32 = 0;
-    static mut CPU: f32 = 0.0;
+    static mut SLEEP_TIME: u32 = 0;
+    static mut CPU_USAGE: f32 = 0.0;
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
+    static mut INPUT_IT_COUNT: u32 = 0;
+    static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
     #[init(resources = [RB, MSG_PAYLOADS, DMA_BUFFER])]
     fn init() {
@@ -171,19 +179,20 @@ const APP: () = {
 
         /* Touch sense controller */
         let sample_pin = gpiob.pb4.into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut ok_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let _tsc_config = TscConfig {
+        let right_button = gpiob.pb5.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+        let mut middle_button = gpiob.pb6.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+        let left_button = gpiob.pb7.into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+        let tsc_config = TscConfig {
             clock_prescale: Some(TscClockPrescaler::HclkDiv32),
             max_count_error: None
         };
-        // Some(tsc_config)
-        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, None);
+        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
         
         // Acquire for rough estimate of capacitance
         const NUM_SAMPLES: u16 = 25;
         let mut baseline = 0;
         for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut ok_button).unwrap();
+            baseline += tsc.acquire(&mut middle_button).unwrap();
         }
         let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
 
@@ -248,7 +257,9 @@ const APP: () = {
         DISPLAY = display;
         RTC = rtc;
         TOUCH = tsc;
-        OK_BUTTON = ok_button;
+        RIGHT_BUTTON = right_button;
+        MIDDLE_BUTTON = middle_button;
+        LEFT_BUTTON = left_button;
         TOUCH_THRESHOLD = threshold;
         BMS = max17048;
         STDBY = stdby;
@@ -259,10 +270,10 @@ const APP: () = {
         TIM7 = cpu;
     }
 
-    #[idle(resources = [SLEEP])]
+    #[idle(resources = [SLEEP_TIME])]
     fn idle() -> ! {
         loop {
-            resources.SLEEP.lock(|sleep| {
+            resources.SLEEP_TIME.lock(|sleep| {
                 let before = DWT::get_cycle_count();
                 asm::wfi();
                 let after = DWT::get_cycle_count();
@@ -285,17 +296,17 @@ const APP: () = {
         .unwrap();
     }
 
-    #[interrupt(resources = [OK_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED], priority = 2)]
+    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED, INPUT_IT_COUNT], priority = 2)]
     fn TSC() {
-        // let reading = resources.TOUCH.read_unchecked();
-        let reading = resources.TOUCH.read(&mut *resources.OK_BUTTON).unwrap();
+        *resources.INPUT_IT_COUNT += 1;
+        let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
         let threshold = *resources.TOUCH_THRESHOLD;
         if reading < threshold {
             *resources.TOUCHED = true;
         } else {
             *resources.TOUCHED = false;
         }
-        resources.TOUCH.start(&mut *resources.OK_BUTTON);
+        resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -316,20 +327,25 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [ITM, TIM7, SLEEP, CPU])]
+    #[interrupt(resources = [ITM, TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM7() {
-        // CPU_USE = ((TOTAL - SLEEP) / TOTAL) * 100.
+        // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
-        let cpu = ((total - *resources.SLEEP) as f32 / total as f32) * 100.0;
+        let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         #[cfg(feature = "cpu-itm")]
-        iprintln!(&mut resources.ITM.stim[0], "CPU: {}%", cpu);
-        *resources.SLEEP = 0;
-        *resources.CPU = cpu;
-        // resources.TIM7.start(CPU_USAGE_POLL_FREQ.hz());
+        iprintln!(&mut resources.ITM.stim[0], "CPU_USAGE: {}%", cpu);
+        *resources.SLEEP_TIME = 0;
+        *resources.CPU_USAGE = cpu;
+        let it_count = resources.INPUT_IT_COUNT.lock(|val|{
+            let value = *val;
+            *val = 0; // reset the value
+            value
+        });
+        *resources.INPUT_IT_COUNT_PER_SECOND = it_count;
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU])]
+    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM2() {
         let mut mgr = resources.MMGR;
         let display = resources.DISPLAY;
@@ -461,28 +477,25 @@ const APP: () = {
             },
             //  Sys info
             4 => {
-                write!(buffer, "CPU").unwrap();
-                display.draw(Font12x16::render_str(buffer.as_str())
-                .translate(Coord::new(46, 16))
-                .with_stroke(Some(0xF818_u16.into()))
-                .into_iter());
-                buffer.clear();
-                write!(buffer, "{:.02}%", *resources.CPU).unwrap();
-                display.draw(Font12x16::render_str(buffer.as_str())
-                .translate(Coord::new(28, 40))
+                write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(0, 12))
                 .with_stroke(Some(0xF818_u16.into()))
                 .into_iter());
                 buffer.clear();
                 let stack_space = get_free_stack();
-                write!(buffer, "{} bytes free",stack_space).unwrap();
+                write!(buffer, "RAM: {} bytes",stack_space).unwrap();
                 display.draw(Font6x12::render_str(buffer.as_str())
-                .translate(Coord::new(18, 116))
+                .translate(Coord::new(0, 24))
                 .with_stroke(Some(0xF818_u16.into()))
                 .into_iter());
                 buffer.clear();
-                // display.draw(Image16BPP::new(include_bytes!("../data/rpr.raw"), 64, 39)
-                //     .translate(Coord::new(32,32))
-                //     .into_iter());
+                write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
+                display.draw(Font6x12::render_str(buffer.as_str())
+                .translate(Coord::new(0, 36))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter());
+                buffer.clear();
             },
             _ => panic!("Unknown state")
         }
