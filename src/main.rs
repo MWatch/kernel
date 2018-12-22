@@ -92,6 +92,7 @@ const APP: () = {
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut TOUCHED: bool = false;
     static mut WAS_TOUCHED: bool = false;
+    static mut FULL_REDRAW: bool = false;
     static mut STATE: u8 = 0;
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
@@ -329,9 +330,22 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH], priority = 2)]
+    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH, TOUCHED, WAS_TOUCHED, STATE, FULL_REDRAW], priority = 2)]
     fn TIM6_DACUNDER() {
         resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
+
+        let current_touched = resources.TOUCHED.lock(|val| *val);
+        if current_touched != *resources.WAS_TOUCHED {
+            *resources.WAS_TOUCHED = current_touched;
+            if current_touched == true {
+                *resources.STATE += 1;
+                if *resources.STATE > 4 {
+                    *resources.STATE = 0;
+                }
+                *resources.FULL_REDRAW = true;
+            }
+        }
+
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
@@ -353,7 +367,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [MMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
         let mut mgr = resources.MMGR;
         let display = resources.DISPLAY;
@@ -366,19 +380,17 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
 
-        let current_touched = resources.TOUCHED.lock(|val| *val);
-        if current_touched != *resources.WAS_TOUCHED {
-            *resources.WAS_TOUCHED = current_touched;
-            if current_touched == true {
-                display.clear();
-                *resources.STATE += 1;
-                if *resources.STATE > 4 {
-                    *resources.STATE = 0;
-                }
-            }
+        let state = resources.STATE.lock(|val| *val);
+        let redraw = resources.FULL_REDRAW.lock(|val| {
+            let value = *val;
+            *val = false; // reset
+            value
+        });
+        if redraw {
+            display.clear();
         }
 
-        match *resources.STATE {
+        match state {
             // HOME PAGE
             0 => {
                 write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
