@@ -90,7 +90,6 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut MSG_PAYLOADS: [[u8; crate::MSG_SIZE]; crate::MSG_COUNT] = [[0; crate::MSG_SIZE]; crate::MSG_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
-    static mut TOUCHED: bool = false;
     static mut WAS_TOUCHED: bool = false;
     static mut FULL_REDRAW: bool = false;
     static mut STATE: u8 = 0;
@@ -243,7 +242,7 @@ const APP: () = {
         
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // 8hz * button count
+        let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
         tsc.listen(TscEvent::EndOfAcquisition);
@@ -299,15 +298,22 @@ const APP: () = {
         .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED, INPUT_IT_COUNT], priority = 2)]
+    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, STATE, FULL_REDRAW], priority = 2)]
     fn TSC() {
         *resources.INPUT_IT_COUNT += 1;
         let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
         let threshold = *resources.TOUCH_THRESHOLD;
-        if reading < threshold {
-            *resources.TOUCHED = true;
-        } else {
-            *resources.TOUCHED = false;
+        let current_touched = reading < threshold;
+
+        if current_touched != *resources.WAS_TOUCHED {
+            *resources.WAS_TOUCHED = current_touched;
+            if current_touched == true {
+                *resources.STATE += 1;
+                if *resources.STATE > 4 {
+                    *resources.STATE = 0;
+                }
+                *resources.FULL_REDRAW = true;
+            }
         }
         resources.TOUCH.clear(TscEvent::EndOfAcquisition);
     }
@@ -330,22 +336,9 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH, TOUCHED, WAS_TOUCHED, STATE, FULL_REDRAW], priority = 2)]
+    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH], priority = 2)]
     fn TIM6_DACUNDER() {
         resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
-
-        let current_touched = resources.TOUCHED.lock(|val| *val);
-        if current_touched != *resources.WAS_TOUCHED {
-            *resources.WAS_TOUCHED = current_touched;
-            if current_touched == true {
-                *resources.STATE += 1;
-                if *resources.STATE > 4 {
-                    *resources.STATE = 0;
-                }
-                *resources.FULL_REDRAW = true;
-            }
-        }
-
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
@@ -412,7 +405,7 @@ const APP: () = {
                     .with_stroke(Some(0x2679_u16.into()))
                     .into_iter());
                 buffer.clear(); // reset the buffer
-                let soc = bodged_soc(resources.BMS.soc().unwrap());
+                let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(Font6x12::render_str(buffer.as_str())
                     .translate(Coord::new(110, 12))
