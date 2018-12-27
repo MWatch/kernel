@@ -71,11 +71,11 @@ type RightButton = hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, ha
 type MiddleButton = hal::gpio::gpiob::PB6<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
 type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
 
-#[app(device = crate::stm32l4x2)]
+#[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut MMGR: MessageManager = ();
-    static mut RB: heapless::spsc::Queue<u8, heapless::consts::U256> = heapless::spsc::Queue::new();
+    static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
@@ -215,7 +215,9 @@ const APP: () = {
         let max17048 = Max17048::new(i2c);
         
         /* Static RB for Msg recieving */
-        let rb: &'static mut Queue<u8, U256> = resources.RB;
+        *resources.RB = Some(Queue::new());
+        let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
+        
         /* Define out block of message - surely there must be a nice way to to this? */
         let msgs: [msgmgr::Message; MSG_COUNT] = [
             Message::new(resources.MSG_PAYLOADS[0]),
