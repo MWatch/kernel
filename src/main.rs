@@ -90,11 +90,12 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut MSG_PAYLOADS: [[u8; crate::MSG_SIZE]; crate::MSG_COUNT] = [[0; crate::MSG_SIZE]; crate::MSG_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
-    static mut TOUCHED: bool = false;
     static mut WAS_TOUCHED: bool = false;
+    static mut FULL_REDRAW: bool = false;
     static mut STATE: u8 = 0;
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
+    static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
     static mut SLEEP_TIME: u32 = 0;
     static mut CPU_USAGE: f32 = 0.0;
@@ -243,13 +244,13 @@ const APP: () = {
         
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        // let mut input = Timer::tim7(device.TIM7, 20.hz(), clocks, &mut rcc.apb1r1);
-        // input.listen(TimerEvent::TimeOut);
+        let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        input.listen(TimerEvent::TimeOut);
 
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
         // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
-        rtfm::pend(stm32l4x2::Interrupt::TSC);
+        // rtfm::pend(stm32l4x2::Interrupt::TSC);
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
 
         
@@ -270,6 +271,7 @@ const APP: () = {
         ITM = core.ITM;
         SYS_TICK = systick;
         TIM7 = cpu;
+        TIM6 = input;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -298,17 +300,24 @@ const APP: () = {
         .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, TOUCHED, INPUT_IT_COUNT], priority = 2)]
+    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, STATE, FULL_REDRAW], priority = 2)]
     fn TSC() {
         *resources.INPUT_IT_COUNT += 1;
         let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
         let threshold = *resources.TOUCH_THRESHOLD;
-        if reading < threshold {
-            *resources.TOUCHED = true;
-        } else {
-            *resources.TOUCHED = false;
+        let current_touched = reading < threshold;
+
+        if current_touched != *resources.WAS_TOUCHED {
+            *resources.WAS_TOUCHED = current_touched;
+            if current_touched == true {
+                *resources.STATE += 1;
+                if *resources.STATE > 4 {
+                    *resources.STATE = 0;
+                }
+                *resources.FULL_REDRAW = true;
+            }
         }
-        resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
+        resources.TOUCH.clear(TscEvent::EndOfAcquisition);
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -329,6 +338,12 @@ const APP: () = {
         }
     }
 
+    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH], priority = 2)]
+    fn TIM6_DACUNDER() {
+        resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
+        resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+    }
+
     #[interrupt(resources = [ITM, TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
@@ -347,7 +362,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, TOUCHED, WAS_TOUCHED, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [MMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
         let mut mgr = resources.MMGR;
         let display = resources.DISPLAY;
@@ -360,19 +375,17 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
 
-        let current_touched = resources.TOUCHED.lock(|val| *val);
-        if current_touched != *resources.WAS_TOUCHED {
-            *resources.WAS_TOUCHED = current_touched;
-            if current_touched == true {
-                display.clear();
-                *resources.STATE += 1;
-                if *resources.STATE > 4 {
-                    *resources.STATE = 0;
-                }
-            }
+        let state = resources.STATE.lock(|val| *val);
+        let redraw = resources.FULL_REDRAW.lock(|val| {
+            let value = *val;
+            *val = false; // reset
+            value
+        });
+        if redraw {
+            display.clear();
         }
 
-        match *resources.STATE {
+        match state {
             // HOME PAGE
             0 => {
                 write!(buffer, "{:02}:{:02}:{:02}", time.hours, time.minutes, time.seconds).unwrap();
@@ -394,7 +407,7 @@ const APP: () = {
                     .with_stroke(Some(0x2679_u16.into()))
                     .into_iter());
                 buffer.clear(); // reset the buffer
-                let soc = bodged_soc(resources.BMS.soc().unwrap());
+                let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(Font6x12::render_str(buffer.as_str())
                     .translate(Coord::new(110, 12))
