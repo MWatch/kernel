@@ -1,0 +1,3 @@
+target create -arch arm-none-none ./target/thumbv7em-none-eabi/release/mabez_watch
+gdb-remote localhost:3333
+target modules load --load --set-pc-to-entry --slide 0 --file /home/mabez/development/embedded/rust/projects/mwatch/target/thumbv7em-none-eabi/release/mabez_watch
