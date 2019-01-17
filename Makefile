@@ -3,7 +3,7 @@ openocd:
 # openocd -f interface/stlink-v2-1.cfg -f target/stm32l4x.cfg
 
 flash: bin
-	st-flash write target/thumbv7em-none-eabi/release/mabez_watch.bin 0x8000000
+	st-flash --reset write target/thumbv7em-none-eabi/release/mabez_watch.bin 0x8000000
 
 binfo: bin
 	cargo size --release --bin mabez_watch -- -A

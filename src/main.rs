@@ -27,7 +27,6 @@ use hal::i2c::I2c;
 use hal::rtc::Rtc;
 use hal::datetime::Date;
 use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
-use hal::stm32l4::stm32l4x2;
 use heapless::spsc::Queue;
 use heapless::String;
 use heapless::consts::*;
