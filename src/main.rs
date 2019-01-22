@@ -53,10 +53,11 @@ use hm11::command::Command;
 /* Our includes */
 mod buffer_manager;
 mod notification;
+mod buffer;
 
 use buffer_manager::BUFF_SIZE;
-use buffer_manager::MSG_COUNT;
-use buffer_manager::Buffer;
+use buffer_manager::BUFF_COUNT;
+use buffer::Buffer;
 use buffer_manager::BufferManager;
 
 const DMA_HAL_SIZE: usize = 64;
@@ -74,7 +75,7 @@ type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
-    static mut MMGR: BufferManager = ();
+    static mut MMGR: BufferManager<'static> = ();
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -88,7 +89,7 @@ const APP: () = {
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut BMS: BatteryManagementIC = ();
     static mut TOUCH_THRESHOLD: u16 = ();
-    static mut MSG_PAYLOADS: [[u8; crate::BUFF_SIZE]; crate::MSG_COUNT] = [[0; crate::BUFF_SIZE]; crate::MSG_COUNT];
+    static mut BUFFERS: [Buffer; crate::BUFF_COUNT] = [Buffer { btype: buffer::Type::Unknown, payload: [0u8; BUFF_SIZE], payload_idx: 0 }; crate::BUFF_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut FULL_REDRAW: bool = false;
@@ -103,7 +104,7 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
-    #[init(resources = [RB, MSG_PAYLOADS, DMA_BUFFER])]
+    #[init(resources = [RB, BUFFERS, DMA_BUFFER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -218,22 +219,10 @@ const APP: () = {
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
-        
-        /* Define out block of message - surely there must be a nice way to to this? */
-        let msgs: [Buffer; MSG_COUNT] = [
-            Buffer::new(resources.MSG_PAYLOADS[0]),
-            Buffer::new(resources.MSG_PAYLOADS[1]),
-            Buffer::new(resources.MSG_PAYLOADS[2]),
-            Buffer::new(resources.MSG_PAYLOADS[3]),
-            Buffer::new(resources.MSG_PAYLOADS[4]),
-            Buffer::new(resources.MSG_PAYLOADS[5]),
-            Buffer::new(resources.MSG_PAYLOADS[6]),
-            Buffer::new(resources.MSG_PAYLOADS[7]),
-        ];
-
+        let buffers: &'static mut [Buffer; crate::BUFF_COUNT] = resources.BUFFERS;
 
         /* Pass messages to the Message Manager */
-        let mmgr = BufferManager::new(msgs, rb);
+        let mmgr = BufferManager::new(buffers, rb);
 
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
@@ -369,7 +358,7 @@ const APP: () = {
         let mut buffer: String<U256> = String::new();
         let msg_count = mgr.lock(|m| {
             m.process();
-            m.msg_count()
+            m.used_count()
         });
         
         let time = resources.RTC.get_time();
@@ -458,7 +447,7 @@ const APP: () = {
                 mgr.lock(|m| {
                     if msg_count > 0 {
                         for i in 0..msg_count {
-                            m.peek_message(i, |msg| {
+                            m.peek_buffer(i, |msg| {
                                 write!(buffer, "[{}]: ", i + 1).unwrap();
                                 for c in 0..msg.payload_idx {
                                     buffer.push(msg.payload[c] as char).unwrap();
@@ -523,7 +512,7 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-fn bodged_soc(raw: u16) -> u16 {
+fn _bodged_soc(raw: u16) -> u16 {
     let rawf = raw as f32;
     // let min = 0.0;
     let max = 80.0;
