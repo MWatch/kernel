@@ -51,12 +51,13 @@ use hm11::Hm11;
 use hm11::command::Command;
 
 /* Our includes */
-mod msgmgr;
+mod buffer_manager;
+mod notification;
 
-use msgmgr::MSG_SIZE;
-use msgmgr::MSG_COUNT;
-use msgmgr::Message;
-use msgmgr::MessageManager;
+use buffer_manager::BUFF_SIZE;
+use buffer_manager::MSG_COUNT;
+use buffer_manager::Buffer;
+use buffer_manager::BufferManager;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -73,7 +74,7 @@ type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
-    static mut MMGR: MessageManager = ();
+    static mut MMGR: BufferManager = ();
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -87,7 +88,7 @@ const APP: () = {
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut BMS: BatteryManagementIC = ();
     static mut TOUCH_THRESHOLD: u16 = ();
-    static mut MSG_PAYLOADS: [[u8; crate::MSG_SIZE]; crate::MSG_COUNT] = [[0; crate::MSG_SIZE]; crate::MSG_COUNT];
+    static mut MSG_PAYLOADS: [[u8; crate::BUFF_SIZE]; crate::MSG_COUNT] = [[0; crate::BUFF_SIZE]; crate::MSG_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut FULL_REDRAW: bool = false;
@@ -219,20 +220,20 @@ const APP: () = {
         let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
         
         /* Define out block of message - surely there must be a nice way to to this? */
-        let msgs: [msgmgr::Message; MSG_COUNT] = [
-            Message::new(resources.MSG_PAYLOADS[0]),
-            Message::new(resources.MSG_PAYLOADS[1]),
-            Message::new(resources.MSG_PAYLOADS[2]),
-            Message::new(resources.MSG_PAYLOADS[3]),
-            Message::new(resources.MSG_PAYLOADS[4]),
-            Message::new(resources.MSG_PAYLOADS[5]),
-            Message::new(resources.MSG_PAYLOADS[6]),
-            Message::new(resources.MSG_PAYLOADS[7]),
+        let msgs: [Buffer; MSG_COUNT] = [
+            Buffer::new(resources.MSG_PAYLOADS[0]),
+            Buffer::new(resources.MSG_PAYLOADS[1]),
+            Buffer::new(resources.MSG_PAYLOADS[2]),
+            Buffer::new(resources.MSG_PAYLOADS[3]),
+            Buffer::new(resources.MSG_PAYLOADS[4]),
+            Buffer::new(resources.MSG_PAYLOADS[5]),
+            Buffer::new(resources.MSG_PAYLOADS[6]),
+            Buffer::new(resources.MSG_PAYLOADS[7]),
         ];
 
 
         /* Pass messages to the Message Manager */
-        let mmgr = MessageManager::new(msgs, rb);
+        let mmgr = BufferManager::new(msgs, rb);
 
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);

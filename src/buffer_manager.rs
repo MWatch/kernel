@@ -6,12 +6,18 @@ extern crate rtfm;
 
 use heapless::spsc::Queue;
 use heapless::consts::*;
+use notification::Notification;
 
-pub const MSG_SIZE: usize = 256;
+pub const BUFF_SIZE: usize = 256;
 pub const MSG_COUNT: usize = 8;
 
+/// Allows the 
+pub trait BufferHandler {
+    fn write(byte: u8);
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum MessageType {
+pub enum Type {
     Unknown, /* NULL */
     Notification,
     Weather,
@@ -20,7 +26,7 @@ pub enum MessageType {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-enum MessageState {
+enum State {
     Wait, /* Waiting for data */
     Init,
     Type,
@@ -31,40 +37,40 @@ const STX: u8 = 2;
 const ETX: u8 = 3;
 const DELIM: u8 = 31; // Unit Separator
 
-pub struct Message {
-    pub msg_type: MessageType,
-    pub payload: [u8; MSG_SIZE],
+pub struct Buffer {
+    pub btype: Type,
+    pub payload: [u8; BUFF_SIZE],
     pub payload_idx: usize,
 }
 
-impl Message {
-    pub fn new(rx_buffer: [u8; MSG_SIZE]) -> Self {
-        Message {
-            msg_type: MessageType::Unknown,
+impl Buffer {
+    pub fn new(rx_buffer: [u8; BUFF_SIZE]) -> Self {
+        Buffer {
+            btype: Type::Unknown,
             payload: rx_buffer,
             payload_idx: 0,
         }
     }
 
-    pub fn get_type(self) -> MessageType {
-        self.msg_type
+    pub fn get_type(self) -> Type {
+        self.btype
     }
 }
 
-pub struct MessageManager {
-    msg_pool : [Message; MSG_COUNT],
+pub struct BufferManager {
+    msg_pool : [Buffer; MSG_COUNT],
     rb: &'static mut Queue<u8, U256>,
-    msg_state: MessageState,
+    msg_state: State,
     msg_idx : usize,
 }
 
-impl MessageManager 
+impl BufferManager 
 {
-    pub fn new(msgs: [Message; MSG_COUNT], ring_t: &'static mut Queue<u8, U256>) -> Self {
-        MessageManager {
+    pub fn new(msgs: [Buffer; MSG_COUNT], ring_t: &'static mut Queue<u8, U256>) -> Self {
+        BufferManager {
             msg_pool: msgs,
             rb: ring_t,
-            msg_state: MessageState::Init,
+            msg_state: State::Init,
             msg_idx: 0,
         }
     }
@@ -84,13 +90,16 @@ impl MessageManager
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
-                        self.msg_state = MessageState::Init; // activate processing
+                        self.msg_state = State::Init; // activate processing
                         let mut msg = &mut self.msg_pool[self.msg_idx];
                         msg.payload_idx = 0; // if we are reusing buffer - set the index back to zero 
                     }
                     ETX => { /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
-                        self.msg_state = MessageState::Wait;
+                        //TODO pop this address from the queue instead of directly working with the array!
+                        // let msg = &self.msg_pool[self.msg_idx];
+                        // let notification: Notification = msg.into();
+                        self.msg_state = State::Wait;
                         self.msg_idx += 1;
                         if self.msg_count() + 1 > self.msg_pool.len() {
                             /* buffer is full, wrap around */        
@@ -98,24 +107,25 @@ impl MessageManager
                         }
                     }
                     DELIM => { // state change - how? based on type
-                        self.msg_state = MessageState::Payload;
+                        self.msg_state = State::Payload;
                     }
                     _ => {
                         /* Run through Msg state machine */
                         match self.msg_state {
-                            MessageState::Init => {
+                            State::Init => {
                                 // if msg_idx + 1 > msgs.len(), cant go
-                                self.msg_state = MessageState::Type;
+                                self.msg_state = State::Type;
                             }
-                            MessageState::Type => {
+                            State::Type => {
                                 self.determine_type(byte);
+                                
                             }
-                            MessageState::Payload => {
+                            State::Payload => {
                                 let mut msg = &mut self.msg_pool[self.msg_idx];
                                 msg.payload[msg.payload_idx] = byte;
                                 msg.payload_idx += 1;
                             }
-                            MessageState::Wait => {
+                            State::Wait => {
                                 // do nothing, useless bytes
                             }
                         }
@@ -126,12 +136,12 @@ impl MessageManager
     }
 
     fn determine_type(&mut self, type_byte: u8){
-        self.msg_pool[self.msg_idx].msg_type = match type_byte {
-            b'N' => MessageType::Notification, /* NOTIFICATION i.e FB Msg */
-            b'W' => MessageType::Weather, /* Weather packet */
-            b'D' => MessageType::Date,   /* Date packet */
-            b'M' => MessageType::Music, /* Spotify controls */
-            _ => MessageType::Unknown
+        self.msg_pool[self.msg_idx].btype = match type_byte {
+            b'N' => Type::Notification, /* NOTIFICATION i.e FB Msg */
+            b'W' => Type::Weather, /* Weather packet */
+            b'D' => Type::Date,   /* Date packet */
+            b'M' => Type::Music, /* Spotify controls */
+            _ => Type::Unknown
         }
     }
 
@@ -149,7 +159,7 @@ impl MessageManager
 
     /// takes a closure to execute on the buffer
     pub fn peek_message<F>(&mut self, index: usize, f: F)
-    where F: FnOnce(&Message) {
+    where F: FnOnce(&Buffer) {
         let msg = &self.msg_pool[index];
         f(&msg);
     }
