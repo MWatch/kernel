@@ -23,6 +23,16 @@ impl Notification {
                             }
         }
     }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.inner.payload[..self.inner.payload_idx]
+    }
+
+    pub fn parse_buffer(&mut self, buffer: &Buffer) -> Result<(), NotificationError> {
+        //TODO actual parsing, using nom?
+        self.inner = buffer.clone();
+        Ok(())
+    }
 }
 #[derive(Copy, Clone, Debug)]
 pub enum NotificationError {
@@ -35,6 +45,14 @@ pub struct NotificationManager {
 }
 
 impl NotificationManager {
+
+    pub fn new(notifications: &'static mut [Notification; BUFF_COUNT]) -> NotificationManager {
+        NotificationManager {
+            pool: notifications,
+            idx : 0,
+        }
+    }
+
     /// takes a closure to execute on the buffer
     pub fn peek_notification<F>(&mut self, index: usize, f: F)
     where F: FnOnce(&Notification) {
@@ -48,11 +66,13 @@ impl NotificationManager {
 
     // Parses a buffer for notification info, copying into the pool
     pub fn add(&mut self, buffer: &Buffer) -> Result<(), NotificationError> {
+        self.pool[self.idx].parse_buffer(buffer)?;
+
         self.idx += 1;
         if self.idx + 1 > self.pool.len() { // TODO impl a cirucular buffer that track head and tail
             /* buffer is full, wrap around */        
             self.idx = 0;
         }
-        unimplemented!()
+        Ok(())
     }
 }

@@ -6,7 +6,8 @@
 #[macro_use]
 extern crate cortex_m;
 extern crate rtfm;
-extern crate panic_itm;
+// extern crate panic_itm;
+extern crate panic_semihosting;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
@@ -14,6 +15,8 @@ extern crate stm32l4xx_hal as hal;
 extern crate max17048;
 extern crate hm11;
 extern crate cortex_m_rt as rt;
+
+mod ingress;
 
 use embedded_graphics::Drawing;
 use crate::rt::ExceptionFrame;
@@ -50,13 +53,10 @@ use max17048::Max17048;
 use hm11::Hm11;
 use hm11::command::Command;
 
-/* Our includes */
-mod ingress;
 
-use crate::ingress::ingress_manager::BUFF_SIZE;
 use crate::ingress::ingress_manager::BUFF_COUNT;
 use crate::ingress::ingress_manager::IngressManager;
-use crate::ingress::buffer::Buffer;
+use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
 
 const DMA_HAL_SIZE: usize = 64;
@@ -74,7 +74,8 @@ type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
-    static mut MMGR: IngressManager = ();
+    static mut IMNG: IngressManager = ();
+    static mut NMGR: NotificationManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] = [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
@@ -220,12 +221,14 @@ const APP: () = {
         let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
         let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
+        // Give the RB to the ingress manager
+        let imgr = IngressManager::new(rb);
+
         /* Pass messages to the Message Manager */
-        let mmgr = IngressManager::new(rb);
+        let nmgr = NotificationManager::new(buffers);
 
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
-
         
         let mut cpu = Timer::tim7(device.TIM7, CPU_USAGE_POLL_FREQ.hz(), clocks, &mut rcc.apb1r1);
         cpu.listen(TimerEvent::TimeOut);
@@ -244,7 +247,7 @@ const APP: () = {
         
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
-        MMGR = mmgr;
+        IMNG = imgr;
         DISPLAY = display;
         RTC = rtc;
         TOUCH = tsc;
@@ -260,6 +263,7 @@ const APP: () = {
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
+        NMGR = nmgr;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -278,9 +282,9 @@ const APP: () = {
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
-    #[interrupt(resources = [CB, MMGR], priority = 2)]
+    #[interrupt(resources = [CB, IMNG], priority = 2)]
     fn DMA1_CH6() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
         resources.CB
         .peek(|buf, _half| {
             mgr.write(buf);
@@ -310,9 +314,9 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(resources = [CB, MMGR, USART2_RX], priority = 2)]
+    #[interrupt(resources = [CB, IMNG, USART2_RX], priority = 2)]
     fn USART2() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
         if resources.USART2_RX.is_idle(true) {
             resources.CB
                 .partial_peek(|buf, _half| {
@@ -350,13 +354,14 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
+    #[interrupt(resources = [IMNG, NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
+        let mut n_mgr = resources.NMGR;
         let display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
-        let msg_count = mgr.lock(|m| {
-            m.process();
+        mgr.lock(|m| {
+            m.process(&mut n_mgr);
         });
         
         let time = resources.RTC.get_time();
@@ -388,7 +393,7 @@ const APP: () = {
                     .with_stroke(Some(0x2679_u16.into()))
                     .into_iter());
                 buffer.clear(); // reset the buffer
-                write!(buffer, "{:02}", msg_count).unwrap();
+                write!(buffer, "{:02}", n_mgr.idx()).unwrap();
                 display.draw(Font12x16::render_str(buffer.as_str())
                     .translate(Coord::new(46, 96))
                     .with_stroke(Some(0x2679_u16.into()))
@@ -442,28 +447,26 @@ const APP: () = {
             },
             // MESSAGE LIST
             1 => {
-                mgr.lock(|m| {
-                    if msg_count > 0 {
-                        for i in 0..msg_count {
-                            m.peek_buffer(i, |msg| {
-                                write!(buffer, "[{}]: ", i + 1).unwrap();
-                                for c in 0..msg.payload_idx {
-                                    buffer.push(msg.payload[c] as char).unwrap();
-                                }
-                                display.draw(Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(0, (i * 12) as i32 + 2))
-                                    .with_stroke(Some(0xF818_u16.into()))
-                                    .into_iter());
-                                buffer.clear();
-                            });
-                        }
-                    } else {
-                        display.draw(Font6x12::render_str("No messages.")
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter());
+                if n_mgr.idx() > 0 {
+                    for i in 0..n_mgr.idx() {
+                        n_mgr.peek_notification(i, |msg| {
+                            write!(buffer, "[{}]: ", i + 1).unwrap();
+                            for byte in msg.buffer() {
+                                buffer.push(*byte as char).unwrap();
+                            }
+                            display.draw(Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(0, (i * 12) as i32 + 2))
+                                .with_stroke(Some(0xF818_u16.into()))
+                                .into_iter());
+                            buffer.clear();
+                        });
                     }
-                });
+                } else {
+                    display.draw(Font6x12::render_str("No messages.")
+                        .translate(Coord::new(0, 12))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter());
+                }
             },
             // MWATCH LOGO
             2 => {

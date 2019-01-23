@@ -7,7 +7,7 @@ extern crate rtfm;
 use heapless::spsc::Queue;
 use heapless::consts::*;
 use crate::ingress::buffer::{Buffer, Type};
-use crate::ingress::notification::Notification;
+use crate::ingress::notification::NotificationManager;
 
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
@@ -49,21 +49,30 @@ impl IngressManager
         }
     }
     
-    pub fn process(&mut self){
+    pub fn process(&mut self, notification_mgr: &mut NotificationManager){
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
-                        self.state = State::Init; // activate processing
-                        self.buffer.payload_idx = 0; // if we are reusing buffer - set the index back to zero 
+                        self.buffer.clear(); 
+                        self.state = State::Type; // activate processing
                     }
                     ETX => { /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.state = State::Wait;
-                        //TODO write into notificaiton manager etc
+                        match self.buffer.btype {
+                            Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
+                            Type::Application => {
+                                //TODO signal installed - verify with checksum etc
+                            },
+                            Type::Notification => {
+                                notification_mgr.add(&self.buffer).unwrap();
+                            },
+                            _ => panic!("Unhandled buffer in {:?}", self.state),
+                        }
                     }
                     PAYLOAD => { // state change - how? based on type
-                        match self.determine_type(byte) {
+                        match self.buffer.btype {
                             Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
                             Type::Application => {
                                 /* Move to new payload processing state, as we will be writing into RAM/ROM */
@@ -76,10 +85,11 @@ impl IngressManager
                         /* Run through byte state machine */
                         match self.state {
                             State::Init => {
-                                self.state = State::Type;
+                                self.state = State::Type
                             }
                             State::Type => {
-                                match self.determine_type(byte) {
+                                self.buffer.btype = self.determine_type(byte);
+                                match self.buffer.btype {
                                     Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
                                     Type::Application => {
                                         /* Move to new payload processing state, as we will be writing into RAM/ROM */
