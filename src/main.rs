@@ -6,7 +6,8 @@
 #[macro_use]
 extern crate cortex_m;
 extern crate rtfm;
-extern crate panic_itm;
+// extern crate panic_itm;
+extern crate panic_semihosting;
 extern crate heapless;
 extern crate ssd1351;
 extern crate embedded_graphics;
@@ -15,23 +16,25 @@ extern crate max17048;
 extern crate hm11;
 extern crate cortex_m_rt as rt;
 
+mod ingress;
+
 use embedded_graphics::Drawing;
-use rt::ExceptionFrame;
-use hal::dma::{dma1, CircBuffer, Event};
-use hal::prelude::*;
-use hal::serial::{Serial, Event as SerialEvent};
-use hal::timer::{Timer, Event as TimerEvent};
-use hal::delay::Delay;
-use hal::spi::Spi;
-use hal::i2c::I2c;
-use hal::rtc::Rtc;
-use hal::datetime::Date;
-use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
+use crate::rt::ExceptionFrame;
+use crate::hal::dma::{dma1, CircBuffer, Event};
+use crate::hal::prelude::*;
+use crate::hal::serial::{Serial, Event as SerialEvent};
+use crate::hal::timer::{Timer, Event as TimerEvent};
+use crate::hal::delay::Delay;
+use crate::hal::spi::Spi;
+use crate::hal::i2c::I2c;
+use crate::hal::rtc::Rtc;
+use crate::hal::datetime::Date;
+use crate::hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use heapless::spsc::Queue;
 use heapless::String;
 use heapless::consts::*;
 use rtfm::app;
-use rt::exception;
+use crate::rt::exception;
 use core::fmt::Write;
 
 use ssd1351::builder::Builder;
@@ -50,13 +53,11 @@ use max17048::Max17048;
 use hm11::Hm11;
 use hm11::command::Command;
 
-/* Our includes */
-mod msgmgr;
 
-use msgmgr::MSG_SIZE;
-use msgmgr::MSG_COUNT;
-use msgmgr::Message;
-use msgmgr::MessageManager;
+use crate::ingress::ingress_manager::BUFF_COUNT;
+use crate::ingress::ingress_manager::IngressManager;
+use crate::ingress::notification::NotificationManager;
+use crate::ingress::notification::Notification;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -73,7 +74,9 @@ type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
-    static mut MMGR: MessageManager = ();
+    static mut IMNG: IngressManager = ();
+    static mut NMGR: NotificationManager = ();
+    static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] = [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -87,7 +90,6 @@ const APP: () = {
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut BMS: BatteryManagementIC = ();
     static mut TOUCH_THRESHOLD: u16 = ();
-    static mut MSG_PAYLOADS: [[u8; crate::MSG_SIZE]; crate::MSG_COUNT] = [[0; crate::MSG_SIZE]; crate::MSG_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut FULL_REDRAW: bool = false;
@@ -102,7 +104,7 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
-    #[init(resources = [RB, MSG_PAYLOADS, DMA_BUFFER])]
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -217,26 +219,16 @@ const APP: () = {
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
-        
-        /* Define out block of message - surely there must be a nice way to to this? */
-        let msgs: [msgmgr::Message; MSG_COUNT] = [
-            Message::new(resources.MSG_PAYLOADS[0]),
-            Message::new(resources.MSG_PAYLOADS[1]),
-            Message::new(resources.MSG_PAYLOADS[2]),
-            Message::new(resources.MSG_PAYLOADS[3]),
-            Message::new(resources.MSG_PAYLOADS[4]),
-            Message::new(resources.MSG_PAYLOADS[5]),
-            Message::new(resources.MSG_PAYLOADS[6]),
-            Message::new(resources.MSG_PAYLOADS[7]),
-        ];
+        let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
+        // Give the RB to the ingress manager
+        let imgr = IngressManager::new(rb);
 
         /* Pass messages to the Message Manager */
-        let mmgr = MessageManager::new(msgs, rb);
+        let nmgr = NotificationManager::new(buffers);
 
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
-
         
         let mut cpu = Timer::tim7(device.TIM7, CPU_USAGE_POLL_FREQ.hz(), clocks, &mut rcc.apb1r1);
         cpu.listen(TimerEvent::TimeOut);
@@ -255,7 +247,7 @@ const APP: () = {
         
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
-        MMGR = mmgr;
+        IMNG = imgr;
         DISPLAY = display;
         RTC = rtc;
         TOUCH = tsc;
@@ -271,6 +263,7 @@ const APP: () = {
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
+        NMGR = nmgr;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -289,9 +282,9 @@ const APP: () = {
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
-    #[interrupt(resources = [CB, MMGR], priority = 2)]
+    #[interrupt(resources = [CB, IMNG], priority = 2)]
     fn DMA1_CH6() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
         resources.CB
         .peek(|buf, _half| {
             mgr.write(buf);
@@ -321,9 +314,9 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(resources = [CB, MMGR, USART2_RX], priority = 2)]
+    #[interrupt(resources = [CB, IMNG, USART2_RX], priority = 2)]
     fn USART2() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
         if resources.USART2_RX.is_idle(true) {
             resources.CB
                 .partial_peek(|buf, _half| {
@@ -361,14 +354,14 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [MMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
+    #[interrupt(resources = [IMNG, NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
-        let mut mgr = resources.MMGR;
+        let mut mgr = resources.IMNG;
+        let mut n_mgr = resources.NMGR;
         let display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
-        let msg_count = mgr.lock(|m| {
-            m.process();
-            m.msg_count()
+        mgr.lock(|m| {
+            m.process(&mut n_mgr);
         });
         
         let time = resources.RTC.get_time();
@@ -400,7 +393,7 @@ const APP: () = {
                     .with_stroke(Some(0x2679_u16.into()))
                     .into_iter());
                 buffer.clear(); // reset the buffer
-                write!(buffer, "{:02}", msg_count).unwrap();
+                write!(buffer, "{:02}", n_mgr.idx()).unwrap();
                 display.draw(Font12x16::render_str(buffer.as_str())
                     .translate(Coord::new(46, 96))
                     .with_stroke(Some(0x2679_u16.into()))
@@ -454,28 +447,26 @@ const APP: () = {
             },
             // MESSAGE LIST
             1 => {
-                mgr.lock(|m| {
-                    if msg_count > 0 {
-                        for i in 0..msg_count {
-                            m.peek_message(i, |msg| {
-                                write!(buffer, "[{}]: ", i + 1).unwrap();
-                                for c in 0..msg.payload_idx {
-                                    buffer.push(msg.payload[c] as char).unwrap();
-                                }
-                                display.draw(Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(0, (i * 12) as i32 + 2))
-                                    .with_stroke(Some(0xF818_u16.into()))
-                                    .into_iter());
-                                buffer.clear();
-                            });
-                        }
-                    } else {
-                        display.draw(Font6x12::render_str("No messages.")
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter());
+                if n_mgr.idx() > 0 {
+                    for i in 0..n_mgr.idx() {
+                        n_mgr.peek_notification(i, |msg| {
+                            write!(buffer, "[{}]: ", i + 1).unwrap();
+                            for byte in msg.buffer() {
+                                buffer.push(*byte as char).unwrap();
+                            }
+                            display.draw(Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(0, (i * 12) as i32 + 2))
+                                .with_stroke(Some(0xF818_u16.into()))
+                                .into_iter());
+                            buffer.clear();
+                        });
                     }
-                });
+                } else {
+                    display.draw(Font6x12::render_str("No messages.")
+                        .translate(Coord::new(0, 12))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter());
+                }
             },
             // MWATCH LOGO
             2 => {
@@ -522,7 +513,7 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-fn bodged_soc(raw: u16) -> u16 {
+fn _bodged_soc(raw: u16) -> u16 {
     let rawf = raw as f32;
     // let min = 0.0;
     let max = 80.0;
