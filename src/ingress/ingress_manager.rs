@@ -16,7 +16,6 @@ pub const BUFF_COUNT: usize = 8;
 enum State {
     Wait, /* Waiting for data */
     Init,
-    Type,
     Payload,
     ApplicationStore,
 }
@@ -55,13 +54,13 @@ impl IngressManager
                 match byte {
                     STX => { /* Start of packet */
                         self.buffer.clear(); 
-                        self.state = State::Type; // activate processing
+                        self.state = State::Init; // activate processing
                     }
                     ETX => { /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.state = State::Wait;
                         match self.buffer.btype {
-                            Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
+                            Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                             Type::Application => {
                                 //TODO signal installed - verify with checksum etc
                             },
@@ -73,7 +72,7 @@ impl IngressManager
                     }
                     PAYLOAD => { // state change - how? based on type
                         match self.buffer.btype {
-                            Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
+                            Type::Unknown => self.state = State::Wait,
                             Type::Application => {
                                 /* Move to new payload processing state, as we will be writing into RAM/ROM */
                                 self.state = State::ApplicationStore
@@ -85,15 +84,9 @@ impl IngressManager
                         /* Run through byte state machine */
                         match self.state {
                             State::Init => {
-                                self.state = State::Type
-                            }
-                            State::Type => {
                                 self.buffer.btype = self.determine_type(byte);
                                 match self.buffer.btype {
-                                    Type::Unknown => panic!("Invalid buffer type in {:?}", self.state),
-                                    Type::Application => {
-                                        /* Move to new payload processing state, as we will be writing into RAM/ROM */
-                                    },
+                                    Type::Unknown => self.state = State::Wait,
                                     _ => {} // carry on
                                 }
                             }
