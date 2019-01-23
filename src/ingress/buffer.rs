@@ -1,7 +1,6 @@
 //! Buffer
-//! 
 
-use buffer_manager::BUFF_SIZE;
+use crate::ingress::ingress_manager::BUFF_SIZE;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Type {
@@ -21,6 +20,7 @@ pub struct Buffer {
 }
 
 impl Default for Buffer {
+    /// Creates a buffer with size `BUFF_SIZE`
     fn default() -> Buffer {
         Buffer {
             btype: Type::Unknown,
@@ -31,6 +31,7 @@ impl Default for Buffer {
 }
 
 impl Buffer {
+    /// creates a buffer from a static array of bytes
     pub fn new(rx_buffer: [u8; BUFF_SIZE]) -> Self {
         Buffer {
             btype: Type::Unknown,
@@ -39,7 +40,18 @@ impl Buffer {
         }
     }
 
-    pub fn get_type(self) -> Type {
+    pub fn get_type(&self) -> Type {
         self.btype
+    }
+
+    /// Writes a byte into the buffer
+    pub fn write(&mut self, byte: u8) {
+        self.payload[self.payload_idx] = byte;
+        self.payload_idx += 1;
+    }
+
+    // Resets the index of the buffer, does not blank the memory
+    pub fn clear(&mut self) {
+        self.payload_idx = 0;
     }
 }

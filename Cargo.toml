@@ -7,6 +7,7 @@ keywords = ["arm", "cortex-m", "smartwatch"]
 categories = ["embedded", "no-std"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mabezdev/mabez_watch_rust"
+edition = "2018"
 
 [dependencies]
 cortex-m = "0.5.8"

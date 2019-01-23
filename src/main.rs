@@ -16,22 +16,22 @@ extern crate hm11;
 extern crate cortex_m_rt as rt;
 
 use embedded_graphics::Drawing;
-use rt::ExceptionFrame;
-use hal::dma::{dma1, CircBuffer, Event};
-use hal::prelude::*;
-use hal::serial::{Serial, Event as SerialEvent};
-use hal::timer::{Timer, Event as TimerEvent};
-use hal::delay::Delay;
-use hal::spi::Spi;
-use hal::i2c::I2c;
-use hal::rtc::Rtc;
-use hal::datetime::Date;
-use hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
+use crate::rt::ExceptionFrame;
+use crate::hal::dma::{dma1, CircBuffer, Event};
+use crate::hal::prelude::*;
+use crate::hal::serial::{Serial, Event as SerialEvent};
+use crate::hal::timer::{Timer, Event as TimerEvent};
+use crate::hal::delay::Delay;
+use crate::hal::spi::Spi;
+use crate::hal::i2c::I2c;
+use crate::hal::rtc::Rtc;
+use crate::hal::datetime::Date;
+use crate::hal::tsc::{Tsc, Event as TscEvent, Config as TscConfig, ClockPrescaler as TscClockPrescaler};
 use heapless::spsc::Queue;
 use heapless::String;
 use heapless::consts::*;
 use rtfm::app;
-use rt::exception;
+use crate::rt::exception;
 use core::fmt::Write;
 
 use ssd1351::builder::Builder;
@@ -51,14 +51,13 @@ use hm11::Hm11;
 use hm11::command::Command;
 
 /* Our includes */
-mod buffer_manager;
-mod notification;
-mod buffer;
+mod ingress;
 
-use buffer_manager::BUFF_SIZE;
-use buffer_manager::BUFF_COUNT;
-use buffer::Buffer;
-use buffer_manager::BufferManager;
+use crate::ingress::ingress_manager::BUFF_SIZE;
+use crate::ingress::ingress_manager::BUFF_COUNT;
+use crate::ingress::ingress_manager::IngressManager;
+use crate::ingress::buffer::Buffer;
+use crate::ingress::notification::Notification;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -75,7 +74,8 @@ type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
-    static mut MMGR: BufferManager<'static> = ();
+    static mut MMGR: IngressManager = ();
+    static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] = [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -89,7 +89,6 @@ const APP: () = {
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut BMS: BatteryManagementIC = ();
     static mut TOUCH_THRESHOLD: u16 = ();
-    static mut BUFFERS: [Buffer; crate::BUFF_COUNT] = [Buffer { btype: buffer::Type::Unknown, payload: [0u8; BUFF_SIZE], payload_idx: 0 }; crate::BUFF_COUNT];
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut FULL_REDRAW: bool = false;
@@ -104,7 +103,7 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
-    #[init(resources = [RB, BUFFERS, DMA_BUFFER])]
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -219,10 +218,10 @@ const APP: () = {
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
-        let buffers: &'static mut [Buffer; crate::BUFF_COUNT] = resources.BUFFERS;
+        let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
         /* Pass messages to the Message Manager */
-        let mmgr = BufferManager::new(buffers, rb);
+        let mmgr = IngressManager::new(rb);
 
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
@@ -358,7 +357,6 @@ const APP: () = {
         let mut buffer: String<U256> = String::new();
         let msg_count = mgr.lock(|m| {
             m.process();
-            m.used_count()
         });
         
         let time = resources.RTC.get_time();
