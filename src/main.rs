@@ -16,7 +16,7 @@ extern crate hm11;
 extern crate cortex_m_rt as rt;
 
 mod ingress;
-mod user_space;
+mod kernel_api;
 
 use embedded_graphics::Drawing;
 use crate::rt::ExceptionFrame;
@@ -59,7 +59,7 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
 
-use crate::user_space::application_manager::ApplicationManager;
+use crate::kernel_api::application_manager::ApplicationManager;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
