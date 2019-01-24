@@ -8,6 +8,8 @@ use heapless::spsc::Queue;
 use heapless::consts::*;
 use crate::ingress::buffer::{Buffer, Type};
 use crate::ingress::notification::NotificationManager;
+use crate::kernel_api::application_manager::ApplicationManager;
+use simple_hex::hex_byte_to_byte;
 
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
@@ -48,7 +50,9 @@ impl IngressManager
         }
     }
     
-    pub fn process(&mut self, notification_mgr: &mut NotificationManager){
+    pub fn process(&mut self, notification_mgr: &mut NotificationManager, amng: &mut ApplicationManager){
+        let hex_chars = [0u8; 2];
+        let hex_idx = 0;
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
@@ -94,7 +98,12 @@ impl IngressManager
                                 self.buffer.write(byte);
                             }
                             State::ApplicationStore => {
-                                unimplemented!()
+                                hex_chars[hex_idx] = byte;
+                                hex_idx += 1;
+                                if hex_idx > 1 {
+                                    amng.write_byte(hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap());
+                                    hex_idx = 0;
+                                }
                             }
                             State::Wait => {
                                 // do nothing, useless bytes

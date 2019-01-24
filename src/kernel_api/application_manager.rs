@@ -7,11 +7,11 @@
 //! - Setup input callbacks from the kernel which then are passed to the application
 
 pub struct ApplicationManager {
-    ram: &'static [u8]
+    ram: &'static [u8],// USER buffer instead?
 }
 
 pub enum Error {
-    AlreadyExecuting,
+    Executing,
     ChecksumFailed,
 }
 
@@ -23,7 +23,11 @@ impl ApplicationManager {
         }
     }
 
-    pub fn execute() -> Result<(), Error>{
+    pub fn write_byte(&mut self, byte: u8) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    pub fn execute() -> Result<(), Error> {
         unimplemented!()
     }
 

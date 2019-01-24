@@ -58,6 +58,7 @@ use crate::ingress::ingress_manager::BUFF_COUNT;
 use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
+use crate::ingress::buffer::Buffer;
 
 use crate::kernel_api::application_manager::ApplicationManager;
 
@@ -109,6 +110,7 @@ const APP: () = {
 
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 32 * 1024] = [0u8; 32 * 1024];
+    // static mut APPLICATION_RAM: Buffer = Buffer { payload: [0u8; RAM_SIZE], ..Buffer::default() }; // cant use buffer as the payload has to be at address
 
     #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM])]
     fn init() {
