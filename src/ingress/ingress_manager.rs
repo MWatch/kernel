@@ -67,6 +67,7 @@ impl IngressManager
                             Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                             Type::Application => {
                                 //TODO signal installed - verify with checksum etc
+                                amng.execute().unwrap();
                             },
                             Type::Notification => {
                                 notification_mgr.add(&self.buffer).unwrap();
@@ -79,6 +80,7 @@ impl IngressManager
                             Type::Unknown => self.state = State::Wait,
                             Type::Application => {
                                 /* Move to new payload processing state, as we will be writing into RAM/ROM */
+                                amng.prepare_load().unwrap();
                                 self.state = State::ApplicationStore
                             },
                             _ => self.state = State::Payload,
@@ -121,7 +123,7 @@ impl IngressManager
             b'W' => Type::Weather, /* Weather packet */
             b'D' => Type::Date,   /* Date packet */
             b'M' => Type::Music, /* Spotify controls */
-            b'A' => Type::Application, /* Spotify controls */
+            b'A' => Type::Application, /* Load Application */
             _ => Type::Unknown
         };
         self.buffer.btype
