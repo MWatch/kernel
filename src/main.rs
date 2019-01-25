@@ -95,7 +95,7 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
-    static mut FULL_REDRAW: bool = false;
+    static mut FULL_REDRAW: bool = true;
     static mut STATE: u8 = 0;
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
@@ -107,11 +107,13 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
+    #[link_section = ".fb_section.fb"]
+    static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
     #[link_section = ".app_section.data"]
-    static mut APPLICATION_RAM: [u8; 32 * 1024] = [0u8; 32 * 1024];
+    static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
     // static mut APPLICATION_RAM: Buffer = Buffer { payload: [0u8; RAM_SIZE], ..Buffer::default() }; // cant use buffer as the payload has to be at address
 
-    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM])]
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -152,8 +154,8 @@ const APP: () = {
             clocks,
             &mut rcc.apb2,
         );
-
-        let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc).into();
+        let fb: &'static mut [u8] = resources.FRAME_BUFFER;
+        let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
         display.reset(&mut rst, &mut delay);
         display.init().unwrap();
         display.set_rotation(DisplayRotation::Rotate0).unwrap();
@@ -387,7 +389,7 @@ const APP: () = {
         });
 
         if redraw {
-            display.clear();
+            display.clear(true);
         }
 
         match state {
@@ -517,6 +519,7 @@ const APP: () = {
             },
             _ => panic!("Unknown state")
         }
+        display.flush();
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }    
 };
@@ -546,6 +549,6 @@ fn get_free_stack() -> usize {
         let ebss = &__ebss as *const u32 as usize;
         let start = &__sdata as *const u32 as usize;
         let total = ebss - start;
-        (64 * 1024) - total
+        (16 * 1024) - total // ram for stack in linker script
     }
 }
