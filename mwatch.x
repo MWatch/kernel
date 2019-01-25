@@ -6,4 +6,9 @@ SECTIONS
   {
     KEEP(*(.app_section.data));
   } > APPDATA
+
+  .fb_section :
+  {
+      KEEP(*(.fb_section.fb));
+  } > FRAMEBUFFER
 }

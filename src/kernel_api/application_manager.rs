@@ -7,7 +7,7 @@
 //! - Setup input callbacks from the kernel which then are passed to the application
 //! 
 
-use mwatch_sdk_core::{Table, Context};
+use mwatch_sdk_core::{Table};
 use crc::crc32::checksum_ieee;
 
 pub struct ApplicationManager {
