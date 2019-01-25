@@ -58,7 +58,6 @@ use crate::ingress::ingress_manager::BUFF_COUNT;
 use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
-use crate::ingress::buffer::Buffer;
 
 use crate::kernel_api::application_manager::ApplicationManager;
 
@@ -366,14 +365,15 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
+        let mut a_mgr = resources.AMGR;
         let display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
         mgr.lock(|m| {
-            m.process(&mut n_mgr);
+            m.process(&mut n_mgr, &mut a_mgr);
         });
         
         let time = resources.RTC.get_time();
@@ -385,6 +385,7 @@ const APP: () = {
             *val = false; // reset
             value
         });
+
         if redraw {
             display.clear();
         }

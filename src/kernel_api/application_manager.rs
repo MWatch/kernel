@@ -7,9 +7,11 @@
 //! - Setup input callbacks from the kernel which then are passed to the application
 
 pub struct ApplicationManager {
-    ram: &'static [u8],// USER buffer instead?
+    ram: &'static mut [u8],
+    ram_idx: usize
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum Error {
     Executing,
     ChecksumFailed,
@@ -17,14 +19,17 @@ pub enum Error {
 
 impl ApplicationManager {
 
-    pub fn new(ram: &'static [u8]) -> Self {
+    pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
-            ram: ram
+            ram: ram,
+            ram_idx: 0,
         }
     }
 
     pub fn write_byte(&mut self, byte: u8) -> Result<(), Error> {
-        unimplemented!()
+        self.ram[self.ram_idx] = byte;
+        self.ram_idx += 1;
+        Ok(())
     }
 
     pub fn execute() -> Result<(), Error> {

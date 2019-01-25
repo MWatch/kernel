@@ -5,18 +5,19 @@ use crate::ingress::{buffer::Buffer, ingress_manager::BUFF_COUNT};
 
 #[derive(Copy, Clone)]
 pub struct Notification {
-    app_name_idx: usize,
-    title_idx: usize,
-    text_idx: usize,
+    //TODO parsing
+    // app_name_idx: usize,
+    // title_idx: usize,
+    // text_idx: usize,
     inner: Buffer,
 }
 
 impl Notification {
     pub const fn default() -> Notification {
         Notification {
-            app_name_idx: 0,
-            title_idx: 0,
-            text_idx: 0, 
+            // app_name_idx: 0,
+            // title_idx: 0,
+            // text_idx: 0, 
             inner: Buffer { btype: crate::ingress::buffer::Type::Unknown, 
                             payload: [0u8; crate::ingress::ingress_manager::BUFF_SIZE],
                             payload_idx: 0 

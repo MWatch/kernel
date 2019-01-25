@@ -51,8 +51,8 @@ impl IngressManager
     }
     
     pub fn process(&mut self, notification_mgr: &mut NotificationManager, amng: &mut ApplicationManager){
-        let hex_chars = [0u8; 2];
-        let hex_idx = 0;
+        let mut hex_chars = [0u8; 2];
+        let mut hex_idx = 0;
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
@@ -101,7 +101,7 @@ impl IngressManager
                                 hex_chars[hex_idx] = byte;
                                 hex_idx += 1;
                                 if hex_idx > 1 {
-                                    amng.write_byte(hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap());
+                                    amng.write_byte(hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap()).unwrap();
                                     hex_idx = 0;
                                 }
                             }
