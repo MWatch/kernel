@@ -8,6 +8,8 @@ use heapless::spsc::Queue;
 use heapless::consts::*;
 use crate::ingress::buffer::{Buffer, Type};
 use crate::ingress::notification::NotificationManager;
+use crate::kernel_api::application_manager::ApplicationManager;
+use simple_hex::hex_byte_to_byte;
 
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
@@ -17,6 +19,7 @@ enum State {
     Wait, /* Waiting for data */
     Init,
     Payload,
+    ApplicationChecksum,
     ApplicationStore,
 }
 
@@ -48,8 +51,10 @@ impl IngressManager
         }
     }
     
-    pub fn process(&mut self, notification_mgr: &mut NotificationManager){
-        if !self.rb.is_empty() {
+    pub fn process(&mut self, notification_mgr: &mut NotificationManager, amng: &mut ApplicationManager){
+        let mut hex_chars = [0u8; 2];
+        let mut hex_idx = 0;
+        if !self.rb.is_empty() && self.rb.len() > 2 {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => { /* Start of packet */
@@ -62,7 +67,10 @@ impl IngressManager
                         match self.buffer.btype {
                             Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                             Type::Application => {
-                                //TODO signal installed - verify with checksum etc
+                                match amng.verify(){
+                                    Ok(_) => amng.execute().unwrap(),
+                                    Err(e) => panic!("Failed to execute application, {:?}", e)
+                                }
                             },
                             Type::Notification => {
                                 notification_mgr.add(&self.buffer).unwrap();
@@ -74,8 +82,14 @@ impl IngressManager
                         match self.buffer.btype {
                             Type::Unknown => self.state = State::Wait,
                             Type::Application => {
-                                /* Move to new payload processing state, as we will be writing into RAM/ROM */
-                                self.state = State::ApplicationStore
+                                if self.state == State::ApplicationChecksum {
+                                    // We've parsed the checksum, now we write the data into ram
+                                    self.state = State::ApplicationStore
+                                } else {
+                                    amng.prepare_load().unwrap();
+                                    // parse the checksum
+                                    self.state = State::ApplicationChecksum;
+                                }
                             },
                             _ => self.state = State::Payload,
                         }
@@ -93,8 +107,21 @@ impl IngressManager
                             State::Payload => {
                                 self.buffer.write(byte);
                             }
+                            State::ApplicationChecksum => {
+                                hex_chars[hex_idx] = byte;
+                                hex_idx += 1;
+                                if hex_idx > 1 {
+                                    amng.write_checksum_byte(hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap()).unwrap();
+                                    hex_idx = 0;
+                                }
+                            }
                             State::ApplicationStore => {
-                                unimplemented!()
+                                hex_chars[hex_idx] = byte;
+                                hex_idx += 1;
+                                if hex_idx > 1 {
+                                    amng.write_byte(hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap()).unwrap();
+                                    hex_idx = 0;
+                                }
                             }
                             State::Wait => {
                                 // do nothing, useless bytes
@@ -112,7 +139,7 @@ impl IngressManager
             b'W' => Type::Weather, /* Weather packet */
             b'D' => Type::Date,   /* Date packet */
             b'M' => Type::Music, /* Spotify controls */
-            b'A' => Type::Application, /* Spotify controls */
+            b'A' => Type::Application, /* Load Application */
             _ => Type::Unknown
         };
         self.buffer.btype

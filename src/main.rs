@@ -1,4 +1,3 @@
-// #![deny(warnings)]
 
 #![no_std]
 #![no_main]
@@ -17,6 +16,7 @@ extern crate hm11;
 extern crate cortex_m_rt as rt;
 
 mod ingress;
+mod kernel_api;
 
 use embedded_graphics::Drawing;
 use crate::rt::ExceptionFrame;
@@ -59,6 +59,8 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
 
+use crate::kernel_api::application_manager::ApplicationManager;
+
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
@@ -76,6 +78,7 @@ const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
     static mut NMGR: NotificationManager = ();
+    static mut AMGR: ApplicationManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] = [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
@@ -104,7 +107,11 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
-    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER])]
+    #[link_section = ".app_section.data"]
+    static mut APPLICATION_RAM: [u8; 32 * 1024] = [0u8; 32 * 1024];
+    // static mut APPLICATION_RAM: Buffer = Buffer { payload: [0u8; RAM_SIZE], ..Buffer::default() }; // cant use buffer as the payload has to be at address
+
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -116,7 +123,6 @@ const APP: () = {
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
-        
 
         let mut pwr = device.PWR.constrain(&mut rcc.apb1r1);
         let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
@@ -227,6 +233,10 @@ const APP: () = {
         /* Pass messages to the Message Manager */
         let nmgr = NotificationManager::new(buffers);
 
+        /* Give the application manager its ram */
+        let ram: &'static mut [u8] = resources.APPLICATION_RAM;
+        let amgr = ApplicationManager::new(ram);
+
         let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
         
@@ -264,6 +274,7 @@ const APP: () = {
         TIM7 = cpu;
         TIM6 = input;
         NMGR = nmgr;
+        AMGR = amgr;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -354,14 +365,15 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
+        let mut a_mgr = resources.AMGR;
         let display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
         mgr.lock(|m| {
-            m.process(&mut n_mgr);
+            m.process(&mut n_mgr, &mut a_mgr);
         });
         
         let time = resources.RTC.get_time();
@@ -373,6 +385,7 @@ const APP: () = {
             *val = false; // reset
             value
         });
+
         if redraw {
             display.clear();
         }
