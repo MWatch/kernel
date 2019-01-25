@@ -8,10 +8,13 @@
 //! 
 
 use mwatch_sdk_core::{Table, Context};
+use crc::crc32::checksum_ieee;
 
 pub struct ApplicationManager {
     ram: &'static mut [u8],
-    ram_idx: usize
+    ram_idx: usize,
+    target_cs: [u8; 4],
+    target_cs_idx: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -26,6 +29,8 @@ impl ApplicationManager {
         Self {
             ram: ram,
             ram_idx: 0,
+            target_cs: [0u8; 4],
+            target_cs_idx: 0,
         }
     }
 
@@ -33,6 +38,26 @@ impl ApplicationManager {
         self.ram[self.ram_idx] = byte;
         self.ram_idx += 1;
         Ok(())
+    }
+
+    pub fn write_checksum_byte(&mut self, byte: u8) -> Result<(), Error> {
+        self.target_cs[self.target_cs_idx] = byte;
+        self.target_cs_idx += 1;
+        Ok(())
+    }
+
+    pub fn verify(&self) -> Result<(), Error> {
+        // reversed order becaused the bytes arrive in the reversed order
+        let digest = ((self.target_cs[0] as u32) << 24)
+                | ((self.target_cs[1] as u32) << 16)
+                | ((self.target_cs[2] as u32) << 8)
+                | ((self.target_cs[3] as u32) << 0);
+        let self_cs = checksum_ieee(&self.ram[..self.ram_idx]);
+        if digest == self_cs {
+            Ok(())
+        } else {
+            Err(Error::ChecksumFailed)
+        }
     }
 
     pub fn execute(&mut self) -> Result<(), Error> {
@@ -60,6 +85,7 @@ impl ApplicationManager {
 
     pub fn prepare_load(&mut self) -> Result<(), Error>{
         self.ram_idx = 0;
+        self.target_cs_idx = 0;
         Ok(())
     }
 

@@ -37,6 +37,10 @@ version = "0.3.4"
 # git = "https://github.com/mabezdev/stm32l4xx-hal"
 features = ["rt", "stm32l4x2"]
 
+[dependencies.crc]
+version = "1.8.1"
+default-features = false
+
 
 [features]
 cpu-itm = []
