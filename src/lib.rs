@@ -4,7 +4,7 @@
 
 #![no_std]
 
-extern crate stm32l4xx_hal as hal;
+pub use stm32l4xx_hal as hal;
 
 /// Type Alias to use in resource definitions
 pub type Ssd1351 = ssd1351::mode::GraphicsMode<

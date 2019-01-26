@@ -12,11 +12,12 @@ extern crate hm11;
 extern crate max17048;
 extern crate panic_semihosting;
 extern crate ssd1351;
-extern crate stm32l4xx_hal as hal;
 
 mod application;
 mod ingress;
 
+
+use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
 use crate::hal::datetime::Date;
 use crate::hal::delay::Delay;
 use crate::hal::dma::{dma1, CircBuffer, Event};
@@ -61,13 +62,12 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
-use mwatch_kernel_api::{BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
-#[app(device = stm32l4xx_hal::stm32)]
+#[app(device = crate::hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
