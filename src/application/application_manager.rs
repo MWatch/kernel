@@ -78,12 +78,8 @@ impl ApplicationManager {
     }
 
     pub fn execute(&mut self) -> Result<(), Error> {
-        // convert 4 bytes into a ffi function pointer
-        let setup_addr = ((self.ram[3] as u32) << 24)
-            | ((self.ram[2] as u32) << 16)
-            | ((self.ram[1] as u32) << 8)
-            | ((self.ram[0] as u32) << 0);
-        let setup_ptr = setup_addr as *const ();
+        let setup_ptr = Self::fn_ptr_from_slice(&mut self.ram[..4]);
+        let _update_ptr = Self::fn_ptr_from_slice(&mut self.ram[4..8]);
         let _result = unsafe {
             let t = Table {
                 context: core::mem::uninitialized(),
@@ -94,14 +90,15 @@ impl ApplicationManager {
             let result = setup(&t);
             result
         };
+        self.status.is_running = true;
         Ok(())
     }
 
-    pub fn stop(&mut self) {
+    pub fn pause(&mut self) {
         self.status.is_running = false;
     }
 
-    pub fn prepare_load(&mut self) -> Result<(), Error> {
+    pub fn stop(&mut self) -> Result<(), Error> {
         self.ram_idx = 0;
         self.target_cs_idx = 0;
         self.status.is_loaded = false;
@@ -111,6 +108,16 @@ impl ApplicationManager {
 
     pub fn status(&self) -> Status {
         self.status
+    }
+
+    /// convert 4 byte slice into a const ptr
+    fn fn_ptr_from_slice(bytes: &mut [u8]) -> *const () {
+        assert!(bytes.len() == 4);
+        let addr = ((bytes[3] as u32) << 24)
+            | ((bytes[2] as u32) << 16)
+            | ((bytes[1] as u32) << 8)
+            | ((bytes[0] as u32) << 0);
+        addr as *const ()
     }
 
     //TODO Expose an interface like below to allow the kernel to set input events

@@ -329,7 +329,6 @@ const APP: () = {
     #[task(resources = [AMGR])]
     fn run_application() {
         let mut amgr = resources.AMGR;
-        amgr.status().is_running = true;
         amgr.execute().unwrap();
     }
 

@@ -96,7 +96,8 @@ impl IngressManager {
                                     // We've parsed the checksum, now we write the data into ram
                                     self.state = State::ApplicationStore
                                 } else {
-                                    amng.prepare_load().unwrap();
+                                    // reset before we load the new application
+                                    amng.stop().unwrap();
                                     // parse the checksum
                                     self.state = State::ApplicationChecksum;
                                 }
