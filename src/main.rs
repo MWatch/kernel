@@ -90,7 +90,7 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
-    static mut FULL_REDRAW: bool = true;
+    static mut FULL_REDRAW: bool = false;
     static mut STATE: u8 = 0;
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
@@ -159,6 +159,7 @@ const APP: () = {
         display.reset(&mut rst, &mut delay);
         display.init().unwrap();
         display.set_rotation(DisplayRotation::Rotate0).unwrap();
+        display.clear(true);
 
         /* Serial with DMA */
         // usart 1
