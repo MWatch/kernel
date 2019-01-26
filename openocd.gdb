@@ -27,6 +27,9 @@ monitor arm semihosting enable
 # # enable ITM port 0
 # monitor itm port 0 on
 
+# erase entire chip before flashing
+mon stm32l4x mass_erase 0
+
 load
 
 # start the process but immediately halt the processor

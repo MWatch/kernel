@@ -1,20 +1,21 @@
 //! Application Manager
-//! 
+//!
 //! Handles loading and running of custom applications
-//! 
+//!
 //! - Load information from the binary
 //! - Start executing
 //! - Setup input callbacks from the kernel which then are passed to the application
-//! 
+//!
 
-use mwatch_kernel_api::{Table, draw_pixel};
 use crc::crc32::checksum_ieee;
+use mwatch_kernel_api::{draw_pixel, Table};
 
 pub struct ApplicationManager {
     ram: &'static mut [u8],
     ram_idx: usize,
     target_cs: [u8; 4],
     target_cs_idx: usize,
+    status: Status,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -23,14 +24,29 @@ pub enum Error {
     ChecksumFailed,
 }
 
-impl ApplicationManager {
+#[derive(Debug, Copy, Clone)]
+pub struct Status {
+    pub is_loaded: bool,
+    pub is_running: bool,
+}
 
+impl Default for Status {
+    fn default() -> Status {
+        Status {
+            is_loaded: false,
+            is_running: false,
+        }
+    }
+}
+
+impl ApplicationManager {
     pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
             ram: ram,
             ram_idx: 0,
             target_cs: [0u8; 4],
             target_cs_idx: 0,
+            status: Status::default(),
         }
     }
 
@@ -46,14 +62,15 @@ impl ApplicationManager {
         Ok(())
     }
 
-    pub fn verify(&self) -> Result<(), Error> {
+    pub fn verify(&mut self) -> Result<(), Error> {
         // reversed order becaused the bytes arrive in the reversed order
         let digest = ((self.target_cs[0] as u32) << 24)
-                | ((self.target_cs[1] as u32) << 16)
-                | ((self.target_cs[2] as u32) << 8)
-                | ((self.target_cs[3] as u32) << 0);
+            | ((self.target_cs[1] as u32) << 16)
+            | ((self.target_cs[2] as u32) << 8)
+            | ((self.target_cs[3] as u32) << 0);
         let self_cs = checksum_ieee(&self.ram[..self.ram_idx]);
         if digest == self_cs {
+            self.status.is_loaded = true;
             Ok(())
         } else {
             Err(Error::ChecksumFailed)
@@ -63,9 +80,9 @@ impl ApplicationManager {
     pub fn execute(&mut self) -> Result<(), Error> {
         // convert 4 bytes into a ffi function pointer
         let setup_addr = ((self.ram[3] as u32) << 24)
-                | ((self.ram[2] as u32) << 16)
-                | ((self.ram[1] as u32) << 8)
-                | ((self.ram[0] as u32) << 0);
+            | ((self.ram[2] as u32) << 16)
+            | ((self.ram[1] as u32) << 8)
+            | ((self.ram[0] as u32) << 0);
         let setup_ptr = setup_addr as *const ();
         let _result = unsafe {
             let t = Table {
@@ -80,14 +97,20 @@ impl ApplicationManager {
         Ok(())
     }
 
-    pub fn stop() {
-
+    pub fn stop(&mut self) {
+        self.status.is_running = false;
     }
 
-    pub fn prepare_load(&mut self) -> Result<(), Error>{
+    pub fn prepare_load(&mut self) -> Result<(), Error> {
         self.ram_idx = 0;
         self.target_cs_idx = 0;
+        self.status.is_loaded = false;
+        self.status.is_running = false;
         Ok(())
+    }
+
+    pub fn status(&self) -> Status {
+        self.status
     }
 
     //TODO Expose an interface like below to allow the kernel to set input events

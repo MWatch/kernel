@@ -2,9 +2,10 @@ MEMORY
 {
   FLASH : ORIGIN = 0x8000000, LENGTH = 256K 
   RAM : ORIGIN = 0x20000000, LENGTH = 16K
-  FRAMEBUFFER : ORIGIN = 0x20004000, LENGTH = 32K
-  APPDATA: ORIGIN = 0x2000C000, LENGTH = 16K
+  APPDATA: ORIGIN = 0x20004000, LENGTH = 16K
+  FRAMEBUFFER : ORIGIN = 0x20008000, LENGTH = 32K
 }
+
 
 /* This is where the call stack will be allocated. */
 /* The stack is of the full descending type. */

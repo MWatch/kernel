@@ -57,6 +57,7 @@ bench = false
 [profile.dev]
 codegen-units = 1
 incremental = false
+opt-level = "z" # optimize for size as the debug builds might not fit into ram
 
 [profile.release]
 codegen-units = 1
