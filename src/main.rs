@@ -90,7 +90,6 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
-    static mut FULL_REDRAW: bool = false;
     static mut STATE: u8 = 0;
     static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
@@ -345,7 +344,7 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, STATE, FULL_REDRAW], priority = 2)]
+    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, STATE], priority = 2)]
     fn TSC() {
         *resources.INPUT_IT_COUNT += 1;
         let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
@@ -359,7 +358,6 @@ const APP: () = {
                 if *resources.STATE > 4 {
                     *resources.STATE = 0;
                 }
-                *resources.FULL_REDRAW = true;
             }
         }
         resources.TOUCH.clear(TscEvent::EndOfAcquisition);
@@ -408,7 +406,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, FULL_REDRAW], spawn = [run_application])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND], spawn = [run_application])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
@@ -423,15 +421,8 @@ const APP: () = {
         let _date = resources.RTC.get_date();
 
         let state = resources.STATE.lock(|val| *val);
-        let redraw = resources.FULL_REDRAW.lock(|val| {
-            let value = *val;
-            *val = false; // reset
-            value
-        });
 
-        if redraw {
-            display.clear(true);
-        }
+        display.clear(false);
 
         let status = a_mgr.status();
         if status.is_loaded && !status.is_running {
