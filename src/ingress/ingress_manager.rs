@@ -8,7 +8,7 @@ use heapless::spsc::Queue;
 use heapless::consts::*;
 use crate::ingress::buffer::{Buffer, Type};
 use crate::ingress::notification::NotificationManager;
-use crate::kernel_api::application_manager::ApplicationManager;
+use crate::application::application_manager::ApplicationManager;
 use simple_hex::hex_byte_to_byte;
 
 pub const BUFF_SIZE: usize = 256;

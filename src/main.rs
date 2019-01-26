@@ -16,7 +16,7 @@ extern crate hm11;
 extern crate cortex_m_rt as rt;
 
 mod ingress;
-mod kernel_api;
+mod application;
 
 use embedded_graphics::Drawing;
 use crate::rt::ExceptionFrame;
@@ -59,19 +59,19 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::notification::NotificationManager;
 use crate::ingress::notification::Notification;
 
-use crate::kernel_api::application_manager::ApplicationManager;
+use crate::application::application_manager::ApplicationManager;
+
+use mwatch_kernel_api::{
+    Ssd1351,
+    RightButton,
+    MiddleButton,
+    LeftButton,
+    BatteryManagementIC,
+};
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
-
-/// Type Alias to use in resource definitions
-type Ssd1351 = ssd1351::mode::GraphicsMode<ssd1351::interface::SpiInterface<hal::spi::Spi<hal::stm32l4::stm32l4x2::SPI1, (hal::gpio::gpioa::PA5<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA6<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>, hal::gpio::gpioa::PA7<hal::gpio::Alternate<hal::gpio::AF5, hal::gpio::Input<hal::gpio::Floating>>>)>, hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>>>;
-type BatteryManagementIC = max17048::Max17048<hal::i2c::I2c<hal::stm32::I2C1, (hal::gpio::gpioa::PA9<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>, hal::gpio::gpioa::PA10<hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>>)>>;
-
-type RightButton = hal::gpio::gpiob::PB5<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
-type MiddleButton = hal::gpio::gpiob::PB6<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
-type LeftButton = hal::gpio::gpiob::PB7<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>>;
 
 #[app(device = stm32l4xx_hal::stm32)]
 const APP: () = {

@@ -7,7 +7,7 @@
 //! - Setup input callbacks from the kernel which then are passed to the application
 //! 
 
-use mwatch_sdk_core::{Table};
+use mwatch_kernel_api::{Table, draw_pixel};
 use crc::crc32::checksum_ieee;
 
 pub struct ApplicationManager {
@@ -67,10 +67,11 @@ impl ApplicationManager {
                 | ((self.ram[1] as u32) << 8)
                 | ((self.ram[0] as u32) << 0);
         let setup_ptr = setup_addr as *const ();
-        let result = unsafe {
+        let _result = unsafe {
             let t = Table {
                 context: core::mem::uninitialized(),
-                draw_pixel: core::mem::uninitialized(),
+                draw_pixel: draw_pixel,
+                register_input: core::mem::uninitialized(),
             };
             let setup: extern "C" fn(*const Table) -> u32 = ::core::mem::transmute(setup_ptr);
             let result = setup(&t);
