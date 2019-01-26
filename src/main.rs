@@ -328,7 +328,7 @@ const APP: () = {
     #[task(resources = [AMGR])]
     fn run_application() {
         let mut amgr = resources.AMGR;
-        amgr.execute().unwrap();
+        amgr.service().unwrap();
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -425,7 +425,7 @@ const APP: () = {
         display.clear(false);
 
         let status = a_mgr.status();
-        if status.is_loaded && !status.is_running {
+        if status.is_running {
             spawn.run_application().unwrap();
         }
 

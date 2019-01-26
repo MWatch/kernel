@@ -51,6 +51,8 @@ pub type LeftButton = hal::gpio::gpiob::PB7<
 
 pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
 
+pub type ServiceFn = extern "C" fn(*const Table) -> u32;
+
 pub enum InputType {
     Left,
     Middle,

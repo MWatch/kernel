@@ -72,11 +72,10 @@ impl IngressManager {
                             Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                             Type::Application => {
                                 match amng.verify() {
-                                    //TODO instead of executing in the current thread, open a software task to run the application
                                     Ok(_) =>
-                                    /* amng.execute().unwrap() */
                                     {
-                                        ()
+                                        //TODO move execution to user initiated input
+                                        amng.execute().unwrap();
                                     }
                                     Err(e) => panic!("Invalid checksum, {:?}", e),
                                 }

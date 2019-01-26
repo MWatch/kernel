@@ -8,13 +8,14 @@
 //!
 
 use crc::crc32::checksum_ieee;
-use mwatch_kernel_api::{draw_pixel, Table};
+use mwatch_kernel_api::{draw_pixel, Table, ServiceFn};
 
 pub struct ApplicationManager {
     ram: &'static mut [u8],
     ram_idx: usize,
     target_cs: [u8; 4],
     target_cs_idx: usize,
+    service_fn: Option<ServiceFn>,
     status: Status,
 }
 
@@ -22,6 +23,8 @@ pub struct ApplicationManager {
 pub enum Error {
     Executing,
     ChecksumFailed,
+    NoApplication,
+    InvalidServiceFn,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -46,6 +49,7 @@ impl ApplicationManager {
             ram_idx: 0,
             target_cs: [0u8; 4],
             target_cs_idx: 0,
+            service_fn: None,
             status: Status::default(),
         }
     }
@@ -78,20 +82,43 @@ impl ApplicationManager {
     }
 
     pub fn execute(&mut self) -> Result<(), Error> {
+        if !self.status.is_loaded {
+            return Err(Error::NoApplication);
+        }
         let setup_ptr = Self::fn_ptr_from_slice(&mut self.ram[..4]);
-        let _update_ptr = Self::fn_ptr_from_slice(&mut self.ram[4..8]);
+        let service_ptr = Self::fn_ptr_from_slice(&mut self.ram[4..8]);
         let _result = unsafe {
             let t = Table {
                 context: core::mem::uninitialized(),
                 draw_pixel: draw_pixel,
                 register_input: core::mem::uninitialized(),
             };
-            let setup: extern "C" fn(*const Table) -> u32 = ::core::mem::transmute(setup_ptr);
-            let result = setup(&t);
-            result
+            let setup: ServiceFn = ::core::mem::transmute(setup_ptr);
+            let service: ServiceFn = ::core::mem::transmute(service_ptr);
+            self.service_fn = Some(service);
+            setup(&t)
         };
         self.status.is_running = true;
         Ok(())
+    }
+
+
+    /// Gives processing time to the application
+    pub fn service(&mut self) -> Result<(), Error> {
+       if let Some(service_fn) = self.service_fn {
+           let t = unsafe {
+               Table {
+                context: core::mem::uninitialized(),
+                draw_pixel: draw_pixel,
+                register_input: core::mem::uninitialized(),
+                }
+            };
+           let _result = service_fn(&t);
+           Ok(())
+       } else {
+           Err(Error::InvalidServiceFn)
+       }
+
     }
 
     pub fn pause(&mut self) {
