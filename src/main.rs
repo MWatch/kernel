@@ -72,7 +72,7 @@ const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
     static mut NMGR: NotificationManager = ();
-    static mut AMGR: ApplicationManager<'static> = ();
+    static mut AMGR: ApplicationManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
@@ -327,9 +327,12 @@ const APP: () = {
     }
 
     #[task(resources = [AMGR, DISPLAY])]
-    fn run_application() {
+    fn APP() {
         let mut amgr = resources.AMGR;
-        amgr.service(&mut resources.DISPLAY).unwrap();
+        let mut display = resources.DISPLAY;
+        display.clear(false);
+        amgr.service(&mut display).unwrap();
+        display.flush();
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -407,201 +410,206 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, ITM, SYS_TICK, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND], spawn = [run_application])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, ITM, SYS_TICK], spawn = [APP, WM])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
         let mut a_mgr = resources.AMGR;
-        let mut display = resources.DISPLAY;
-        let mut buffer: String<U256> = String::new();
         mgr.lock(|m| {
             m.process(&mut n_mgr, &mut a_mgr);
         });
 
-        let time = resources.RTC.get_time();
-        let _date = resources.RTC.get_date();
-
-        let state = resources.STATE.lock(|val| *val);
-
-        display.clear(false);
-
         let status = a_mgr.status();
         if status.is_running {
-            spawn.run_application().unwrap();
+            spawn.APP().unwrap();
+            // a_mgr.service(&mut display).unwrap();
         } else { // else run the WM
-            match state {
-                // HOME PAGE
-                0 => {
-                    write!(
-                        buffer,
-                        "{:02}:{:02}:{:02}",
-                        time.hours, time.minutes, time.seconds
-                    )
-                    .unwrap();
-                    display.draw(
-                        Font12x16::render_str(buffer.as_str())
-                            .translate(Coord::new(10, 40))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                                    // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-                    write!(buffer, "BT={}", resources.BT_CONN.is_high()).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(24, 60))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    write!(buffer, "{:02}", n_mgr.idx()).unwrap();
-                    display.draw(
-                        Font12x16::render_str(buffer.as_str())
-                            .translate(Coord::new(46, 96))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
-                    write!(buffer, "{:02}%", soc).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(110, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    write!(buffer, "{:03.03}v", resources.BMS.vcell().unwrap()).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    if resources.CHRG.is_low() {
-                        write!(buffer, "CHRG").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                        buffer.clear(); // reset the buffer
-                        if let Some(soc_per_hr) = resources.BMS.charge_rate().ok() {
-                            if soc_per_hr < 200.0 {
-                                write!(buffer, "{:03.1}%/hr", soc_per_hr).unwrap();
-                                display.draw(
-                                    Font6x12::render_str(buffer.as_str())
-                                        .translate(Coord::new(32, 116))
-                                        .with_stroke(Some(0x2679_u16.into()))
-                                        .into_iter(),
-                                );
-                                buffer.clear(); // reset the buffer
-                            }
-                        }
-                    } else if resources.STDBY.is_high() {
-                        write!(buffer, "STDBY").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                        buffer.clear(); // reset the buffer
-                    } else {
-                        write!(buffer, "DONE").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                        buffer.clear(); // reset the buffer
-                    }
-                }
-                // MESSAGE LIST
-                1 => {
-                    if n_mgr.idx() > 0 {
-                        for i in 0..n_mgr.idx() {
-                            n_mgr.peek_notification(i, |msg| {
-                                write!(buffer, "[{}]: ", i + 1).unwrap();
-                                for byte in msg.buffer() {
-                                    buffer.push(*byte as char).unwrap();
-                                }
-                                display.draw(
-                                    Font6x12::render_str(buffer.as_str())
-                                        .translate(Coord::new(0, (i * 12) as i32 + 2))
-                                        .with_stroke(Some(0xF818_u16.into()))
-                                        .into_iter(),
-                                );
-                                buffer.clear();
-                            });
-                        }
-                    } else {
-                        display.draw(
-                            Font6x12::render_str("No messages.")
-                                .translate(Coord::new(0, 12))
-                                .with_stroke(Some(0xF818_u16.into()))
-                                .into_iter(),
-                        );
-                    }
-                }
-                // MWATCH LOGO
-                2 => {
-                    display.draw(
-                        Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
-                            .translate(Coord::new(32, 32))
-                            .into_iter(),
-                    );
-                }
-                // UOP LOGO
-                3 => {
-                    display.draw(
-                        Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
-                            .translate(Coord::new(32, 32))
-                            .into_iter(),
-                    );
-                }
-                //  Sys info
-                4 => {
-                    write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear();
-                    let stack_space = get_free_stack();
-                    write!(buffer, "RAM: {} bytes", stack_space).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(0, 24))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear();
-                    write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(0, 36))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear();
-                }
-                _ => panic!("Unknown state"),
-            }
+            spawn.WM().unwrap();
         }
-
-        display.flush();
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+    }
+
+    #[task(resources = [NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    fn WM() {
+        let mut display = resources.DISPLAY;
+        let mut buffer: String<U256> = String::new();
+        let state = resources.STATE.lock(|val| *val);
+        let time = resources.RTC.get_time();
+        let _date = resources.RTC.get_date();
+        let mut n_mgr = resources.NMGR;
+
+        display.clear(false);
+        match state {
+            // HOME PAGE
+            0 => {
+                write!(
+                    buffer,
+                    "{:02}:{:02}:{:02}",
+                    time.hours, time.minutes, time.seconds
+                )
+                .unwrap();
+                display.draw(
+                    Font12x16::render_str(buffer.as_str())
+                        .translate(Coord::new(10, 40))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear(); // reset the buffer
+                                // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+                write!(buffer, "BT={}", resources.BT_CONN.is_high()).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(24, 60))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear(); // reset the buffer
+                write!(buffer, "{:02}", n_mgr.idx()).unwrap();
+                display.draw(
+                    Font12x16::render_str(buffer.as_str())
+                        .translate(Coord::new(46, 96))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear(); // reset the buffer
+                let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
+                write!(buffer, "{:02}%", soc).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(110, 12))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear(); // reset the buffer
+                write!(buffer, "{:03.03}v", resources.BMS.vcell().unwrap()).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, 12))
+                        .with_stroke(Some(0x2679_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear(); // reset the buffer
+                if resources.CHRG.is_low() {
+                    write!(buffer, "CHRG").unwrap();
+                    display.draw(
+                        Font6x12::render_str(buffer.as_str())
+                            .translate(Coord::new(48, 12))
+                            .with_stroke(Some(0x2679_u16.into()))
+                            .into_iter(),
+                    );
+                    buffer.clear(); // reset the buffer
+                    if let Some(soc_per_hr) = resources.BMS.charge_rate().ok() {
+                        if soc_per_hr < 200.0 {
+                            write!(buffer, "{:03.1}%/hr", soc_per_hr).unwrap();
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(32, 116))
+                                    .with_stroke(Some(0x2679_u16.into()))
+                                    .into_iter(),
+                            );
+                            buffer.clear(); // reset the buffer
+                        }
+                    }
+                } else if resources.STDBY.is_high() {
+                    write!(buffer, "STDBY").unwrap();
+                    display.draw(
+                        Font6x12::render_str(buffer.as_str())
+                            .translate(Coord::new(48, 12))
+                            .with_stroke(Some(0x2679_u16.into()))
+                            .into_iter(),
+                    );
+                    buffer.clear(); // reset the buffer
+                } else {
+                    write!(buffer, "DONE").unwrap();
+                    display.draw(
+                        Font6x12::render_str(buffer.as_str())
+                            .translate(Coord::new(48, 12))
+                            .with_stroke(Some(0x2679_u16.into()))
+                            .into_iter(),
+                    );
+                    buffer.clear(); // reset the buffer
+                }
+            }
+            // MESSAGE LIST
+            1 => {
+                if n_mgr.idx() > 0 {
+                    for i in 0..n_mgr.idx() {
+                        n_mgr.peek_notification(i, |msg| {
+                            write!(buffer, "[{}]: ", i + 1).unwrap();
+                            for byte in msg.buffer() {
+                                buffer.push(*byte as char).unwrap();
+                            }
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(0, (i * 12) as i32 + 2))
+                                    .with_stroke(Some(0xF818_u16.into()))
+                                    .into_iter(),
+                            );
+                            buffer.clear();
+                        });
+                    }
+                } else {
+                    display.draw(
+                        Font6x12::render_str("No messages.")
+                            .translate(Coord::new(0, 12))
+                            .with_stroke(Some(0xF818_u16.into()))
+                            .into_iter(),
+                    );
+                }
+            }
+            // MWATCH LOGO
+            2 => {
+                display.draw(
+                    Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
+                        .translate(Coord::new(32, 32))
+                        .into_iter(),
+                );
+            }
+            // UOP LOGO
+            3 => {
+                display.draw(
+                    Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
+                        .translate(Coord::new(32, 32))
+                        .into_iter(),
+                );
+            }
+            //  Sys info
+            4 => {
+                write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, 12))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear();
+                let stack_space = get_free_stack();
+                write!(buffer, "RAM: {} bytes", stack_space).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, 24))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear();
+                write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, 36))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear();
+            }
+            _ => panic!("Unknown state"),
+        }
+        display.flush();
     }
 
     // Interrupt handlers used to dispatch software tasks
     extern "C" {
         fn EXTI0();
+        fn EXTI1();
     }
 };
 

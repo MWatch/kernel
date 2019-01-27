@@ -51,13 +51,16 @@ pub type LeftButton = hal::gpio::gpiob::PB7<
 
 pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
 
-pub type ServiceFn = extern "C" fn(*const Table) -> u32;
+pub type SetupFn = extern "C" fn() -> i32;
+pub type ServiceFn = extern "C" fn(*mut Context) -> i32;
 
 pub enum InputType {
     Left,
     Middle,
     Right,
 }
+
+pub static mut CONTEXT_POINTER: Option<&'static mut Context> = None;
 
 pub struct Context<'a> {
     pub display: &'a mut Ssd1351,
@@ -66,26 +69,27 @@ pub struct Context<'a> {
 // is this safe?
 unsafe impl<'a> Send for Context<'a> {}
 
-/// Pointer to the structure we're given by the host.
-pub static mut TABLE_POINTER: Option<&'static mut Table> = None;
-
 #[repr(C)]
 /// The callbacks supplied by the OS.
-pub struct Table<'a> {
-    pub context: Context<'a>,
+pub struct Table {
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: extern "C" fn(*mut Context, u8, u8, u16) -> i32,
     /// Register an input event handler for an input
     pub register_input: extern "C" fn(*mut Context, InputType, InputHandlerFn) -> i32,
 }
 
-impl<'a> Table<'a> {
-    pub fn get() -> &'static mut Table<'a> {
+pub static CALLBACK_TABLE: Table = Table {
+    draw_pixel: draw_pixel,
+    register_input: register_input
+};
+
+impl<'a> Context<'a> {
+    pub fn get() -> &'static mut Context<'a> {
         unsafe {
-            if let Some(tbl) = &mut TABLE_POINTER {
+            if let Some(tbl) = &mut CONTEXT_POINTER {
                 tbl
             } else {
-                panic!("Bad context");
+                panic!("Bad context, context is only valid within update()!");
             }
         }
     }
@@ -97,4 +101,8 @@ pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -
     let ctx = unsafe { &mut *context };
     ctx.display.set_pixel(x as u32, y as u32, colour);
     0
+}
+
+pub extern "C" fn register_input(_context: *mut Context, _input_type: InputType, _cb: InputHandlerFn) -> i32 {
+    unimplemented!()
 }

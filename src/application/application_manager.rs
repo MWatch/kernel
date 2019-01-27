@@ -8,15 +8,14 @@
 //!
 
 use crc::crc32::checksum_ieee;
-use mwatch_kernel_api::{draw_pixel, Table, Context, ServiceFn, Ssd1351};
+use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351};
 
-pub struct ApplicationManager<'a> {
+pub struct ApplicationManager {
     ram: &'static mut [u8],
     ram_idx: usize,
     target_cs: [u8; 4],
     target_cs_idx: usize,
     service_fn: Option<ServiceFn>,
-    table: Option<Table<'a>>,
     status: Status,
 }
 
@@ -33,6 +32,7 @@ pub struct Status {
     pub is_loaded: bool,
     pub is_running: bool,
     pub ram_used: usize,
+    pub service_result: i32,
 }
 
 impl Default for Status {
@@ -40,12 +40,13 @@ impl Default for Status {
         Status {
             is_loaded: false,
             is_running: false,
+            service_result: -1,
             ram_used: 0,
         }
     }
 }
 
-impl<'a> ApplicationManager<'a> {
+impl ApplicationManager {
     pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
             ram: ram,
@@ -53,7 +54,6 @@ impl<'a> ApplicationManager<'a> {
             target_cs: [0u8; 4],
             target_cs_idx: 0,
             service_fn: None,
-            table: None,
             status: Status::default(),
         }
     }
@@ -93,20 +93,10 @@ impl<'a> ApplicationManager<'a> {
         let setup_ptr = Self::fn_ptr_from_slice(&mut self.ram[..4]);
         let service_ptr = Self::fn_ptr_from_slice(&mut self.ram[4..8]);
         let _result = unsafe {
-            self.table = Some(Table { // create the table
-                context: core::mem::uninitialized(),
-                draw_pixel: draw_pixel,
-                register_input: core::mem::uninitialized(),
-            });
-            
-            let setup: ServiceFn = ::core::mem::transmute(setup_ptr);
+            let setup: SetupFn = ::core::mem::transmute(setup_ptr);
             let service: ServiceFn = ::core::mem::transmute(service_ptr);
             self.service_fn = Some(service);
-            let _result = if let Some(t) = &self.table {
-                setup(t)
-            } else {
-                0
-            };
+            setup()
         };
         self.status.is_running = true;
         Ok(())
@@ -116,21 +106,10 @@ impl<'a> ApplicationManager<'a> {
     /// Gives processing time to the application
     pub fn service(&mut self, display: &mut Ssd1351) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
-        let t = Table {
-            context: Context {
-                display: display,
-            },
-            draw_pixel: draw_pixel,
-            register_input: unsafe { core::mem::uninitialized() },
+        let mut ctx = Context {
+            display: display,
         };
-        
-        let _result = service_fn(&t);
-        // let _result = if let Some(t) = &self.table {
-        //     service_fn(t)
-        // } else {
-        //     0
-        // };
-        // self.stop();//TODO REMOVE
+        self.status.service_result = service_fn(&mut ctx);
         Ok(())
        } else {
            Err(Error::InvalidServiceFn)

@@ -81,7 +81,7 @@ impl IngressManager {
                                         //TODO move execution to user initiated input
                                         amng.execute().unwrap();
                                     }
-                                    Err(e) => panic!("{:?} || Bytes in ram: {}", e, amng.status().ram_used),
+                                    Err(e) => panic!("{:?} || AMNG: {:?}", e, amng.status()),
                                 }
                             }
                             Type::Notification => {
