@@ -1,5 +1,5 @@
 [package]
-name = "mabez_watch"
+name = "mwatch_kernel"
 version = "0.0.1"
 authors = ["Scott Mabin <mabezdev@gmail.com>"]
 description = "A 'Smart' watch"
@@ -19,7 +19,6 @@ embedded-graphics = "0.4.4"
 max17048 = "0.1.0"
 hm11 = "0.2.1"
 simple-hex = "0.1.0"
-mwatch-sdk-core = { path = "/home/mabez/development/rust/embedded/projects/mabez-watch-sdk-core" }
 
 [dependencies.ssd1351]
 version = "0.2.0"
@@ -46,14 +45,19 @@ default-features = false
 [features]
 cpu-itm = []
 
+[lib]
+name = "mwatch_kernel_api"
+path = "src/lib.rs"
+
 [[bin]]
-name = "mabez_watch"
+name = "mwatch_kernel"
 test = false
 bench = false
 
 [profile.dev]
 codegen-units = 1
 incremental = false
+opt-level = 1
 
 [profile.release]
 codegen-units = 1

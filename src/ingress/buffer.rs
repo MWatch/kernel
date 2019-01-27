@@ -25,7 +25,7 @@ impl Default for Buffer {
         Buffer {
             btype: Type::Unknown,
             payload: [0u8; BUFF_SIZE],
-            payload_idx: 0
+            payload_idx: 0,
         }
     }
 }

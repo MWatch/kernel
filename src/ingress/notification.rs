@@ -1,5 +1,5 @@
 //! Push notification parsing
-//! 
+//!
 
 use crate::ingress::{buffer::Buffer, ingress_manager::BUFF_COUNT};
 
@@ -17,11 +17,12 @@ impl Notification {
         Notification {
             // app_name_idx: 0,
             // title_idx: 0,
-            // text_idx: 0, 
-            inner: Buffer { btype: crate::ingress::buffer::Type::Unknown, 
-                            payload: [0u8; crate::ingress::ingress_manager::BUFF_SIZE],
-                            payload_idx: 0 
-                            }
+            // text_idx: 0,
+            inner: Buffer {
+                btype: crate::ingress::buffer::Type::Unknown,
+                payload: [0u8; crate::ingress::ingress_manager::BUFF_SIZE],
+                payload_idx: 0,
+            },
         }
     }
 
@@ -46,17 +47,18 @@ pub struct NotificationManager {
 }
 
 impl NotificationManager {
-
     pub fn new(notifications: &'static mut [Notification; BUFF_COUNT]) -> NotificationManager {
         NotificationManager {
             pool: notifications,
-            idx : 0,
+            idx: 0,
         }
     }
 
     /// takes a closure to execute on the buffer
     pub fn peek_notification<F>(&mut self, index: usize, f: F)
-    where F: FnOnce(&Notification) {
+    where
+        F: FnOnce(&Notification),
+    {
         let notification = &self.pool[index];
         f(&notification);
     }
@@ -70,8 +72,10 @@ impl NotificationManager {
         self.pool[self.idx].parse_buffer(buffer)?;
 
         self.idx += 1;
-        if self.idx + 1 > self.pool.len() { // TODO impl a cirucular buffer that track head and tail
-            /* buffer is full, wrap around */        
+        if self.idx + 1 > self.pool.len() {
+            // TODO impl a cirucular buffer that track head and tail
+            /* buffer is full, wrap around */
+
             self.idx = 0;
         }
         Ok(())
