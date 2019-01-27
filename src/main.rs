@@ -4,13 +4,15 @@
 #[macro_use]
 extern crate cortex_m;
 extern crate rtfm;
-// extern crate panic_itm;
+#[cfg(feature = "cpu-itm")]
+extern crate panic_itm;
+#[cfg(not(feature = "cpu-itm"))]
+extern crate panic_semihosting;
 extern crate cortex_m_rt as rt;
 extern crate embedded_graphics;
 extern crate heapless;
 extern crate hm11;
 extern crate max17048;
-extern crate panic_semihosting;
 extern crate ssd1351;
 
 mod application;
@@ -115,9 +117,9 @@ const APP: () = {
         let mut rcc = device.RCC.constrain();
         let clocks = rcc
             .cfgr
-            .sysclk(SYS_CLK.hz())
-            .pclk1(32.mhz())
-            .pclk2(32.mhz())
+            .sysclk(16.mhz())
+            .pclk1(16.mhz())
+            .pclk2(16.mhz())
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -149,7 +151,7 @@ const APP: () = {
             device.SPI1,
             (sck, miso, mosi),
             SSD1351_SPI_MODE,
-            16.mhz(),
+            8.mhz(),
             clocks,
             &mut rcc.apb2,
         );

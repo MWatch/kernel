@@ -95,8 +95,6 @@ impl<'a> Context<'a> {
     }
 }
 
-//TODO is this safe? It's only safe if when we launch an application we never draw anything else
-// i.e we give control of the display to the application
 pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
     let ctx = unsafe { &mut *context };
     ctx.display.set_pixel(x as u32, y as u32, colour);
