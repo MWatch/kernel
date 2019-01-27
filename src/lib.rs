@@ -59,27 +59,30 @@ pub enum InputType {
     Right,
 }
 
-pub struct Context {
-    pub display: Ssd1351,
+pub struct Context<'a> {
+    pub display: &'a mut Ssd1351,
 }
 
+// is this safe?
+unsafe impl<'a> Send for Context<'a> {}
+
 /// Pointer to the structure we're given by the host.
-pub static mut TABLE_POINTER: Option<&'static Table> = None;
+pub static mut TABLE_POINTER: Option<&'static mut Table> = None;
 
 #[repr(C)]
 /// The callbacks supplied by the OS.
-pub struct Table {
-    pub context: *mut Context,
+pub struct Table<'a> {
+    pub context: Context<'a>,
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: extern "C" fn(*mut Context, u8, u8, u16) -> i32,
     /// Register an input event handler for an input
     pub register_input: extern "C" fn(*mut Context, InputType, InputHandlerFn) -> i32,
 }
 
-impl Table {
-    pub fn get() -> &'static Table {
+impl<'a> Table<'a> {
+    pub fn get() -> &'static mut Table<'a> {
         unsafe {
-            if let Some(tbl) = &TABLE_POINTER {
+            if let Some(tbl) = &mut TABLE_POINTER {
                 tbl
             } else {
                 panic!("Bad context");

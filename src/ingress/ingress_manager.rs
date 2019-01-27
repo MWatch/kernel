@@ -42,10 +42,14 @@ impl IngressManager {
 
     pub fn write(&mut self, data: &[u8]) {
         for byte in data {
-            // this is safe because we are only storing bytes, which do not need destructors called on them
-            unsafe {
-                self.rb.enqueue_unchecked(*byte);
-            } // although we wont know if we have overwritten previous data
+            match self.rb.enqueue(*byte) {
+                Ok(_) => {},
+                Err(e) => panic!("Ring buffer overflow {:?}", e)
+            }
+            // // this is safe because we are only storing bytes, which do not need destructors called on them
+            // unsafe {
+            //     self.rb.enqueue_unchecked(*byte);
+            // } // although we wont know if we have overwritten previous data
         }
     }
 
@@ -77,7 +81,7 @@ impl IngressManager {
                                         //TODO move execution to user initiated input
                                         amng.execute().unwrap();
                                     }
-                                    Err(e) => panic!("Invalid checksum, {:?}", e),
+                                    Err(e) => panic!("{:?} || Bytes in ram: {}", e, amng.status().ram_used),
                                 }
                             }
                             Type::Notification => {
