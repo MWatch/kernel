@@ -62,6 +62,7 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
+use crc::crc32::checksum_ieee;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -330,9 +331,13 @@ const APP: () = {
     fn APP() {
         let mut amgr = resources.AMGR;
         let mut display = resources.DISPLAY;
+        let fb_cs = checksum_ieee(display.fb());
         display.clear(false);
         amgr.service(&mut display).unwrap();
-        display.flush();
+        let fb_after = checksum_ieee(display.fb());
+        if fb_cs != fb_after {
+            display.flush();
+        }
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -397,7 +402,7 @@ const APP: () = {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
-        #[cfg(feature = "cpu-itm")]
+        #[cfg(feature = "itm")]
         iprintln!(&mut resources.ITM.stim[0], "CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
         *resources.CPU_USAGE = cpu;
@@ -437,7 +442,7 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
-
+        let fb_cs = checksum_ieee(display.fb());
         display.clear(false);
         match state {
             // HOME PAGE
@@ -603,7 +608,10 @@ const APP: () = {
             }
             _ => panic!("Unknown state"),
         }
-        display.flush();
+        let fb_after = checksum_ieee(display.fb());
+        if fb_cs != fb_after {
+            display.flush();
+        }
     }
 
     // Interrupt handlers used to dispatch software tasks

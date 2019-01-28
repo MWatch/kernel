@@ -29,10 +29,10 @@ hm11 = "0.2.1"
 simple-hex = "0.1.0"
 
 [dependencies.ssd1351]
-version = "0.2.0"
+# version = "0.2.0"
 # git = "https://github.com/mabezdev/ssd1351"
 # rev = "716af2c8de8b24c22d489df7a10ecbd62349fee5"
-# path = "../../drivers/ssd1351"
+path = "../../drivers/ssd1351"
 features = ["embedded-graphics", "buffered"]
 
 [dependencies.heapless]
@@ -51,7 +51,7 @@ default-features = false
 
 
 [features]
-cpu-itm = []
+itm = []
 
 [lib]
 name = "mwatch_kernel_api"
