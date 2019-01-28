@@ -2,20 +2,22 @@
 
 > An embedded smartwatch written with Rust, using the RTFM framework for multithreading.
 
-![Logo](https://i.imgur.com/T3HADuB.jpg)
+![Logo](https://i.imgur.com/BYfEjaX.jpg)
 
 ## Features
 
-- Capacitive touch sense input control
-- Full 16bit colour OLED
+- Capacitive touch sense inputs
+- Full 16bit colour ssd1351 OLED
 - Installable apps (see [SDK section](#developing-applications-for-the-mwatch) for more info)
+- Real time clock
 - Notification alerts via bluetooth
+- Buildable on stable rust 2018
 
 ## Developing applications for the `mwatch`
 
 The `mwatch` provides an SDK for developing applications that can be installed via the mobile app. More info about the SDK can be found in the [SDK repo](https://github.com/MWatch/mwatch-sdk).
 
-<!-- # [Documentation](https://github/MabezDev) -->
+# [Documentation](https://docs.rs/mwatch_kernel/latest/mwatch_kernel/)
 
 
 
@@ -40,3 +42,5 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+**Copyright Scott Mabin 2019**

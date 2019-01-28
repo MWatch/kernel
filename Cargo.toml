@@ -1,12 +1,22 @@
 [package]
 name = "mwatch_kernel"
-version = "0.0.1"
+version = "0.8.0"
 authors = ["Scott Mabin <mabezdev@gmail.com>"]
-description = "A 'Smart' watch"
+description = "A embedded 'Smart' watch"
 keywords = ["arm", "cortex-m", "smartwatch"]
 categories = ["embedded", "no-std"]
+repository = "https://github.com/mwatch/kernel"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/mabezdev/mabez_watch_rust"
+exclude = [
+	".travis.yml",
+	".gitignore",
+	"tools/",
+	"tools/*",
+	"data/",
+	"data/*",
+	"itm.fifo",
+]
 edition = "2018"
 
 [dependencies]
