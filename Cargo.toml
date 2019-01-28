@@ -13,8 +13,6 @@ exclude = [
 	".gitignore",
 	"tools/",
 	"tools/*",
-	"data/",
-	"data/*",
 	"itm.fifo",
 ]
 edition = "2018"
