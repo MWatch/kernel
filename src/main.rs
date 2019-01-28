@@ -62,10 +62,16 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
+use cortex_m_log::log::{Logger, init};
+use cortex_m_log::destination::Itm as ItmDestination;
+use cortex_m_log::printer::Itm as ItmPrinter;
+
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
+
+// unsafe impl Send for cortex_m::peripheral::ITM {}
 
 #[app(device = crate::hal::stm32)]
 const APP: () = {
@@ -101,12 +107,13 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
+    // static mut LOGGER: Logger<Itm> = Logger { inner: Itm, level: log::LevelFilter::Off};
+
     #[link_section = ".fb_section.fb"]
     static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
-    // static mut APPLICATION_RAM: Buffer = Buffer { payload: [0u8; RAM_SIZE], ..Buffer::default() }; // cant use buffer as the payload has to be at address
-
+    
     #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
@@ -120,6 +127,11 @@ const APP: () = {
             .pclk2(32.mhz())
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        let itm = core.ITM;
+        let logger = Logger {
+            inner: ItmPrinter::new(ItmDestination::new(itm)),
+            level: log::LevelFilter::Info
+        };
 
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);

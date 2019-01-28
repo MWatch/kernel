@@ -19,6 +19,8 @@ embedded-graphics = "0.4.4"
 max17048 = "0.1.0"
 hm11 = "0.2.1"
 simple-hex = "0.1.0"
+cortex-m-log = { version = "0.3.3", features = ["itm", "log-integration"] }
+log = "0.4.6" 
 
 [dependencies.ssd1351]
 version = "0.2.0"
