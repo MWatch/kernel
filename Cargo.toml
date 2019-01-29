@@ -33,7 +33,7 @@ simple-hex = "0.1.0"
 # git = "https://github.com/mabezdev/ssd1351"
 # rev = "716af2c8de8b24c22d489df7a10ecbd62349fee5"
 path = "../../drivers/ssd1351"
-features = ["embedded-graphics", "buffered"]
+features = ["embedded-graphics", "fb-checksum"]
 
 [dependencies.heapless]
 version = "0.4.1"

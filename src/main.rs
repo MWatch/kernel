@@ -62,7 +62,7 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
-use crc::crc32::checksum_ieee;
+// use crc::crc32::checksum_ieee;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -331,10 +331,10 @@ const APP: () = {
     fn APP() {
         let mut amgr = resources.AMGR;
         let mut display = resources.DISPLAY;
-        let fb_cs = checksum_ieee(display.fb());
+        let fb_cs = display.cs();
         display.clear(false);
         amgr.service(&mut display).unwrap();
-        let fb_after = checksum_ieee(display.fb());
+        let fb_after = display.cs();
         if fb_cs != fb_after {
             display.flush();
         }
@@ -442,7 +442,7 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
-        let fb_cs = checksum_ieee(display.fb());
+        let fb_cs = display.cs();
         display.clear(false);
         match state {
             // HOME PAGE
@@ -608,7 +608,7 @@ const APP: () = {
             }
             _ => panic!("Unknown state"),
         }
-        let fb_after = checksum_ieee(display.fb());
+        let fb_after = display.cs();
         if fb_cs != fb_after {
             display.flush();
         }
