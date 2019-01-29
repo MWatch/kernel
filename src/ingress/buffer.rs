@@ -55,3 +55,15 @@ impl Buffer {
         self.payload_idx = 0;
     }
 }
+
+impl core::fmt::Debug for Buffer {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Buffer : [")?;
+        for idx in 0..self.payload_idx{
+            write!(f, " '{}',", self.payload[idx] as char)?;
+        }
+        write!(f, " ]")?;
+        Ok(())
+    }
+}

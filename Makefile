@@ -1,3 +1,5 @@
+FEATURES = default
+
 openocd: 
 	openocd -f interface/stlink-v2.cfg -f target/stm32l4x.cfg
 # openocd -f interface/stlink-v2-1.cfg -f target/stm32l4x.cfg
@@ -13,10 +15,10 @@ bin: release
 	cargo objcopy -- -O binary target/thumbv7em-none-eabi/release/mwatch_kernel target/thumbv7em-none-eabi/release/mwatch_kernel.bin
 
 release:
-	cargo build --release
+	cargo build --release --features $(FEATURES)
 
 debug:
-	cargo build
+	cargo build --features $(FEATURES)
 
 clean:
 	cargo clean

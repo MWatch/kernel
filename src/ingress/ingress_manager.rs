@@ -85,13 +85,13 @@ impl IngressManager {
                                 }
                             }
                             Type::Notification => {
+                                info!("Adding notification from: {:?}", self.buffer);
                                 notification_mgr.add(&self.buffer).unwrap();
                             }
                             _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
                     }
                     PAYLOAD => {
-                        // state change - how? based on type
                         match self.buffer.btype {
                             Type::Unknown => self.state = State::Wait,
                             Type::Application => {

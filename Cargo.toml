@@ -45,8 +45,8 @@ default-features = false
 
 
 [features]
-default = ["cpu-itm"]
-cpu-itm = []
+default = []
+itm = []
 
 [lib]
 name = "mwatch_kernel_api"

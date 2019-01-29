@@ -68,6 +68,7 @@ use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
 use cortex_m_log::printer::itm::InterruptFree as InterruptFreeItm;
 
+type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::Itm<cortex_m_log::modes::InterruptFree>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -106,14 +107,14 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
-    static mut LOGGER: cortex_m_log::log::Logger<cortex_m_log::printer::itm::Itm<cortex_m_log::modes::InterruptFree>> = ();
+    static mut LOGGER: Option<LoggerType> = None;
 
     #[link_section = ".fb_section.fb"]
     static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
     
-    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER])]
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -127,14 +128,30 @@ const APP: () = {
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
+        // initialize the logging framework
+        let level = {
+            #[cfg(feature = "itm")]
+            {
+                log::LevelFilter::Trace
+            }
+            #[cfg(not(feature = "itm"))]
+            {
+                log::LevelFilter::Off
+            }
+        };
         let itm = core.ITM;
         let logger = Logger {
             inner: InterruptFreeItm::new(ItmDestination::new(itm)),
-            level: log::LevelFilter::Trace
+            level: level,
         };
 
-        info!("Initialized Logging.");
-        trace!("Tracing application");
+        *resources.LOGGER = Some(logger);
+        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap();
+        unsafe { trick_init(&log).unwrap(); }
+
+        info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
+        info!("Copyright Scott Mabin 2019");
+        info!("Clocks: {:?}", clocks);
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
@@ -321,19 +338,12 @@ const APP: () = {
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
-        LOGGER = logger;
         NMGR = nmgr;
         AMGR = amgr;
     }
 
-    #[idle(resources = [SLEEP_TIME, LOGGER])]
+    #[idle(resources = [SLEEP_TIME])]
     fn idle() -> ! {
-        // WARNING can this can get preempted before it completes?
-        // this only runs once
-        let log = resources.LOGGER;
-        unsafe { trick_init(&log).unwrap() };
-        info!("Logging Initialized");
-
         loop {
             resources.SLEEP_TIME.lock(|sleep| {
                 let before = DWT::get_cycle_count();
@@ -363,7 +373,6 @@ const APP: () = {
         resources
             .CB
             .peek(|buf, _half| {
-                info!("Full Buffer: {:?}", buf);
                 mgr.write(buf);
             })
             .unwrap();
@@ -399,7 +408,6 @@ const APP: () = {
                 .partial_peek(|buf, _half| {
                     let len = buf.len();
                     if len > 0 {
-                        info!("Buffer: {:?}", buf);
                         mgr.write(buf);
                     }
                     Ok((len, ()))
@@ -419,8 +427,7 @@ const APP: () = {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
-        #[cfg(feature = "cpu-itm")]
-        info!("CPU_USAGE: {}%", cpu);
+        trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
         *resources.CPU_USAGE = cpu;
         let it_count = resources.INPUT_IT_COUNT.lock(|val| {
@@ -440,7 +447,6 @@ const APP: () = {
         mgr.lock(|m| {
             m.process(&mut n_mgr, &mut a_mgr);
         });
-        trace!("Tim2");
         let status = a_mgr.status();
         if status.is_running {
             spawn.APP().unwrap();
@@ -459,7 +465,6 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
-        info!("WM");
         display.clear(false);
         match state {
             // HOME PAGE
