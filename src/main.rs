@@ -73,8 +73,6 @@ const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
-// unsafe impl Send for cortex_m::peripheral::ITM {}
-
 #[app(device = crate::hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
@@ -107,6 +105,7 @@ const APP: () = {
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
+
     static mut LOGGER: cortex_m_log::log::Logger<cortex_m_log::printer::itm::Itm<cortex_m_log::modes::InterruptFree>> = ();
 
     #[link_section = ".fb_section.fb"]
@@ -127,15 +126,12 @@ const APP: () = {
             .pclk2(32.mhz())
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+
         let itm = core.ITM;
         let logger = Logger {
             inner: InterruptFreeItm::new(ItmDestination::new(itm)),
             level: log::LevelFilter::Trace
         };
-        // this should be safe as logger goes on to be static
-        unsafe {
-            let _ = trick_init(&logger);
-        }
 
         info!("Initialized Logging.");
         trace!("Tracing application");
@@ -325,13 +321,19 @@ const APP: () = {
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
+        LOGGER = logger;
         NMGR = nmgr;
         AMGR = amgr;
-        LOGGER = logger;
     }
 
-    #[idle(resources = [SLEEP_TIME])]
+    #[idle(resources = [SLEEP_TIME, LOGGER])]
     fn idle() -> ! {
+        // WARNING can this can get preempted before it completes?
+        // this only runs once
+        let log = resources.LOGGER;
+        unsafe { trick_init(&log).unwrap() };
+        info!("Logging Initialized");
+
         loop {
             resources.SLEEP_TIME.lock(|sleep| {
                 let before = DWT::get_cycle_count();
@@ -412,7 +414,7 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [LOGGER, TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
