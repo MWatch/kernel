@@ -12,9 +12,12 @@ extern crate hm11;
 extern crate max17048;
 extern crate panic_semihosting;
 extern crate ssd1351;
+#[macro_use]
+extern crate log;
 
 mod application;
 mod ingress;
+mod util;
 
 
 use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
@@ -62,6 +65,9 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
+use crate::util::itm_log::ItmLogger;
+use log::LevelFilter;
+
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -91,7 +97,8 @@ const APP: () = {
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut STATE: u8 = 0;
-    static mut ITM: cortex_m::peripheral::ITM = ();
+    static mut LOGGER: ItmLogger = ();
+    static mut LOG_SETUP: bool = false;
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
@@ -120,6 +127,13 @@ const APP: () = {
             .pclk2(32.mhz())
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+
+        let logger = ItmLogger::new(core.ITM);
+        // This is safe, provided itm_logger is not dropped
+        // let itm_logger: &'static ItmLogger = unsafe { core::mem::transmute(&logger) };
+
+        // info!("Loggin initialized.");
+
 
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
@@ -304,7 +318,7 @@ const APP: () = {
         STDBY = stdby;
         CHRG = chrg;
         BT_CONN = bt_conn;
-        ITM = core.ITM;
+        LOGGER = logger;
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
@@ -312,8 +326,15 @@ const APP: () = {
         AMGR = amgr;
     }
 
-    #[idle(resources = [SLEEP_TIME])]
+    #[idle(resources = [LOGGER, SLEEP_TIME, LOG_SETUP])]
     fn idle() -> ! {
+        // WARNING can this can get preempted?
+        // this only runs once
+        if !*resources.LOG_SETUP {
+            log::set_logger(resources.LOGGER).unwrap();
+            log::set_max_level(LevelFilter::Info);
+            *resources.LOG_SETUP = true;
+        }
         loop {
             resources.SLEEP_TIME.lock(|sleep| {
                 let before = DWT::get_cycle_count();
@@ -392,13 +413,13 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [ITM, TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         #[cfg(feature = "cpu-itm")]
-        iprintln!(&mut resources.ITM.stim[0], "CPU_USAGE: {}%", cpu);
+        info!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
         *resources.CPU_USAGE = cpu;
         let it_count = resources.INPUT_IT_COUNT.lock(|val| {
@@ -410,7 +431,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, ITM, SYS_TICK], spawn = [APP, WM])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, SYS_TICK], spawn = [APP, WM])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
@@ -418,6 +439,8 @@ const APP: () = {
         mgr.lock(|m| {
             m.process(&mut n_mgr, &mut a_mgr);
         });
+
+        info!("TIM2");
 
         let status = a_mgr.status();
         if status.is_running {
@@ -437,7 +460,7 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
-
+        info!("WM");
         display.clear(false);
         match state {
             // HOME PAGE
