@@ -66,9 +66,9 @@ use crate::application::application_manager::ApplicationManager;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
-use cortex_m_log::printer::itm::InterruptFree as InterruptFreeItm;
+use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 
-type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::Itm<cortex_m_log::modes::InterruptFree>>;
+type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -141,7 +141,7 @@ const APP: () = {
         };
         let itm = core.ITM;
         let logger = Logger {
-            inner: InterruptFreeItm::new(ItmDestination::new(itm)),
+            inner: InterruptSyncItm::new(ItmDestination::new(itm)),
             level: level,
         };
 

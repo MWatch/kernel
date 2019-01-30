@@ -11,8 +11,7 @@ use crc::crc32::checksum_ieee;
 use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351};
 
 pub struct ApplicationManager {
-    ram: &'static mut [u8],
-    ram_idx: usize,
+    ram: Ram,
     target_cs: [u8; 4],
     target_cs_idx: usize,
     service_fn: Option<ServiceFn>,
@@ -49,8 +48,7 @@ impl Default for Status {
 impl ApplicationManager {
     pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
-            ram: ram,
-            ram_idx: 0,
+            ram: Ram::new(ram),
             target_cs: [0u8; 4],
             target_cs_idx: 0,
             service_fn: None,
@@ -58,10 +56,8 @@ impl ApplicationManager {
         }
     }
 
-    pub fn write_byte(&mut self, byte: u8) -> Result<(), Error> {
-        self.ram[self.ram_idx] = byte;
-        self.ram_idx += 1;
-        self.status.ram_used = self.ram_idx;
+    pub fn write_ram_byte(&mut self, byte: u8) -> Result<(), Error> {
+        self.ram.write(byte)?;
         Ok(())
     }
 
@@ -77,11 +73,15 @@ impl ApplicationManager {
             | ((self.target_cs[1] as u32) << 16)
             | ((self.target_cs[2] as u32) << 8)
             | ((self.target_cs[3] as u32) << 0);
-        let self_cs = checksum_ieee(&self.ram[..self.ram_idx]);
-        if digest == self_cs {
+        trace!("{:?}", self.ram);
+        info!("Digest: {}", digest);
+        let ram_cs = self.ram.cs();
+        info!("Current Ram Digest: {}", ram_cs);
+        if digest == ram_cs {
             self.status.is_loaded = true;
             Ok(())
         } else {
+            error!("Application checksum failed!");
             Err(Error::ChecksumFailed)
         }
     }
@@ -90,8 +90,8 @@ impl ApplicationManager {
         if !self.status.is_loaded {
             return Err(Error::NoApplication);
         }
-        let setup_ptr = Self::fn_ptr_from_slice(&mut self.ram[..4]);
-        let service_ptr = Self::fn_ptr_from_slice(&mut self.ram[4..8]);
+        let setup_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[..4]);
+        let service_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[4..8]);
         let _result = unsafe {
             let setup: SetupFn = ::core::mem::transmute(setup_ptr);
             let service: ServiceFn = ::core::mem::transmute(service_ptr);
@@ -121,7 +121,7 @@ impl ApplicationManager {
     }
 
     pub fn stop(&mut self) -> Result<(), Error> {
-        self.ram_idx = 0;
+        self.ram.reset();
         self.target_cs_idx = 0;
         self.status.is_loaded = false;
         self.status.is_running = false;
@@ -133,7 +133,7 @@ impl ApplicationManager {
     }
 
     /// convert 4 byte slice into a const ptr
-    fn fn_ptr_from_slice(bytes: &mut [u8]) -> *const () {
+    fn fn_ptr_from_slice(bytes: &[u8]) -> *const () {
         assert!(bytes.len() == 4);
         let addr = ((bytes[3] as u32) << 24)
             | ((bytes[2] as u32) << 16)
@@ -146,4 +146,53 @@ impl ApplicationManager {
     // pub fn update_input(someEnum: InputVariant)
 
     //TODO call the relevant input handlers when the kernel notifies us of a change
+}
+
+/// A structure for manipulating application memory
+pub struct Ram {
+    ram: &'static mut [u8],
+    ram_idx: usize,
+}
+
+impl Ram {
+    /// Create a new Ram instance with the size of the provided buffer
+    pub fn new(ram: &'static mut [u8]) -> Self {
+        Self {
+            ram: ram,
+            ram_idx: 0,
+        }
+    }
+
+    /// Write a byte into Ram
+    pub fn write(&mut self, byte: u8) -> Result<(), Error> {
+        self.ram[self.ram_idx] = byte;
+        self.ram_idx += 1;
+        Ok(())
+    }
+
+    /// ieee crc32 of the ram buffer
+    pub fn cs(&self) -> u32 {
+        checksum_ieee(&self.ram[..self.ram_idx])
+    }
+
+    // Reset ram
+    pub fn reset(&mut self) {
+        self.ram_idx = 0;
+    }
+
+    pub fn as_ref(&self) -> &[u8] {
+        &self.ram
+    }
+}
+
+impl core::fmt::Debug for Ram {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Ram : [")?;
+        for idx in 0..self.ram_idx {
+            write!(f, " {},", self.ram[idx] as char)?;
+        }
+        write!(f, " ]")?;
+        Ok(())
+    }
 }
