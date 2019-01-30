@@ -1,6 +1,4 @@
-extern crate cortex_m;
-extern crate heapless;
-extern crate rtfm;
+//! Handles all seral data
 
 use crate::application::application_manager::ApplicationManager;
 use crate::ingress::buffer::{Buffer, Type};
@@ -60,7 +58,8 @@ impl IngressManager {
     ) {
         let mut hex_chars = [0u8; 2];
         let mut hex_idx = 0;
-        if !self.rb.is_empty() && self.rb.len() > 2 {
+        if !self.rb.is_empty() {
+            self.print_rb();
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => {
@@ -166,20 +165,24 @@ impl IngressManager {
             b'D' => Type::Date,         /* Date packet */
             b'M' => Type::Music,        /* Spotify controls */
             b'A' => Type::Application,  /* Load Application */
+            b'C' => Type::Command,  /* Execute a command */
             _ => Type::Unknown,
         };
         self.buffer.btype
     }
 
-    pub fn print_rb(&mut self, itm: &mut cortex_m::peripheral::itm::Stim) {
-        if self.rb.is_empty() {
-            // iprintln!(itm, "RB is Empty!");
-        } else {
-            iprintln!(itm, "RB Contents: ");
-            while let Some(byte) = self.rb.dequeue() {
-                iprint!(itm, "{}", byte as char);
+    pub fn print_rb(&self) {
+        if !self.rb.is_empty() {
+            trace!("RB Contents: ");
+            for byte in self.rb.iter() {
+                trace!("{}", *byte);
             }
-            iprintln!(itm, "");
-        }
+            // iprintln!(itm, "RB Contents: ");
+            // while let Some(byte) = self.rb.dequeue() {
+            //     iprint!(itm, "{}", byte as char);
+            // }
+            // iprintln!(itm, "");
+        } 
+        
     }
 }

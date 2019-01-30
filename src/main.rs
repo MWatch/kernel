@@ -1,22 +1,17 @@
 #![no_std]
 #![no_main]
 
-#[macro_use]
-extern crate cortex_m;
-extern crate rtfm;
-// extern crate panic_itm;
 extern crate cortex_m_rt as rt;
-extern crate embedded_graphics;
-extern crate heapless;
-extern crate hm11;
-extern crate max17048;
+#[macro_use] extern crate log;
+
+#[cfg(feature = "itm")]
+extern crate panic_itm;
+#[cfg(not(feature = "itm"))]
 extern crate panic_semihosting;
-extern crate ssd1351;
-#[macro_use]
-extern crate log;
 
 mod application;
 mod ingress;
+mod system;
 
 
 use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
@@ -81,7 +76,7 @@ const APP: () = {
     static mut NMGR: NotificationManager = ();
     static mut AMGR: ApplicationManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
-        [Notification::default(); crate::BUFF_COUNT];
+        [Notification::new(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -354,6 +349,11 @@ const APP: () = {
 
             // interrupts are serviced here
         }
+    }
+
+    #[task(resources = [AMGR, DISPLAY])]
+    fn CMD(command: system::syscall::Syscall) {
+        
     }
 
     #[task(resources = [AMGR, DISPLAY])]

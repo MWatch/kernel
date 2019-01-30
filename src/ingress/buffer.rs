@@ -10,6 +10,7 @@ pub enum Type {
     Date,
     Music,
     Application,
+    Command,
 }
 
 #[derive(Copy, Clone)]

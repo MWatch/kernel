@@ -13,7 +13,7 @@ pub struct Notification {
 }
 
 impl Notification {
-    pub const fn default() -> Notification {
+    pub const fn new() -> Notification {
         Notification {
             // app_name_idx: 0,
             // title_idx: 0,
