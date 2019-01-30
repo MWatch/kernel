@@ -64,6 +64,9 @@ impl IngressManager {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => {
+                        if self.state != State::Wait {
+                            warn!("Partial buffer detected: {:?}", self.buffer);
+                        }
                         /* Start of packet */
                         self.buffer.clear();
                         self.state = State::Init; // activate processing
@@ -85,15 +88,18 @@ impl IngressManager {
                                 }
                             }
                             Type::Notification => {
+                                info!("Adding notification from: {:?}", self.buffer);
                                 notification_mgr.add(&self.buffer).unwrap();
                             }
                             _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
                     }
                     PAYLOAD => {
-                        // state change - how? based on type
                         match self.buffer.btype {
-                            Type::Unknown => self.state = State::Wait,
+                            Type::Unknown => {
+                                warn!("Dropping buffer of unknown type {:?}", self.buffer.btype);
+                                self.state = State::Wait
+                            }
                             Type::Application => {
                                 if self.state == State::ApplicationChecksum {
                                     // We've parsed the checksum, now we write the data into ram
@@ -136,7 +142,7 @@ impl IngressManager {
                                 hex_chars[hex_idx] = byte;
                                 hex_idx += 1;
                                 if hex_idx > 1 {
-                                    amng.write_byte(
+                                    amng.write_ram_byte(
                                         hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap(),
                                     )
                                     .unwrap();

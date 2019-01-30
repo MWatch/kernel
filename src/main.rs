@@ -12,6 +12,8 @@ extern crate hm11;
 extern crate max17048;
 extern crate panic_semihosting;
 extern crate ssd1351;
+#[macro_use]
+extern crate log;
 
 mod application;
 mod ingress;
@@ -62,6 +64,11 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 
+use cortex_m_log::log::{Logger, trick_init};
+use cortex_m_log::destination::Itm as ItmDestination;
+use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
+
+type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
@@ -91,7 +98,6 @@ const APP: () = {
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
     static mut STATE: u8 = 0;
-    static mut ITM: cortex_m::peripheral::ITM = ();
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
@@ -101,13 +107,14 @@ const APP: () = {
     static mut INPUT_IT_COUNT: u32 = 0;
     static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
 
+    static mut LOGGER: Option<LoggerType> = None;
+
     #[link_section = ".fb_section.fb"]
     static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
-    // static mut APPLICATION_RAM: Buffer = Buffer { payload: [0u8; RAM_SIZE], ..Buffer::default() }; // cant use buffer as the payload has to be at address
-
-    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER])]
+    
+    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -121,6 +128,30 @@ const APP: () = {
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
+        // initialize the logging framework
+        let level = {
+            #[cfg(feature = "itm")]
+            {
+                log::LevelFilter::Trace
+            }
+            #[cfg(not(feature = "itm"))]
+            {
+                log::LevelFilter::Off
+            }
+        };
+        let itm = core.ITM;
+        let logger = Logger {
+            inner: InterruptSyncItm::new(ItmDestination::new(itm)),
+            level: level,
+        };
+
+        *resources.LOGGER = Some(logger);
+        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap();
+        unsafe { trick_init(&log).unwrap(); }
+
+        info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
+        info!("Copyright Scott Mabin 2019");
+        info!("Clocks: {:?}", clocks);
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
@@ -304,7 +335,6 @@ const APP: () = {
         STDBY = stdby;
         CHRG = chrg;
         BT_CONN = bt_conn;
-        ITM = core.ITM;
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
@@ -392,13 +422,12 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [ITM, TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
-        #[cfg(feature = "cpu-itm")]
-        iprintln!(&mut resources.ITM.stim[0], "CPU_USAGE: {}%", cpu);
+        trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
         *resources.CPU_USAGE = cpu;
         let it_count = resources.INPUT_IT_COUNT.lock(|val| {
@@ -410,7 +439,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, ITM, SYS_TICK], spawn = [APP, WM])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, SYS_TICK], spawn = [APP, WM])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
@@ -418,7 +447,6 @@ const APP: () = {
         mgr.lock(|m| {
             m.process(&mut n_mgr, &mut a_mgr);
         });
-
         let status = a_mgr.status();
         if status.is_running {
             spawn.APP().unwrap();
@@ -437,7 +465,6 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
-
         display.clear(false);
         match state {
             // HOME PAGE
