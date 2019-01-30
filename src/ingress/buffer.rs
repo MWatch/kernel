@@ -59,11 +59,21 @@ impl Buffer {
 impl core::fmt::Debug for Buffer {
 
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "Buffer : [")?;
+        write!(f, "Buffer<{:?}>[{}] : [", self.btype, self.payload_idx)?;
         for idx in 0..self.payload_idx{
             write!(f, " '{}',", self.payload[idx] as char)?;
         }
         write!(f, " ]")?;
+        Ok(())
+    }
+}
+
+impl core::fmt::Display for Buffer {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        for idx in 0..self.payload_idx{
+            write!(f, "{}", self.payload[idx] as char)?;
+        }
         Ok(())
     }
 }
