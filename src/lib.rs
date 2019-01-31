@@ -53,13 +53,18 @@ pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
 
 pub type SetupFn = extern "C" fn() -> i32;
 pub type ServiceFn = extern "C" fn(*mut Context) -> i32;
-pub type InputFn = extern "C" fn(*mut Context, InputType) -> i32;
+pub type InputFn = extern "C" fn(*mut Context, InputEvent) -> i32;
 
 #[repr(C)]
-pub enum InputType {
-    Left(bool),
-    Middle(bool),
-    Right(bool),
+#[derive(Debug, Clone, Copy)]
+pub enum InputEvent {
+    Left,
+    Middle,
+    Right,
+    Dual,
+    Multi,
+    LeftMiddle,
+    RightMiddle,
 }
 
 pub static mut CONTEXT_POINTER: Option<&'static mut Context> = None;

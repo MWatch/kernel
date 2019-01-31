@@ -8,7 +8,7 @@
 //!
 
 use crc::crc32::checksum_ieee;
-use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputType};
+use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputEvent};
 
 pub struct ApplicationManager {
     ram: Ram,
@@ -124,7 +124,7 @@ impl ApplicationManager {
     }
 
     /// Gives processing time to input handlers of the function
-    pub fn service_input(&mut self, display: &mut Ssd1351, input: InputType) -> Result<(), Error> {
+    pub fn service_input(&mut self, display: &mut Ssd1351, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
             display: display,
@@ -213,14 +213,4 @@ extern "C" fn application_logger(string: &str) -> i32 {
     0
 }
 
-// impl core::fmt::Debug for Ram {
 
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Ram : [")?;
-//         for idx in (0..self.ram_idx).iter().chunks(2) {
-//             write!(f, " {},", self.ram[idx] as char)?;
-//         }
-//         write!(f, " ]")?;
-//         Ok(())
-//     }
-// }
