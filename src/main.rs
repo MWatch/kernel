@@ -19,7 +19,7 @@ mod application;
 mod ingress;
 
 
-use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
+use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351, InputType};
 use crate::hal::datetime::Date;
 use crate::hal::delay::Delay;
 use crate::hal::dma::{dma1, CircBuffer, Event};
@@ -362,6 +362,8 @@ const APP: () = {
         let mut display = resources.DISPLAY;
         display.clear(false);
         amgr.service(&mut display).unwrap();
+        //TODO move this input the kernel input handlers
+        amgr.service_input(&mut display, InputType::Left(true)).unwrap();
         display.flush();
     }
 

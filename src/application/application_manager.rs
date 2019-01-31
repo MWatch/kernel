@@ -8,13 +8,14 @@
 //!
 
 use crc::crc32::checksum_ieee;
-use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351};
+use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputType};
 
 pub struct ApplicationManager {
     ram: Ram,
     target_cs: [u8; 4],
     target_cs_idx: usize,
     service_fn: Option<ServiceFn>,
+    input_fn: Option<InputFn>,
     status: Status,
 }
 
@@ -24,6 +25,7 @@ pub enum Error {
     ChecksumFailed,
     NoApplication,
     InvalidServiceFn,
+    InvalidInputFn,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -52,6 +54,7 @@ impl ApplicationManager {
             target_cs: [0u8; 4],
             target_cs_idx: 0,
             service_fn: None,
+            input_fn: None,
             status: Status::default(),
         }
     }
@@ -73,7 +76,7 @@ impl ApplicationManager {
             | ((self.target_cs[1] as u32) << 16)
             | ((self.target_cs[2] as u32) << 8)
             | ((self.target_cs[3] as u32) << 0);
-        trace!("{:?}", self.ram);
+        // trace!("{:?}", self.ram);
         info!("Digest: {}", digest);
         let ram_cs = self.ram.cs();
         info!("Current Ram Digest: {}", ram_cs);
@@ -92,10 +95,13 @@ impl ApplicationManager {
         }
         let setup_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[..4]);
         let service_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[4..8]);
+        let input_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[8..12]);
         let _result = unsafe {
             let setup: SetupFn = ::core::mem::transmute(setup_ptr);
             let service: ServiceFn = ::core::mem::transmute(service_ptr);
+            let input: InputFn = ::core::mem::transmute(input_ptr);
             self.service_fn = Some(service);
+            self.input_fn = Some(input);
             setup()
         };
         self.status.is_running = true;
@@ -108,11 +114,26 @@ impl ApplicationManager {
        if let Some(service_fn) = self.service_fn {
         let mut ctx = Context {
             display: display,
+            log: application_logger,
         };
         self.status.service_result = service_fn(&mut ctx);
         Ok(())
        } else {
            Err(Error::InvalidServiceFn)
+       }
+    }
+
+    /// Gives processing time to input handlers of the function
+    pub fn service_input(&mut self, display: &mut Ssd1351, input: InputType) -> Result<(), Error> {
+       if let Some(input_fn) = self.input_fn {
+        let mut ctx = Context {
+            display: display,
+            log: application_logger,
+        };
+        let _ = input_fn(&mut ctx, input);
+        Ok(())
+       } else {
+           Err(Error::InvalidInputFn)
        }
     }
 
@@ -125,6 +146,8 @@ impl ApplicationManager {
         self.target_cs_idx = 0;
         self.status.is_loaded = false;
         self.status.is_running = false;
+        self.input_fn = None;
+        self.service_fn = None;
         Ok(())
     }
 
@@ -185,14 +208,19 @@ impl Ram {
     }
 }
 
-impl core::fmt::Debug for Ram {
-
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "Ram : [")?;
-        for idx in 0..self.ram_idx {
-            write!(f, " {},", self.ram[idx] as char)?;
-        }
-        write!(f, " ]")?;
-        Ok(())
-    }
+extern "C" fn application_logger(string: &str) -> i32 {
+    trace!("{}", string);
+    0
 }
+
+// impl core::fmt::Debug for Ram {
+
+//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+//         write!(f, "Ram : [")?;
+//         for idx in (0..self.ram_idx).iter().chunks(2) {
+//             write!(f, " {},", self.ram[idx] as char)?;
+//         }
+//         write!(f, " ]")?;
+//         Ok(())
+//     }
+// }
