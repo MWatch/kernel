@@ -129,8 +129,8 @@ const APP: () = {
         //     .sysclk(SYS_CLK.hz())
         //     .pclk1(32.mhz())
         //     .pclk2(32.mhz())
-        //     .freeze(&mut flash.acr);
-        // this config is too slow
+        //     .freeze(&mut flash.acr); // 31% cpu usage~
+        
         // let clocks = rcc
         //     .cfgr
         //     .sysclk(2.mhz())
@@ -138,8 +138,9 @@ const APP: () = {
         //     .pclk2(2.mhz())
         //     .lsi(true)
         //     .msi(stm32l4xx_hal::rcc::MsiFreq::RANGE2M)
-        //     .freeze(&mut flash.acr);
-        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr);
+        //     .freeze(&mut flash.acr); // this config is too slow - cant use lprun etc
+        
+        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
         // initialize the logging framework
         let level = {
