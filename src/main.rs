@@ -74,7 +74,7 @@ use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
 
 const DMA_HAL_SIZE: usize = 64;
-const SYS_CLK: u32 = 32_000_000;
+const SYS_CLK: u32 = 16_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
 #[app(device = crate::hal::stm32)]
@@ -124,13 +124,22 @@ const APP: () = {
         core.DWT.enable_cycle_counter();
         let mut flash = device.FLASH.constrain();
         let mut rcc = device.RCC.constrain();
-        let clocks = rcc
-            .cfgr
-            .sysclk(SYS_CLK.hz())
-            .pclk1(32.mhz())
-            .pclk2(32.mhz())
-            .freeze(&mut flash.acr);
-        // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        // let clocks = rcc
+        //     .cfgr
+        //     .sysclk(SYS_CLK.hz())
+        //     .pclk1(32.mhz())
+        //     .pclk2(32.mhz())
+        //     .freeze(&mut flash.acr);
+        // this config is too slow
+        // let clocks = rcc
+        //     .cfgr
+        //     .sysclk(2.mhz())
+        //     .pclk1(2.mhz())
+        //     .pclk2(2.mhz())
+        //     .lsi(true)
+        //     .msi(stm32l4xx_hal::rcc::MsiFreq::RANGE2M)
+        //     .freeze(&mut flash.acr);
+        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr);
 
         // initialize the logging framework
         let level = {
@@ -184,7 +193,7 @@ const APP: () = {
             device.SPI1,
             (sck, miso, mosi),
             SSD1351_SPI_MODE,
-            16.mhz(),
+            8.mhz(),
             clocks,
             &mut rcc.apb2,
         );
