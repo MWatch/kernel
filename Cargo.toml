@@ -1,6 +1,6 @@
 [package]
 name = "mwatch_kernel"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Scott Mabin <mabezdev@gmail.com>"]
 description = "A embedded 'Smart' watch"
 keywords = ["arm", "cortex-m", "smartwatch"]

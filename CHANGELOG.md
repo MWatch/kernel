@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## v0.8.1
+
+- Added an proper input manager, with multiplexing of inputs, with a API for applications
+- Added a itm tracing using `cortex-m-log`
+
 ## v0.8.0
 
 - Moved kernel objects into the kernel library crate, allowing the sdk to depend on it
