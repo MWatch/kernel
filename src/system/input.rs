@@ -9,6 +9,7 @@ pub const LEFT_MIDDLE: u8 = LEFT | MIDDLE;
 pub const RIGHT_MIDDLE: u8 = RIGHT | MIDDLE;
 pub const LEFT_RIGHT: u8 = LEFT | RIGHT;
 pub const ALL: u8 = LEFT | MIDDLE | RIGHT;
+pub const NONE: u8 = 0;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
@@ -18,7 +19,6 @@ pub enum Error {
 
 pub struct InputManager {
     raw_vector: u8,
-    last_vector: u8,
 }
 
 impl InputManager {
@@ -26,7 +26,6 @@ impl InputManager {
     pub fn new() -> Self {
         Self {
             raw_vector: 0,
-            last_vector: 0,
         }
     }
 
@@ -37,14 +36,13 @@ impl InputManager {
             RIGHT => (active as u8) << 2,
             _ => {
                 warn!("Ignoring vector input with value {:?}", input);
-                0 // do nothing
+                NONE // do nothing
             },
         };
-        // trace!("{:#b}", self.raw_vector);
     }
 
     pub fn output(&mut self) -> Result<InputEvent, Error> {
-        if self.raw_vector != self.last_vector {
+        if self.raw_vector != NONE {
             let result = match self.raw_vector {
                 ALL => Ok(InputEvent::Multi),
                 LEFT_RIGHT => Ok(InputEvent::Dual),
@@ -56,7 +54,7 @@ impl InputManager {
                 0 => Err(Error::NoInput), // no input
                 _ => Err(Error::InvalidInputVector(self.raw_vector)),
             };
-            self.last_vector = self.raw_vector;
+            self.raw_vector = 0;
             result
         } else {
             Err(Error::NoInput)
