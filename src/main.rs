@@ -17,9 +17,10 @@ extern crate log;
 
 mod application;
 mod ingress;
+mod system;
 
 
-use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351};
+use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351, InputEvent};
 use crate::hal::datetime::Date;
 use crate::hal::delay::Delay;
 use crate::hal::dma::{dma1, CircBuffer, Event};
@@ -63,10 +64,12 @@ use crate::ingress::notification::Notification;
 use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
+use crate::system::input::InputManager;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
 use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
+
 
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
 
@@ -80,6 +83,7 @@ const APP: () = {
     static mut IMNG: IngressManager = ();
     static mut NMGR: NotificationManager = ();
     static mut AMGR: ApplicationManager = ();
+    static mut INPUT_MGR: InputManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
@@ -321,6 +325,8 @@ const APP: () = {
         // rtfm::pend(stm32l4x2::Interrupt::TSC);
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
 
+        let input_mgr = InputManager::new();
+
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
@@ -340,6 +346,7 @@ const APP: () = {
         TIM6 = input;
         NMGR = nmgr;
         AMGR = amgr;
+        INPUT_MGR = input_mgr;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -365,6 +372,20 @@ const APP: () = {
         display.flush();
     }
 
+    #[task(resources = [AMGR, DISPLAY, STATE])]
+    fn HANDLE_INPUT(input: InputEvent) {
+        let mut amgr = resources.AMGR;
+        let mut display = resources.DISPLAY;
+        if amgr.status().is_running {
+            amgr.service_input(&mut display, input).unwrap();
+        } else { // WM input
+            *resources.STATE += 1;
+            if *resources.STATE > 4 {
+                *resources.STATE = 0;
+            }
+        }
+    }
+
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
     #[interrupt(resources = [CB, IMNG], priority = 2)]
@@ -378,22 +399,36 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, STATE], priority = 2)]
+    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
+        let input_mgr = resources.INPUT_MGR;
         *resources.INPUT_IT_COUNT += 1;
         let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
         let threshold = *resources.TOUCH_THRESHOLD;
         let current_touched = reading < threshold;
 
+        // TODO make this genric accross all pins
         if current_touched != *resources.WAS_TOUCHED {
             *resources.WAS_TOUCHED = current_touched;
             if current_touched == true {
-                *resources.STATE += 1;
-                if *resources.STATE > 4 {
-                    *resources.STATE = 0;
+                input_mgr.update_input(system::input::MIDDLE, true);
+            } else {
+                input_mgr.update_input(system::input::MIDDLE, false);
+            }
+        }
+
+
+        match input_mgr.output() {
+            Ok(input) => {
+                spawn.HANDLE_INPUT(input).unwrap();
+            },
+            Err(e) => {
+                if e != system::input::Error::NoInput {
+                    error!("Input Error, {:?}", e);
                 }
             }
         }
+
         resources.TOUCH.clear(TscEvent::EndOfAcquisition);
     }
 

@@ -53,17 +53,25 @@ pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
 
 pub type SetupFn = extern "C" fn() -> i32;
 pub type ServiceFn = extern "C" fn(*mut Context) -> i32;
+pub type InputFn = extern "C" fn(*mut Context, InputEvent) -> i32;
 
-pub enum InputType {
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub enum InputEvent {
     Left,
     Middle,
     Right,
+    Dual,
+    Multi,
+    LeftMiddle,
+    RightMiddle,
 }
 
 pub static mut CONTEXT_POINTER: Option<&'static mut Context> = None;
 
 pub struct Context<'a> {
     pub display: &'a mut Ssd1351,
+    pub log: extern "C" fn(&str) -> i32,
 }
 
 // is this safe?
@@ -74,13 +82,13 @@ unsafe impl<'a> Send for Context<'a> {}
 pub struct Table {
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: extern "C" fn(*mut Context, u8, u8, u16) -> i32,
-    /// Register an input event handler for an input
-    pub register_input: extern "C" fn(*mut Context, InputType, InputHandlerFn) -> i32,
+    /// Draw a colour on the display - x, y, colour
+    pub print: extern "C" fn(*mut Context, &str) -> i32,
 }
 
 pub static CALLBACK_TABLE: Table = Table {
     draw_pixel: draw_pixel,
-    register_input: register_input
+    print: print
 };
 
 impl<'a> Context<'a> {
@@ -103,6 +111,8 @@ pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -
     0
 }
 
-pub extern "C" fn register_input(_context: *mut Context, _input_type: InputType, _cb: InputHandlerFn) -> i32 {
-    unimplemented!()
+pub extern "C" fn print(context: *mut Context, string: &str) -> i32 {
+    let ctx = unsafe { &mut *context };
+    (ctx.log)(string);
+    0
 }
