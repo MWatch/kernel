@@ -27,12 +27,12 @@ const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
     buffer: Buffer,
-    rb: &'static mut Queue<u8, U256>,
+    rb: &'static mut Queue<u8, U512>,
     state: State,
 }
 
 impl IngressManager {
-    pub fn new(ring: &'static mut Queue<u8, U256>) -> Self {
+    pub fn new(ring: &'static mut Queue<u8, U512>) -> Self {
         IngressManager {
             buffer: Buffer::default(),
             rb: ring,
@@ -84,7 +84,10 @@ impl IngressManager {
                                         //TODO move execution to user initiated input
                                         amng.execute().unwrap();
                                     }
-                                    Err(e) => panic!("{:?} || AMNG: {:?}", e, amng.status()),
+                                    Err(e) => {
+                                        // error!("{:?}", amng.ram());
+                                        panic!("{:?} || AMNG: {:?} || {:?}", e, amng.status(), amng.ram())
+                                    }
                                 }
                             }
                             Type::Notification => {

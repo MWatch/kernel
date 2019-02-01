@@ -4,16 +4,19 @@
 #[macro_use]
 extern crate cortex_m;
 extern crate rtfm;
-// extern crate panic_itm;
 extern crate cortex_m_rt as rt;
 extern crate embedded_graphics;
 extern crate heapless;
 extern crate hm11;
 extern crate max17048;
-extern crate panic_semihosting;
 extern crate ssd1351;
 #[macro_use]
 extern crate log;
+
+#[cfg(feature = "itm")]
+extern crate panic_itm;
+#[cfg(not(feature = "itm"))]
+extern crate panic_semihosting;
 
 mod application;
 mod ingress;
@@ -86,7 +89,7 @@ const APP: () = {
     static mut INPUT_MGR: InputManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
-    static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
+    static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
@@ -136,7 +139,7 @@ const APP: () = {
         let level = {
             #[cfg(feature = "itm")]
             {
-                log::LevelFilter::Trace
+                log::LevelFilter::Info
             }
             #[cfg(not(feature = "itm"))]
             {
@@ -291,7 +294,7 @@ const APP: () = {
 
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
-        let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
+        let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
         let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
         // Give the RB to the ingress manager

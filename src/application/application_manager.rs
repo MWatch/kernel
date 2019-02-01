@@ -9,6 +9,7 @@
 
 use crc::crc32::checksum_ieee;
 use mwatch_kernel_api::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputEvent};
+use simple_hex::half_byte_to_hex;
 
 pub struct ApplicationManager {
     ram: Ram,
@@ -165,10 +166,9 @@ impl ApplicationManager {
         addr as *const ()
     }
 
-    //TODO Expose an interface like below to allow the kernel to set input events
-    // pub fn update_input(someEnum: InputVariant)
-
-    //TODO call the relevant input handlers when the kernel notifies us of a change
+    pub fn ram(&self) -> &Ram {
+        &self.ram
+    }
 }
 
 /// A structure for manipulating application memory
@@ -205,6 +205,19 @@ impl Ram {
 
     pub fn as_ref(&self) -> &[u8] {
         &self.ram
+    }
+}
+
+impl core::fmt::Debug for Ram {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Ram[{}]:[", self.ram_idx)?;
+        for idx in 0..self.ram_idx {
+            write!(f, "{}", half_byte_to_hex(self.ram[idx] & 0xF) as char)?;
+            write!(f, "{}", half_byte_to_hex((self.ram[idx] >> 4) & 0xF) as char)?;
+        }
+        write!(f, "]")?;
+        Ok(())
     }
 }
 
