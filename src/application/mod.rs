@@ -1,2 +1,2 @@
-pub mod application_manager;
-pub mod wm;
+pub(crate) mod application_manager;
+pub(crate) mod wm;

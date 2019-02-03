@@ -31,7 +31,7 @@ use crate::hal::serial::{Event as SerialEvent, Serial};
 use crate::hal::spi::Spi;
 use crate::hal::timer::{Event as TimerEvent, Timer};
 use crate::hal::tsc::{
-    ClockPrescaler as TscClockPrescaler, Config as TscConfig, Event as TscEvent, Tsc,
+    ClockPrescaler as TscClockPrescaler, Config as TscConfig, Tsc,
 };
 use crate::rt::exception;
 use crate::rt::ExceptionFrame;
@@ -72,10 +72,16 @@ use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 
 
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 32_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
+
+#[cfg(feature = "itm")]
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
+#[cfg(not(feature = "itm"))]
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
 #[app(device = crate::hal::stm32)]
 const APP: () = {
@@ -90,17 +96,11 @@ const APP: () = {
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
-    static mut TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>> = ();
-    static mut RIGHT_BUTTON: RightButton = ();
-    static mut MIDDLE_BUTTON: MiddleButton = ();
-    static mut LEFT_BUTTON: LeftButton = ();
     static mut CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>> = ();
     static mut STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>> = ();
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut BMS: BatteryManagementIC = ();
-    static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
-    static mut WAS_TOUCHED: bool = false;
     static mut STATE: u8 = 0;
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
@@ -129,24 +129,15 @@ const APP: () = {
             .sysclk(SYS_CLK.hz())
             .pclk1(32.mhz())
             .pclk2(32.mhz())
+            .lsi(true)
             .freeze(&mut flash.acr);
         // let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
         // initialize the logging framework
-        let level = {
-            #[cfg(feature = "itm")]
-            {
-                log::LevelFilter::Trace
-            }
-            #[cfg(not(feature = "itm"))]
-            {
-                log::LevelFilter::Off
-            }
-        };
         let itm = core.ITM;
         let logger = Logger {
             inner: InterruptSyncItm::new(ItmDestination::new(itm)),
-            level: level,
+            level: LOG_LEVEL,
         };
 
         *resources.LOGGER = Some(logger);
@@ -161,7 +152,7 @@ const APP: () = {
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
 
         let mut pwr = device.PWR.constrain(&mut rcc.apb1r1);
-        let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
+        let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1, clocks);
 
         let date = Date::new(1.day(), 07.date(), 10.month(), 2018.year());
         rtc.set_date(&date);
@@ -239,7 +230,7 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut middle_button =
+        let middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -251,15 +242,7 @@ const APP: () = {
             clock_prescale: Some(TscClockPrescaler::HclkDiv32),
             max_count_error: None,
         };
-        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
-
-        // Acquire for rough estimate of capacitance
-        const NUM_SAMPLES: u16 = 25;
-        let mut baseline = 0;
-        for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut middle_button).unwrap();
-        }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
+        let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -319,24 +302,15 @@ const APP: () = {
         let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
-        tsc.listen(TscEvent::EndOfAcquisition);
-        // tsc.listen(TscEvent::MaxCountError); // TODO
-        // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
-        // rtfm::pend(stm32l4x2::Interrupt::TSC);
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
 
-        let input_mgr = InputManager::new();
+        let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
         DISPLAY = display;
         RTC = rtc;
-        TOUCH = tsc;
-        RIGHT_BUTTON = right_button;
-        MIDDLE_BUTTON = middle_button;
-        LEFT_BUTTON = left_button;
-        TOUCH_THRESHOLD = threshold;
         BMS = max17048;
         STDBY = stdby;
         CHRG = chrg;
@@ -399,37 +373,24 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
+    #[interrupt(resources = [INPUT_IT_COUNT, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
-        let input_mgr = resources.INPUT_MGR;
+        let mut input_mgr = resources.INPUT_MGR;
+        input_mgr.process_result();
         *resources.INPUT_IT_COUNT += 1;
-        let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
-        let threshold = *resources.TOUCH_THRESHOLD;
-        let current_touched = reading < threshold;
 
-        // TODO make this genric accross all pins
-        if current_touched != *resources.WAS_TOUCHED {
-            *resources.WAS_TOUCHED = current_touched;
-            if current_touched == true {
-                input_mgr.update_input(system::input::MIDDLE, true);
-            } else {
-                input_mgr.update_input(system::input::MIDDLE, false);
-            }
-        }
+        // match input_mgr.output() {
+        //     Ok(input) => {
+        //         spawn.HANDLE_INPUT(input).unwrap();
+        //     },
+        //     Err(e) => {
+        //         if e != system::input::Error::NoInput {
+        //             error!("Input Error, {:?}", e);
+        //         }
+        //     }
+        // }
 
-
-        match input_mgr.output() {
-            Ok(input) => {
-                spawn.HANDLE_INPUT(input).unwrap();
-            },
-            Err(e) => {
-                if e != system::input::Error::NoInput {
-                    error!("Input Error, {:?}", e);
-                }
-            }
-        }
-
-        resources.TOUCH.clear(TscEvent::EndOfAcquisition);
+        // resources.TOUCH.clear(TscEvent::EndOfAcquisition); //TODO
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -451,9 +412,16 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH], priority = 2)]
+    #[interrupt(resources = [TIM6, INPUT_MGR], priority = 2)]
     fn TIM6_DACUNDER() {
-        resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
+        match resources.INPUT_MGR.start_new() {
+            Ok(_) => {},
+            Err(e) => {
+                if e != system::input::Error::AcquisitionInProgress {
+                    panic!("{:?}", e);
+                }
+            }
+        }
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
