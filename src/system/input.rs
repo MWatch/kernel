@@ -38,14 +38,14 @@ impl InputManager {
 
     pub fn new(tsc: TouchSenseController, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
         // Acquire for rough estimate of capacitance
-        let mut middle = middle;
+        let mut left = left;
         let mut tsc = tsc;
 
         let mut baseline = 0;
         for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut middle).unwrap();
+            baseline += tsc.acquire(&mut left).unwrap();
         }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
+        let threshold = ((baseline / NUM_SAMPLES) / 100) * 40;
 
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
@@ -116,6 +116,9 @@ impl InputManager {
             2 => self.tsc.read(&mut self.right).unwrap(),
             _ => panic!("Invalid pin index")
         };
-        self.update_input(value < self.tsc_threshold);
+        trace!("tsc {} < {}?", value, self.tsc_threshold);
+        // self.update_input(value < self.tsc_threshold); //TODO put back
+        self.update_input(true);
+        self.tsc.clear(TscEvent::EndOfAcquisition);
     }
 }

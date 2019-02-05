@@ -146,7 +146,7 @@ const APP: () = {
 
         info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
         info!("Copyright Scott Mabin 2019");
-        info!("Clocks: {:?}", clocks);
+        info!("Clocks: {:#?}", clocks);
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
@@ -299,7 +299,7 @@ const APP: () = {
         cpu.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        let mut input = Timer::tim6(device.TIM6, 1.hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
@@ -379,18 +379,16 @@ const APP: () = {
         input_mgr.process_result();
         *resources.INPUT_IT_COUNT += 1;
 
-        // match input_mgr.output() {
-        //     Ok(input) => {
-        //         spawn.HANDLE_INPUT(input).unwrap();
-        //     },
-        //     Err(e) => {
-        //         if e != system::input::Error::NoInput {
-        //             error!("Input Error, {:?}", e);
-        //         }
-        //     }
-        // }
-
-        // resources.TOUCH.clear(TscEvent::EndOfAcquisition); //TODO
+        match input_mgr.output() {
+            Ok(input) => {
+                spawn.HANDLE_INPUT(input).unwrap();
+            },
+            Err(e) => {
+                if e != system::input::Error::NoInput {
+                    error!("Input Error, {:?}", e);
+                }
+            }
+        }
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -412,7 +410,7 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [TIM6, INPUT_MGR], priority = 2)]
+    #[interrupt(resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
     fn TIM6_DACUNDER() {
         match resources.INPUT_MGR.start_new() {
             Ok(_) => {},
