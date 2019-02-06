@@ -1,0 +1,12 @@
+/// somehow an etx byte is being written into ram??
+
+
+diff --git a/hello.app.cs.eachline.txt b/failed.cs.eachline.txt
+index c9f6163..bdcc00d 100644
+--- a/hello.app.cs.eachline.txt
++++ b/failed.cs.eachline.txt
+@@ -18654,3 +18654,4 @@
+ 5
+ 5
+ 1
++3
