@@ -31,10 +31,10 @@ cortex-m-log = {  git = "https://github.com/DoumanAsh/cortex-m-log", version = "
 log = "0.4.6"
 
 [dependencies.ssd1351]
-version = "0.2.0"
+# version = "0.2.0"
 # git = "https://github.com/mabezdev/ssd1351"
 # rev = "716af2c8de8b24c22d489df7a10ecbd62349fee5"
-# path = "../../drivers/ssd1351"
+path = "../../drivers/ssd1351"
 features = ["embedded-graphics", "buffered"]
 
 [dependencies.heapless]

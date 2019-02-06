@@ -314,7 +314,7 @@ const APP: () = {
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
         let amgr = ApplicationManager::new(ram);
 
-        let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
+        let mut systick = Timer::tim2(device.TIM2, 2.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
 
         let mut cpu = Timer::tim7(
@@ -510,6 +510,8 @@ const APP: () = {
         let time = resources.RTC.get_time();
         let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
+        let cs = crc::crc16::checksum_x25(display.fb());
+        trace!("WM - CS before: {}", cs);
         display.clear(false);
         match state {
             // HOME PAGE
@@ -675,7 +677,11 @@ const APP: () = {
             }
             _ => panic!("Unknown state"),
         }
-        display.flush();
+        let cs_after = crc::crc16::checksum_x25(display.fb());
+        trace!("WM - CS after: {}", cs_after);
+        if cs != cs_after {
+            display.flush();
+        }
     }
 
     // Interrupt handlers used to dispatch software tasks
