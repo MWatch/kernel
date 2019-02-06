@@ -60,7 +60,8 @@ impl IngressManager {
     ) {
         let mut hex_chars = [0u8; 2];
         let mut hex_idx = 0;
-        if !self.rb.is_empty() && self.rb.len() > 2 {
+        if !self.rb.is_empty() {
+            info!("{:?}", self.rb);
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => {

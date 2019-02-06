@@ -38,7 +38,8 @@ version = "0.2.0"
 features = ["embedded-graphics", "buffered"]
 
 [dependencies.heapless]
-version = "0.4.1"
+# version = "0.4.1"
+git = "https://github.com/japaric/heapless"
 # features = ["const-fn"]
 
 [dependencies.stm32l4xx-hal]
