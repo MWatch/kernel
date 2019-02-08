@@ -65,6 +65,8 @@ use crate::ingress::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 use crate::system::input::InputManager;
+use crate::system::bms::BatteryManagement;
+use crate::system::bms::State as BmsState;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -72,10 +74,17 @@ use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 
 
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
+type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 16_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
+
+#[cfg(feature = "itm")]
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
+#[cfg(not(feature = "itm"))]
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
 
 #[app(device = crate::hal::stm32)]
 const APP: () = {
@@ -94,10 +103,8 @@ const APP: () = {
     static mut RIGHT_BUTTON: RightButton = ();
     static mut MIDDLE_BUTTON: MiddleButton = ();
     static mut LEFT_BUTTON: LeftButton = ();
-    static mut CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>> = ();
-    static mut STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>> = ();
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
-    static mut BMS: BatteryManagementIC = ();
+    static mut BMS: BatteryManagement = ();
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
@@ -143,20 +150,10 @@ const APP: () = {
         let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
         // initialize the logging framework
-        let level = {
-            #[cfg(feature = "itm")]
-            {
-                log::LevelFilter::Trace
-            }
-            #[cfg(not(feature = "itm"))]
-            {
-                log::LevelFilter::Off
-            }
-        };
         let itm = core.ITM;
         let logger = Logger {
             inner: InterruptSyncItm::new(ItmDestination::new(itm)),
-            level: level,
+            level: LOG_LEVEL,
         };
 
         *resources.LOGGER = Some(logger);
@@ -204,12 +201,6 @@ const APP: () = {
         display.init().unwrap();
         display.set_rotation(DisplayRotation::Rotate0).unwrap();
         display.clear(true);
-
-        /* Serial with DMA */
-        // usart 1
-        // let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-        // let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-        // let mut serial = Serial::usart1(device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
         let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -299,6 +290,8 @@ const APP: () = {
 
         let max17048 = Max17048::new(i2c);
 
+        let bms = BatteryManagement::new(max17048, chrg, stdby);
+
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
@@ -347,9 +340,7 @@ const APP: () = {
         MIDDLE_BUTTON = middle_button;
         LEFT_BUTTON = left_button;
         TOUCH_THRESHOLD = threshold;
-        BMS = max17048;
-        STDBY = stdby;
-        CHRG = chrg;
+        BMS = bms;
         BT_CONN = bt_conn;
         SYS_TICK = systick;
         TIM7 = cpu;
@@ -502,7 +493,7 @@ const APP: () = {
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[task(resources = [NMGR, DISPLAY, RTC, STATE, BMS, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
@@ -544,7 +535,7 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                let soc = bodged_soc(resources.BMS.soc().unwrap());
+                let soc = resources.BMS.soc();
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
@@ -553,54 +544,37 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                write!(buffer, "{:03.03}v", resources.BMS.vcell().unwrap()).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 12))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                if resources.CHRG.is_low() {
-                    write!(buffer, "CHRG").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    if let Some(soc_per_hr) = resources.BMS.charge_rate().ok() {
-                        if soc_per_hr < 200.0 {
-                            write!(buffer, "{:03.1}%/hr", soc_per_hr).unwrap();
-                            display.draw(
-                                Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(32, 116))
-                                    .with_stroke(Some(0x2679_u16.into()))
-                                    .into_iter(),
-                            );
-                            buffer.clear(); // reset the buffer
-                        }
-                    }
-                } else if resources.STDBY.is_high() {
-                    write!(buffer, "STDBY").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                } else {
-                    write!(buffer, "DONE").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
+                match resources.BMS.state() {
+                    BmsState::Charging => {
+                        write!(buffer, "CHARGING").unwrap();
+                        display.draw(
+                            Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(48, 12))
+                                .with_stroke(Some(0x2679_u16.into()))
+                                .into_iter(),
+                        );
+                        
+                    },
+                    BmsState::Draining => {
+                        write!(buffer, "DRAINING").unwrap();
+                        display.draw(
+                            Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(48, 12))
+                                .with_stroke(Some(0x2679_u16.into()))
+                                .into_iter(),
+                        );
+                    },
+                    BmsState::Charged => {
+                        write!(buffer, "DONE").unwrap();
+                        display.draw(
+                            Font6x12::render_str(buffer.as_str())
+                                .translate(Coord::new(48, 12))
+                                .with_stroke(Some(0x2679_u16.into()))
+                                .into_iter(),
+                        );
+                    },
                 }
+                buffer.clear(); // reset the buffer
             }
             // MESSAGE LIST
             1 => {
@@ -655,15 +629,15 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear();
-                let stack_space = get_free_stack();
-                write!(buffer, "RAM: {} bytes", stack_space).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 24))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
+                // let stack_space = get_free_stack();
+                // write!(buffer, "RAM: {} bytes", stack_space).unwrap();
+                // display.draw(
+                //     Font6x12::render_str(buffer.as_str())
+                //         .translate(Coord::new(0, 24))
+                //         .with_stroke(Some(0xF818_u16.into()))
+                //         .into_iter(),
+                // );
+                // buffer.clear();
                 write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
@@ -688,27 +662,4 @@ const APP: () = {
 #[exception]
 fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
-}
-
-fn bodged_soc(raw: u16) -> u16 {
-    let rawf = raw as f32;
-    let max = 94.0; // based on current battery
-    let mut soc = ((rawf / max) * 100.0) as u16;
-    if soc > 100 {
-        soc = 100; // cap at 100
-    }
-    soc
-}
-
-fn get_free_stack() -> usize {
-    unsafe {
-        extern "C" {
-            static __ebss: u32;
-            static __sdata: u32;
-        }
-        let ebss = &__ebss as *const u32 as usize;
-        let start = &__sdata as *const u32 as usize;
-        let total = ebss - start;
-        (16 * 1024) - total // ram for stack in linker script
-    }
 }
