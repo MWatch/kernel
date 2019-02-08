@@ -86,7 +86,7 @@ const APP: () = {
     static mut INPUT_MGR: InputManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
-    static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
+    static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
@@ -301,7 +301,7 @@ const APP: () = {
 
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
-        let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
+        let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
         let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
         // Give the RB to the ingress manager
@@ -544,7 +544,7 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
+                let soc = bodged_soc(resources.BMS.soc().unwrap());
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
@@ -690,10 +690,9 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-fn _bodged_soc(raw: u16) -> u16 {
+fn bodged_soc(raw: u16) -> u16 {
     let rawf = raw as f32;
-    // let min = 0.0;
-    let max = 80.0;
+    let max = 94.0; // based on current battery
     let mut soc = ((rawf / max) * 100.0) as u16;
     if soc > 100 {
         soc = 100; // cap at 100

@@ -27,14 +27,14 @@ const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
     buffer: Buffer,
-    rb: &'static mut Queue<u8, U256>,
+    rb: &'static mut Queue<u8, U512>,
     state: State,
     hex_chars: [u8; 2],
     hex_idx: usize,
 }
 
 impl IngressManager {
-    pub fn new(ring: &'static mut Queue<u8, U256>) -> Self {
+    pub fn new(ring: &'static mut Queue<u8, U512>) -> Self {
         IngressManager {
             buffer: Buffer::default(),
             rb: ring,
