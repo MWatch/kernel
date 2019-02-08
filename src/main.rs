@@ -67,6 +67,7 @@ use crate::application::application_manager::ApplicationManager;
 use crate::system::input::InputManager;
 use crate::system::bms::BatteryManagement;
 use crate::system::bms::State as BmsState;
+use crate::system::system::System;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -98,13 +99,12 @@ const APP: () = {
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
-    static mut RTC: hal::rtc::Rtc = ();
     static mut TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>> = ();
     static mut RIGHT_BUTTON: RightButton = ();
     static mut MIDDLE_BUTTON: MiddleButton = ();
     static mut LEFT_BUTTON: LeftButton = ();
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
-    static mut BMS: BatteryManagement = ();
+    static mut SYSTEM: System = ();
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
@@ -292,6 +292,8 @@ const APP: () = {
 
         let bms = BatteryManagement::new(max17048, chrg, stdby);
 
+        let system = System::new(rtc, bms);
+
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
@@ -334,13 +336,12 @@ const APP: () = {
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
         DISPLAY = display;
-        RTC = rtc;
         TOUCH = tsc;
         RIGHT_BUTTON = right_button;
         MIDDLE_BUTTON = middle_button;
         LEFT_BUTTON = left_button;
         TOUCH_THRESHOLD = threshold;
-        BMS = bms;
+        SYSTEM = system;
         BT_CONN = bt_conn;
         SYS_TICK = systick;
         TIM7 = cpu;
@@ -475,31 +476,32 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, SYS_TICK], spawn = [APP, WM])]
+    #[interrupt(resources = [IMNG, NMGR, AMGR, SYSTEM, SYS_TICK], spawn = [APP, WM])]
     fn TIM2() {
         let mut mgr = resources.IMNG;
         let mut n_mgr = resources.NMGR;
         let mut a_mgr = resources.AMGR;
+        let mut system = resources.SYSTEM;
+        system.process();
         mgr.lock(|m| {
             m.process(&mut n_mgr, &mut a_mgr);
         });
         let status = a_mgr.status();
         if status.is_running {
             spawn.APP().unwrap();
-            // a_mgr.service(&mut display).unwrap();
         } else { // else run the WM
             spawn.WM().unwrap();
         }
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [NMGR, DISPLAY, RTC, STATE, BMS, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[task(resources = [NMGR, DISPLAY, STATE, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut buffer: String<U256> = String::new();
         let state = resources.STATE.lock(|val| *val);
-        let time = resources.RTC.get_time();
-        let _date = resources.RTC.get_date();
+        let time = resources.SYSTEM.rtc().get_time();
+        // let _date = resources.RTC.get_date();
         let mut n_mgr = resources.NMGR;
         display.clear(false);
         match state {
@@ -535,7 +537,7 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                let soc = resources.BMS.soc();
+                let soc = resources.SYSTEM.bms().soc();
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
@@ -544,7 +546,7 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                match resources.BMS.state() {
+                match resources.SYSTEM.bms().state() {
                     BmsState::Charging => {
                         write!(buffer, "CHARGING").unwrap();
                         display.draw(
@@ -629,15 +631,15 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear();
-                // let stack_space = get_free_stack();
-                // write!(buffer, "RAM: {} bytes", stack_space).unwrap();
-                // display.draw(
-                //     Font6x12::render_str(buffer.as_str())
-                //         .translate(Coord::new(0, 24))
-                //         .with_stroke(Some(0xF818_u16.into()))
-                //         .into_iter(),
-                // );
-                // buffer.clear();
+                let stack_space = resources.SYSTEM.get_free_stack();
+                write!(buffer, "RAM: {} bytes", stack_space).unwrap();
+                display.draw(
+                    Font6x12::render_str(buffer.as_str())
+                        .translate(Coord::new(0, 24))
+                        .with_stroke(Some(0xF818_u16.into()))
+                        .into_iter(),
+                );
+                buffer.clear();
                 write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
