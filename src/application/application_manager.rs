@@ -213,6 +213,19 @@ impl core::fmt::Debug for Ram {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "Ram[{}]:[", self.ram_idx)?;
         for idx in 0..self.ram_idx {
+            write!(f, "{}", half_byte_to_hex(self.ram[idx] & 0xF))?;
+            write!(f, "{}", half_byte_to_hex((self.ram[idx] >> 4) & 0xF))?;
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
+
+impl core::fmt::Display for Ram {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Ram[{}]:[", self.ram_idx)?;
+        for idx in 0..self.ram_idx {
             write!(f, "{}", half_byte_to_hex(self.ram[idx] & 0xF) as char)?;
             write!(f, "{}", half_byte_to_hex((self.ram[idx] >> 4) & 0xF) as char)?;
         }
@@ -220,6 +233,7 @@ impl core::fmt::Debug for Ram {
         Ok(())
     }
 }
+
 
 extern "C" fn application_logger(string: &str) -> i32 {
     trace!("{}", string);
