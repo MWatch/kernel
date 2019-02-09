@@ -35,22 +35,14 @@ use crate::hal::tsc::{
 };
 use crate::rt::exception;
 use crate::rt::ExceptionFrame;
-use core::fmt::Write;
-use embedded_graphics::Drawing;
 use heapless::consts::*;
 use heapless::spsc::Queue;
-use heapless::String;
 use rtfm::app;
 
 use ssd1351::builder::Builder;
 use ssd1351::mode::GraphicsMode;
 use ssd1351::prelude::*;
 use ssd1351::properties::DisplayRotation;
-
-use embedded_graphics::fonts::Font12x16;
-use embedded_graphics::fonts::Font6x12;
-use embedded_graphics::image::Image16BPP;
-use embedded_graphics::prelude::*;
 
 use cortex_m::asm;
 use cortex_m::peripheral::DWT;
@@ -66,8 +58,9 @@ use crate::ingress::notification::NotificationManager;
 use crate::application::application_manager::ApplicationManager;
 use crate::system::input::InputManager;
 use crate::system::bms::BatteryManagement;
-use crate::system::bms::State as BmsState;
 use crate::system::system::System;
+
+use crate::application::wm::WindowManager;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -94,6 +87,7 @@ const APP: () = {
     static mut NMGR: NotificationManager = ();
     static mut AMGR: ApplicationManager = ();
     static mut INPUT_MGR: InputManager = ();
+    static mut WMNG: WindowManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
@@ -332,6 +326,8 @@ const APP: () = {
 
         let input_mgr = InputManager::new();
 
+        let wmng = WindowManager::new();
+
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
@@ -349,6 +345,7 @@ const APP: () = {
         NMGR = nmgr;
         AMGR = amgr;
         INPUT_MGR = input_mgr;
+        WMNG = wmng;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -374,17 +371,18 @@ const APP: () = {
         display.flush();
     }
 
-    #[task(resources = [AMGR, DISPLAY, STATE])]
+    #[task(resources = [AMGR, DISPLAY, STATE, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
         let mut amgr = resources.AMGR;
         let mut display = resources.DISPLAY;
         if amgr.status().is_running {
             amgr.service_input(&mut display, input).unwrap();
         } else { // WM input
-            *resources.STATE += 1;
+            *resources.STATE += 1;//TODO REMOVE
             if *resources.STATE > 4 {
                 *resources.STATE = 0;
             }
+            resources.WMNG.next();//TODO handle input
         }
     }
 
@@ -495,162 +493,90 @@ const APP: () = {
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [NMGR, DISPLAY, STATE, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[task(resources = [NMGR, DISPLAY, STATE, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, WMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
-        let mut buffer: String<U256> = String::new();
-        let state = resources.STATE.lock(|val| *val);
-        let time = resources.SYSTEM.rtc().get_time();
-        // let _date = resources.RTC.get_date();
-        let mut n_mgr = resources.NMGR;
+        let mut wmng = resources.WMNG;
         display.clear(false);
-        match state {
-            // HOME PAGE
-            0 => {
-                write!(
-                    buffer,
-                    "{:02}:{:02}:{:02}",
-                    time.hours, time.minutes, time.seconds
-                )
-                .unwrap();
-                display.draw(
-                    Font12x16::render_str(buffer.as_str())
-                        .translate(Coord::new(10, 40))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                                // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-                write!(buffer, "BT={}", resources.BT_CONN.is_high()).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(24, 60))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                write!(buffer, "{:02}", n_mgr.idx()).unwrap();
-                display.draw(
-                    Font12x16::render_str(buffer.as_str())
-                        .translate(Coord::new(46, 96))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                let soc = resources.SYSTEM.bms().soc();
-                write!(buffer, "{:02}%", soc).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(110, 12))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                match resources.SYSTEM.bms().state() {
-                    BmsState::Charging => {
-                        write!(buffer, "CHARGING").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                        
-                    },
-                    BmsState::Draining => {
-                        write!(buffer, "DRAINING").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                    },
-                    BmsState::Charged => {
-                        write!(buffer, "DONE").unwrap();
-                        display.draw(
-                            Font6x12::render_str(buffer.as_str())
-                                .translate(Coord::new(48, 12))
-                                .with_stroke(Some(0x2679_u16.into()))
-                                .into_iter(),
-                        );
-                    },
-                }
-                buffer.clear(); // reset the buffer
-            }
-            // MESSAGE LIST
-            1 => {
-                if n_mgr.idx() > 0 {
-                    for i in 0..n_mgr.idx() {
-                        n_mgr.peek_notification(i, |msg| {
-                            write!(buffer, "[{}]: ", i + 1).unwrap();
-                            for byte in msg.buffer() {
-                                buffer.push(*byte as char).unwrap();
-                            }
-                            display.draw(
-                                Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(0, (i * 12) as i32 + 2))
-                                    .with_stroke(Some(0xF818_u16.into()))
-                                    .into_iter(),
-                            );
-                            buffer.clear();
-                        });
-                    }
-                } else {
-                    display.draw(
-                        Font6x12::render_str("No messages.")
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter(),
-                    );
-                }
-            }
-            // MWATCH LOGO
-            2 => {
-                display.draw(
-                    Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
-                        .translate(Coord::new(32, 32))
-                        .into_iter(),
-                );
-            }
-            // UOP LOGO
-            3 => {
-                display.draw(
-                    Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
-                        .translate(Coord::new(32, 32))
-                        .into_iter(),
-                );
-            }
-            //  Sys info
-            4 => {
-                write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 12))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-                let stack_space = resources.SYSTEM.get_free_stack();
-                write!(buffer, "RAM: {} bytes", stack_space).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 24))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-                write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 36))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-            }
-            _ => panic!("Unknown state"),
-        }
+        wmng.process(&mut display, &mut resources.SYSTEM);
+        // match state {
+        //     // HOME PAGE
+        //     0 => {
+        //         //
+        //     }
+        //     // MESSAGE LIST
+        //     1 => {
+        //         if n_mgr.idx() > 0 {
+        //             for i in 0..n_mgr.idx() {
+        //                 n_mgr.peek_notification(i, |msg| {
+        //                     write!(buffer, "[{}]: ", i + 1).unwrap();
+        //                     for byte in msg.buffer() {
+        //                         buffer.push(*byte as char).unwrap();
+        //                     }
+        //                     display.draw(
+        //                         Font6x12::render_str(buffer.as_str())
+        //                             .translate(Coord::new(0, (i * 12) as i32 + 2))
+        //                             .with_stroke(Some(0xF818_u16.into()))
+        //                             .into_iter(),
+        //                     );
+        //                     buffer.clear();
+        //                 });
+        //             }
+        //         } else {
+        //             display.draw(
+        //                 Font6x12::render_str("No messages.")
+        //                     .translate(Coord::new(0, 12))
+        //                     .with_stroke(Some(0xF818_u16.into()))
+        //                     .into_iter(),
+        //             );
+        //         }
+        //     }
+        //     // MWATCH LOGO
+        //     2 => {
+        //         display.draw(
+        //             Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
+        //                 .translate(Coord::new(32, 32))
+        //                 .into_iter(),
+        //         );
+        //     }
+        //     // UOP LOGO
+        //     3 => {
+        //         display.draw(
+        //             Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
+        //                 .translate(Coord::new(32, 32))
+        //                 .into_iter(),
+        //         );
+        //     }
+        //     //  Sys info
+        //     4 => {
+        //         write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
+        //         display.draw(
+        //             Font6x12::render_str(buffer.as_str())
+        //                 .translate(Coord::new(0, 12))
+        //                 .with_stroke(Some(0xF818_u16.into()))
+        //                 .into_iter(),
+        //         );
+        //         buffer.clear();
+        //         let stack_space = resources.SYSTEM.get_free_stack();
+        //         write!(buffer, "RAM: {} bytes", stack_space).unwrap();
+        //         display.draw(
+        //             Font6x12::render_str(buffer.as_str())
+        //                 .translate(Coord::new(0, 24))
+        //                 .with_stroke(Some(0xF818_u16.into()))
+        //                 .into_iter(),
+        //         );
+        //         buffer.clear();
+        //         write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
+        //         display.draw(
+        //             Font6x12::render_str(buffer.as_str())
+        //                 .translate(Coord::new(0, 36))
+        //                 .with_stroke(Some(0xF818_u16.into()))
+        //                 .into_iter(),
+        //         );
+        //         buffer.clear();
+        //     }
+        //     _ => panic!("Unknown state"),
+        // }
         display.flush();
     }
 
