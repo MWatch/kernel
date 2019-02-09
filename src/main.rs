@@ -359,13 +359,8 @@ const APP: () = {
 
     #[task(resources = [SYSTEM, DISPLAY, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
-        let amgr = resources.SYSTEM.am();
         let mut display = resources.DISPLAY;
-        if amgr.status().is_running { //TODO REMOVE THIS wm should distrubute inputs
-            amgr.service_input(&mut display, input).unwrap();
-        } else { // WM input
-            resources.WMNG.service_input(input);
-        }
+        resources.WMNG.service_input(&mut display, &mut resources.SYSTEM, input);
     }
 
     /// Handles a full or hal full dma buffer of serial data,

@@ -30,6 +30,7 @@ const MAX_STATES: i8 = 3;
 pub struct WindowManager 
 {
     state_idx: i8,
+    input_control: bool,
     clock_state: ClockState,
     info_state: InfoState,
     app_state: AppState,
@@ -40,34 +41,44 @@ impl WindowManager
     pub fn new() -> Self {
         Self {
             state_idx: 0,
+            input_control: false,
             clock_state: ClockState::default(),
             info_state: InfoState::default(),
             app_state: AppState::default(),
         }
     }
 
-    pub fn service_input(&mut self, input: InputEvent) {
-        match input {
-            InputEvent::Left => {
-                self.state_idx -= 1;
-                if self.state_idx < 0 {
-                    self.state_idx = MAX_STATES - 1;
+    pub fn service_input(&mut self, display: &mut Ssd1351, system: &mut System, input: InputEvent) {
+        if !self.input_control { // Not in a state, just traversing through states
+            match input {
+                InputEvent::Left => {
+                    self.state_idx -= 1;
+                    if self.state_idx < 0 {
+                        self.state_idx = MAX_STATES - 1;
+                    }
                 }
-            }
-            InputEvent::Middle => {
-
-            }
-            InputEvent::Right => {
-                self.state_idx += 1;
-                if self.state_idx > MAX_STATES - 1 {
-                    self.state_idx = 0;
+                InputEvent::Middle => {
+                    system.am().execute().unwrap(); //TODO make this generic
+                    self.input_control = true;
                 }
+                InputEvent::Right => {
+                    self.state_idx += 1;
+                    if self.state_idx > MAX_STATES - 1 {
+                        self.state_idx = 0;
+                    }
+                }
+                InputEvent::Multi => {}
+                _ => warn!("User clicked {:?} but it was unhandled", input)
             }
-            InputEvent::Dual => {}
-            InputEvent::Multi => {}
-            InputEvent::LeftMiddle => {}
-            InputEvent::RightMiddle => {}
+        } else {
+            match self.state_idx {
+            0 => {
+                self.app_state.service_input(system, display, input)
+            }
+            _ => panic!("Unhandled state")
         }
+        }
+        
     }
 
     pub fn process(&mut self, display: &mut Ssd1351, system: &mut System) {

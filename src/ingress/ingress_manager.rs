@@ -78,8 +78,7 @@ impl IngressManager {
                                 match system.am().verify() {
                                     Ok(_) =>
                                     {
-                                        //TODO move execution to user initiated input
-                                        system.am().execute().unwrap();
+                                        
                                     }
                                     Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
                                 }
