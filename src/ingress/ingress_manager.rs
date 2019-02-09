@@ -2,12 +2,11 @@ extern crate cortex_m;
 extern crate heapless;
 extern crate rtfm;
 
-use crate::application::application_manager::ApplicationManager;
 use crate::ingress::buffer::{Buffer, Type};
-use crate::ingress::notification::NotificationManager;
 use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
+use crate::system::system::System;
 
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
@@ -48,19 +47,14 @@ impl IngressManager {
         for byte in data {
             match self.rb.enqueue(*byte) {
                 Ok(_) => {},
-                Err(e) => panic!("Ring buffer overflow {:?}", e)
+                Err(e) => panic!("Ring buffer overflow by {:?} bytes", e)
             }
-            // // this is safe because we are only storing bytes, which do not need destructors called on them
-            // unsafe {
-            //     self.rb.enqueue_unchecked(*byte);
-            // } // although we wont know if we have overwritten previous data
         }
     }
 
     pub fn process(
         &mut self,
-        notification_mgr: &mut NotificationManager,
-        amng: &mut ApplicationManager,
+        system: &mut System
     ) {
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
@@ -81,18 +75,18 @@ impl IngressManager {
                         match self.buffer.btype {
                             Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                             Type::Application => {
-                                match amng.verify() {
+                                match system.am().verify() {
                                     Ok(_) =>
                                     {
                                         //TODO move execution to user initiated input
-                                        amng.execute().unwrap();
+                                        system.am().execute().unwrap();
                                     }
-                                    Err(e) => panic!("{:?} || AMNG: {:?}", e, amng.status()),
+                                    Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
                                 }
                             }
                             Type::Notification => {
                                 info!("Adding notification from: {:?}", self.buffer);
-                                notification_mgr.add(&self.buffer).unwrap();
+                                system.nm().add(&self.buffer).unwrap();
                             }
                             _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
@@ -109,7 +103,7 @@ impl IngressManager {
                                     self.state = State::ApplicationStore
                                 } else {
                                     // reset before we load the new application
-                                    amng.stop().unwrap();
+                                    system.am().stop().unwrap();
                                     // parse the checksum
                                     self.state = State::ApplicationChecksum;
                                 }
@@ -134,7 +128,7 @@ impl IngressManager {
                                 self.hex_chars[self.hex_idx] = byte;
                                 self.hex_idx += 1;
                                 if self.hex_idx > 1 {
-                                    amng.write_checksum_byte(
+                                    system.am().write_checksum_byte(
                                         hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
                                     )
                                     .unwrap();
@@ -145,7 +139,7 @@ impl IngressManager {
                                 self.hex_chars[self.hex_idx] = byte;
                                 self.hex_idx += 1;
                                 if self.hex_idx > 1 {
-                                    amng.write_ram_byte(
+                                    system.am().write_ram_byte(
                                         hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
                                     )
                                     .unwrap();

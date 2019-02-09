@@ -4,30 +4,44 @@
 
 use stm32l4xx_hal::rtc::Rtc;
 use crate::system::bms::BatteryManagement;
+use crate::system::notification::NotificationManager;
+use crate::application::application_manager::ApplicationManager;
 
 pub struct System {
     rtc: Rtc,
-    bms: BatteryManagement
+    bms: BatteryManagement,
+    nm: NotificationManager,
+    am: ApplicationManager,
 }
 
 impl System {
-    pub fn new(rtc: Rtc, bms: BatteryManagement) -> Self {
+    pub fn new(rtc: Rtc, bms: BatteryManagement, nm: NotificationManager, am: ApplicationManager) -> Self {
         Self {
             rtc: rtc,
             bms: bms,
+            nm: nm,
+            am: am
         }
     }
 
+    /// Real time clock
     pub fn rtc(&mut self) -> &mut Rtc {
         &mut self.rtc
     }
 
+    /// Battery management
     pub fn bms(&mut self) -> &mut BatteryManagement {
         &mut self.bms
     }
 
-    pub fn process(&mut self) {
-        self.bms.process();
+    /// Application manager
+    pub fn am(&mut self) -> &mut ApplicationManager {
+        &mut self.am
+    }
+
+    /// Notification Manager
+    pub fn nm(&mut self) -> &mut NotificationManager {
+        &mut self.nm
     }
 
     pub fn get_free_stack() -> usize {

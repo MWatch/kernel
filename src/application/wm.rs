@@ -7,7 +7,10 @@ use crate::system::system::System;
 use crate::application::states::{
                                     clock::ClockState,
                                     info::InfoState,
+                                    app::AppState,
                                 };
+
+use mwatch_kernel_api::InputEvent;
 
 /// All built in states must implement this trait to be renderable by the WM
 pub trait State: Default {
@@ -17,13 +20,19 @@ pub trait State: Default {
     fn service(&mut self, system: &mut System);
 }
 
-const MAX_STATES: i8 = 2;
+pub trait InputState: State {
+    /// Allows the state to take control of inputs from the kernel
+    fn service_input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent); //TODO can we remove the need for the display?
+}
+
+const MAX_STATES: i8 = 3;
 
 pub struct WindowManager 
 {
     state_idx: i8,
     clock_state: ClockState,
     info_state: InfoState,
+    app_state: AppState,
 }
 
 impl WindowManager
@@ -33,34 +42,47 @@ impl WindowManager
             state_idx: 0,
             clock_state: ClockState::default(),
             info_state: InfoState::default(),
+            app_state: AppState::default(),
         }
     }
 
-    /// Move to the next state, wrapping if necessary
-    pub fn next(&mut self) {
-        self.state_idx += 1;
-        if self.state_idx > MAX_STATES - 1 {
-            self.state_idx = 0;
-        }
-    }
+    pub fn service_input(&mut self, input: InputEvent) {
+        match input {
+            InputEvent::Left => {
+                self.state_idx -= 1;
+                if self.state_idx < 0 {
+                    self.state_idx = MAX_STATES - 1;
+                }
+            }
+            InputEvent::Middle => {
 
-    /// Move to the previous state, wrapping if necessary
-    pub fn prev(&mut self) {
-        self.state_idx -= 1;
-        if self.state_idx < 0 {
-            self.state_idx = MAX_STATES - 1;
+            }
+            InputEvent::Right => {
+                self.state_idx += 1;
+                if self.state_idx > MAX_STATES - 1 {
+                    self.state_idx = 0;
+                }
+            }
+            InputEvent::Dual => {}
+            InputEvent::Multi => {}
+            InputEvent::LeftMiddle => {}
+            InputEvent::RightMiddle => {}
         }
     }
 
     pub fn process(&mut self, display: &mut Ssd1351, system: &mut System) {
         match self.state_idx {
-            0 => {
+            2 => {
                 self.clock_state.service(system);
                 self.clock_state.render(system, display)
             },
             1 => {
                 self.info_state.service(system);
                 self.info_state.render(system, display)
+            },
+            0 => {
+                self.app_state.service(system);
+                self.app_state.render(system, display)
             }
             _ => panic!("Unhandled state")
         }

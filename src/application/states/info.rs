@@ -3,16 +3,13 @@
 use crate::application::wm::State;
 use crate::Ssd1351;
 use crate::system::system::System;
-use stm32l4xx_hal::datetime::Time;
 
 use heapless::String;
 use heapless::consts::*;
-use crate::system::bms::State as BmsState;
 use core::fmt::Write;
-use stm32l4xx_hal::prelude::*;
 
 use embedded_graphics::Drawing;
-use embedded_graphics::fonts::Font12x16;
+// use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 // use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
@@ -48,7 +45,7 @@ impl State for InfoState {
         );
     }
 
-    fn service(&mut self, system: &mut System){
+    fn service(&mut self, _system: &mut System){
         
     }
 }

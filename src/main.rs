@@ -52,8 +52,8 @@ use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::ingress_manager::BUFF_COUNT;
-use crate::ingress::notification::Notification;
-use crate::ingress::notification::NotificationManager;
+use crate::system::notification::Notification;
+use crate::system::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 use crate::system::input::InputManager;
@@ -84,8 +84,6 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
-    static mut NMGR: NotificationManager = ();
-    static mut AMGR: ApplicationManager = ();
     static mut INPUT_MGR: InputManager = ();
     static mut WMNG: WindowManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
@@ -102,7 +100,6 @@ const APP: () = {
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut WAS_TOUCHED: bool = false;
-    static mut STATE: u8 = 0;
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
@@ -286,8 +283,6 @@ const APP: () = {
 
         let bms = BatteryManagement::new(max17048, chrg, stdby);
 
-        let system = System::new(rtc, bms);
-
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
@@ -328,6 +323,8 @@ const APP: () = {
 
         let wmng = WindowManager::new();
 
+        let system = System::new(rtc, bms, nmgr, amgr);
+
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
@@ -342,8 +339,6 @@ const APP: () = {
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
-        NMGR = nmgr;
-        AMGR = amgr;
         INPUT_MGR = input_mgr;
         WMNG = wmng;
     }
@@ -362,27 +357,14 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [AMGR, DISPLAY])]
-    fn APP() {
-        let mut amgr = resources.AMGR;
-        let mut display = resources.DISPLAY;
-        display.clear(false);
-        amgr.service(&mut display).unwrap();
-        display.flush();
-    }
-
-    #[task(resources = [AMGR, DISPLAY, STATE, WMNG])]
+    #[task(resources = [SYSTEM, DISPLAY, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
-        let mut amgr = resources.AMGR;
+        let amgr = resources.SYSTEM.am();
         let mut display = resources.DISPLAY;
-        if amgr.status().is_running {
+        if amgr.status().is_running { //TODO REMOVE THIS wm should distrubute inputs
             amgr.service_input(&mut display, input).unwrap();
         } else { // WM input
-            *resources.STATE += 1;//TODO REMOVE
-            if *resources.STATE > 4 {
-                *resources.STATE = 0;
-            }
-            resources.WMNG.next();//TODO handle input
+            resources.WMNG.service_input(input);
         }
     }
 
@@ -474,26 +456,19 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, SYSTEM, SYS_TICK], spawn = [APP, WM])]
+    #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK], spawn = [WM])]
     fn TIM2() {
-        let mut mgr = resources.IMNG;
-        let mut n_mgr = resources.NMGR;
-        let mut a_mgr = resources.AMGR;
         let mut system = resources.SYSTEM;
-        system.process();
+        let mut mgr = resources.IMNG;
+        system.bms().process();
         mgr.lock(|m| {
-            m.process(&mut n_mgr, &mut a_mgr);
+            m.process(&mut system);
         });
-        let status = a_mgr.status();
-        if status.is_running {
-            spawn.APP().unwrap();
-        } else { // else run the WM
-            spawn.WM().unwrap();
-        }
+        spawn.WM().unwrap();
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [NMGR, DISPLAY, STATE, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, WMNG])]
+    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, WMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut wmng = resources.WMNG;
