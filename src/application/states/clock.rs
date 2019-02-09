@@ -36,7 +36,7 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, display: &mut Ssd1351){
+    fn render(&mut self, _system: &mut System, display: &mut Ssd1351){
         write!(
             self.buffer,
             "{:02}:{:02}:{:02}",

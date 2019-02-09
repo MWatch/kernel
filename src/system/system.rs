@@ -30,7 +30,7 @@ impl System {
         self.bms.process();
     }
 
-    pub fn get_free_stack(&self) -> usize {
+    pub fn get_free_stack() -> usize {
         unsafe {
             extern "C" {
                 static __ebss: u32;
