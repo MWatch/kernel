@@ -1,6 +1,6 @@
 
 
-use crate::application::wm::State;
+use crate::application::wm::{State, ExitCode};
 use crate::Ssd1351;
 use crate::system::system::System;
 use stm32l4xx_hal::datetime::Time;
@@ -16,6 +16,8 @@ use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 // use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
+
+use mwatch_kernel_api::InputEvent;
 
 pub struct ClockState {
     buffer: String<U256>,
@@ -36,7 +38,10 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, _system: &mut System, display: &mut Ssd1351){
+    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Result<(), ExitCode> {
+        self.time = system.rtc().get_time();
+        self.soc = system.bms().soc();
+        self.bms_state = system.bms().state();
         write!(
             self.buffer,
             "{:02}:{:02}:{:02}",
@@ -51,22 +56,6 @@ impl State for ClockState {
         );
         self.buffer.clear(); // reset the buffer
                         // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-        // write!(self.buffer, "BT={}", resources.BT_CONN.is_high()).unwrap();
-        // display.draw(
-        //     Font6x12::render_str(self.buffer.as_str())
-        //         .translate(Coord::new(24, 60))
-        //         .with_stroke(Some(0x2679_u16.into()))
-        //         .into_iter(),
-        // );
-        // self.buffer.clear(); // reset the buffer
-        // write!(buffer, "{:02}", n_mgr.idx()).unwrap();
-        // display.draw(
-        //     Font12x16::render_str(buffer.as_str())
-        //         .translate(Coord::new(46, 96))
-        //         .with_stroke(Some(0x2679_u16.into()))
-        //         .into_iter(),
-        // );
-        // buffer.clear(); // reset the buffer
         write!(self.buffer, "{:02}%", self.soc).unwrap();
         display.draw(
             Font6x12::render_str(self.buffer.as_str())
@@ -93,11 +82,14 @@ impl State for ClockState {
                 .into_iter(),
         );
         self.buffer.clear(); // reset the buffer
+        Ok(())
     }
 
-    fn service(&mut self, system: &mut System){
-        self.time = system.rtc().get_time();
-        self.soc = system.bms().soc();
-        self.bms_state = system.bms().state();
+    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Result<(), ExitCode> {
+        match input {
+            InputEvent::Left => Err(ExitCode::Previous),
+            InputEvent::Right => Err(ExitCode::Next),
+            _ => Ok(())
+        }
     }
 }

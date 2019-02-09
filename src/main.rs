@@ -78,7 +78,7 @@ const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 #[cfg(feature = "itm")]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
 #[cfg(not(feature = "itm"))]
-const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
 #[app(device = crate::hal::stm32)]
 const APP: () = {
