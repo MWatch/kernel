@@ -241,6 +241,8 @@ const APP: () = {
         let tsc_config = TscConfig {
             clock_prescale: Some(TscClockPrescaler::HclkDiv32),
             max_count_error: None,
+            charge_transfer_high: None,
+            charge_transfer_low: None,
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
