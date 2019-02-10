@@ -1,1 +1,1 @@
- pub mod input;
+ pub(crate) mod input;
