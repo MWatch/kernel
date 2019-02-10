@@ -42,9 +42,9 @@ version = "0.4.1"
 # features = ["const-fn"]
 
 [dependencies.stm32l4xx-hal]
-version = "0.3.5"
+#version = "0.3.5"
 # path = "../../hal/stm32l432xx-hal"
-# git = "https://github.com/mabezdev/stm32l4xx-hal"
+git = "https://github.com/mabezdev/stm32l4xx-hal"
 features = ["rt", "stm32l4x2"]
 
 [dependencies.crc]
@@ -68,7 +68,7 @@ bench = false
 [profile.dev]
 codegen-units = 1
 incremental = false
-opt-level = 1
+opt-level = 0 # also can be 1
 
 [profile.release]
 codegen-units = 1
