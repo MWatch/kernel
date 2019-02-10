@@ -1,6 +1,6 @@
 //! System info state - debugging
 
-use crate::application::wm::{State, ScopedState, ExitCode};
+use crate::application::wm::{State, ScopedState, Signal};
 use crate::Ssd1351;
 use crate::system::system::System;
 
@@ -29,33 +29,20 @@ impl Default for AppState {
 }
 
 impl State for AppState {
-    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Result<(), ExitCode> {
+    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         system.am().service(display).unwrap();
-        Ok(())     
+        None     
     }
 
-    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Result<(), ExitCode> {
-        if self.is_running() {
-            system.am().service_input(display, input).unwrap();
-            Ok(())
-        } else {
-            match input {
-                InputEvent::Left => Err(ExitCode::Previous),
-                InputEvent::Right => Err(ExitCode::Next),
-                InputEvent::Middle => {
-                    self.start(system);
-                    Ok(())
-                }
-                _ => Ok(())
-            }
-            
-        }
+    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+        system.am().service_input(display, input).unwrap();
+        None
     }
 }
 
 impl ScopedState for AppState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, _system: &mut System, display: &mut Ssd1351) -> Result<(), ExitCode> {
+    fn preview(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         self.buffer.clear();
         write!(self.buffer, "Open App").unwrap();
         display.draw(
@@ -64,7 +51,7 @@ impl ScopedState for AppState {
                 .with_stroke(Some(0xF818_u16.into()))
                 .into_iter(),
         );
-        Ok(())
+        None
     }
 
     fn is_running(&self) -> bool {
