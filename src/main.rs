@@ -35,22 +35,14 @@ use crate::hal::tsc::{
 };
 use crate::rt::exception;
 use crate::rt::ExceptionFrame;
-use core::fmt::Write;
-use embedded_graphics::Drawing;
 use heapless::consts::*;
 use heapless::spsc::Queue;
-use heapless::String;
 use rtfm::app;
 
 use ssd1351::builder::Builder;
 use ssd1351::mode::GraphicsMode;
 use ssd1351::prelude::*;
 use ssd1351::properties::DisplayRotation;
-
-use embedded_graphics::fonts::Font12x16;
-use embedded_graphics::fonts::Font6x12;
-use embedded_graphics::image::Image16BPP;
-use embedded_graphics::prelude::*;
 
 use cortex_m::asm;
 use cortex_m::peripheral::DWT;
@@ -60,11 +52,15 @@ use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
 use crate::ingress::ingress_manager::BUFF_COUNT;
-use crate::ingress::notification::Notification;
-use crate::ingress::notification::NotificationManager;
+use crate::system::notification::Notification;
+use crate::system::notification::NotificationManager;
 
 use crate::application::application_manager::ApplicationManager;
 use crate::system::input::InputManager;
+use crate::system::bms::BatteryManagement;
+use crate::system::system::System;
+
+use crate::application::wm::WindowManager;
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -72,6 +68,9 @@ use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 
 
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+
+type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
+type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
 type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
 
 const DMA_HAL_SIZE: usize = 64;
@@ -87,21 +86,17 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
-    static mut NMGR: NotificationManager = ();
-    static mut AMGR: ApplicationManager = ();
     static mut INPUT_MGR: InputManager = ();
+    static mut WMNG: WindowManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
-    static mut RTC: hal::rtc::Rtc = ();
-    static mut CHRG: hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>> = ();
-    static mut STDBY: hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>> = ();
+
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
-    static mut BMS: BatteryManagementIC = ();
+    static mut SYSTEM: System = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
-    static mut STATE: u8 = 0;
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
@@ -195,12 +190,6 @@ const APP: () = {
         display.set_rotation(DisplayRotation::Rotate0).unwrap();
         display.clear(true);
 
-        /* Serial with DMA */
-        // usart 1
-        // let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-        // let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-        // let mut serial = Serial::usart1(device.USART1, (tx, rx), 9_600.bps(), clocks, &mut rcc.apb2);
-
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
         let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
 
@@ -283,6 +272,8 @@ const APP: () = {
 
         let max17048 = Max17048::new(i2c);
 
+        let bms = BatteryManagement::new(max17048, chrg, stdby);
+
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
         let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
@@ -317,21 +308,21 @@ const APP: () = {
 
         let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
+        let wmng = WindowManager::new();
+
+        let system = System::new(rtc, bms, nmgr, amgr);
+
         USART2_RX = rx;
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
         DISPLAY = display;
-        RTC = rtc;
-        BMS = max17048;
-        STDBY = stdby;
-        CHRG = chrg;
+        SYSTEM = system;
         BT_CONN = bt_conn;
         SYS_TICK = systick;
         TIM7 = cpu;
         TIM6 = input;
-        NMGR = nmgr;
-        AMGR = amgr;
         INPUT_MGR = input_mgr;
+        WMNG = wmng;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -348,27 +339,10 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [AMGR, DISPLAY])]
-    fn APP() {
-        let mut amgr = resources.AMGR;
-        let mut display = resources.DISPLAY;
-        display.clear(false);
-        amgr.service(&mut display).unwrap();
-        display.flush();
-    }
-
-    #[task(resources = [AMGR, DISPLAY, STATE])]
+    #[task(resources = [SYSTEM, DISPLAY, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
-        let mut amgr = resources.AMGR;
         let mut display = resources.DISPLAY;
-        if amgr.status().is_running {
-            amgr.service_input(&mut display, input).unwrap();
-        } else { // WM input
-            *resources.STATE += 1;
-            if *resources.STATE > 4 {
-                *resources.STATE = 0;
-            }
-        }
+        resources.WMNG.service_input(&mut display, &mut resources.SYSTEM, input);
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -464,197 +438,24 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, NMGR, AMGR, SYS_TICK], spawn = [APP, WM])]
+    #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK], spawn = [WM])]
     fn TIM2() {
+        let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
-        let mut n_mgr = resources.NMGR;
-        let mut a_mgr = resources.AMGR;
+        system.bms().process();
         mgr.lock(|m| {
-            m.process(&mut n_mgr, &mut a_mgr);
+            m.process(&mut system);
         });
-        let status = a_mgr.status();
-        if status.is_running {
-            spawn.APP().unwrap();
-            // a_mgr.service(&mut display).unwrap();
-        } else { // else run the WM
-            spawn.WM().unwrap();
-        }
+        spawn.WM().unwrap();
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [NMGR, DISPLAY, RTC, STATE, BMS, STDBY, CHRG, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND])]
+    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, WMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
-        let mut buffer: String<U256> = String::new();
-        let state = resources.STATE.lock(|val| *val);
-        let time = resources.RTC.get_time();
-        let _date = resources.RTC.get_date();
-        let mut n_mgr = resources.NMGR;
+        let mut wmng = resources.WMNG;
         display.clear(false);
-        match state {
-            // HOME PAGE
-            0 => {
-                write!(
-                    buffer,
-                    "{:02}:{:02}:{:02}",
-                    time.hours, time.minutes, time.seconds
-                )
-                .unwrap();
-                display.draw(
-                    Font12x16::render_str(buffer.as_str())
-                        .translate(Coord::new(10, 40))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                                // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
-                write!(buffer, "BT={}", resources.BT_CONN.is_high()).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(24, 60))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                write!(buffer, "{:02}", n_mgr.idx()).unwrap();
-                display.draw(
-                    Font12x16::render_str(buffer.as_str())
-                        .translate(Coord::new(46, 96))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                let soc = bodged_soc(resources.BMS.soc().unwrap());
-                write!(buffer, "{:02}%", soc).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(110, 12))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                write!(buffer, "{:03.03}v", resources.BMS.vcell().unwrap()).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 12))
-                        .with_stroke(Some(0x2679_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear(); // reset the buffer
-                if resources.CHRG.is_low() {
-                    write!(buffer, "CHRG").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                    if let Some(soc_per_hr) = resources.BMS.charge_rate().ok() {
-                        if soc_per_hr < 200.0 {
-                            write!(buffer, "{:03.1}%/hr", soc_per_hr).unwrap();
-                            display.draw(
-                                Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(32, 116))
-                                    .with_stroke(Some(0x2679_u16.into()))
-                                    .into_iter(),
-                            );
-                            buffer.clear(); // reset the buffer
-                        }
-                    }
-                } else if resources.STDBY.is_high() {
-                    write!(buffer, "STDBY").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                } else {
-                    write!(buffer, "DONE").unwrap();
-                    display.draw(
-                        Font6x12::render_str(buffer.as_str())
-                            .translate(Coord::new(48, 12))
-                            .with_stroke(Some(0x2679_u16.into()))
-                            .into_iter(),
-                    );
-                    buffer.clear(); // reset the buffer
-                }
-            }
-            // MESSAGE LIST
-            1 => {
-                if n_mgr.idx() > 0 {
-                    for i in 0..n_mgr.idx() {
-                        n_mgr.peek_notification(i, |msg| {
-                            write!(buffer, "[{}]: ", i + 1).unwrap();
-                            for byte in msg.buffer() {
-                                buffer.push(*byte as char).unwrap();
-                            }
-                            display.draw(
-                                Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(0, (i * 12) as i32 + 2))
-                                    .with_stroke(Some(0xF818_u16.into()))
-                                    .into_iter(),
-                            );
-                            buffer.clear();
-                        });
-                    }
-                } else {
-                    display.draw(
-                        Font6x12::render_str("No messages.")
-                            .translate(Coord::new(0, 12))
-                            .with_stroke(Some(0xF818_u16.into()))
-                            .into_iter(),
-                    );
-                }
-            }
-            // MWATCH LOGO
-            2 => {
-                display.draw(
-                    Image16BPP::new(include_bytes!("../data/mwatch.raw"), 64, 64)
-                        .translate(Coord::new(32, 32))
-                        .into_iter(),
-                );
-            }
-            // UOP LOGO
-            3 => {
-                display.draw(
-                    Image16BPP::new(include_bytes!("../data/uop.raw"), 48, 64)
-                        .translate(Coord::new(32, 32))
-                        .into_iter(),
-                );
-            }
-            //  Sys info
-            4 => {
-                write!(buffer, "CPU_USAGE: {:.02}%", *resources.CPU_USAGE).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 12))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-                let stack_space = get_free_stack();
-                write!(buffer, "RAM: {} bytes", stack_space).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 24))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-                write!(buffer, "TSC IT: {}/s", *resources.INPUT_IT_COUNT_PER_SECOND).unwrap();
-                display.draw(
-                    Font6x12::render_str(buffer.as_str())
-                        .translate(Coord::new(0, 36))
-                        .with_stroke(Some(0xF818_u16.into()))
-                        .into_iter(),
-                );
-                buffer.clear();
-            }
-            _ => panic!("Unknown state"),
-        }
+        wmng.process(&mut display, &mut resources.SYSTEM);
         display.flush();
     }
 
@@ -668,27 +469,4 @@ const APP: () = {
 #[exception]
 fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
-}
-
-fn bodged_soc(raw: u16) -> u16 {
-    let rawf = raw as f32;
-    let max = 94.0; // based on current battery
-    let mut soc = ((rawf / max) * 100.0) as u16;
-    if soc > 100 {
-        soc = 100; // cap at 100
-    }
-    soc
-}
-
-fn get_free_stack() -> usize {
-    unsafe {
-        extern "C" {
-            static __ebss: u32;
-            static __sdata: u32;
-        }
-        let ebss = &__ebss as *const u32 as usize;
-        let start = &__sdata as *const u32 as usize;
-        let total = ebss - start;
-        (16 * 1024) - total // ram for stack in linker script
-    }
 }
