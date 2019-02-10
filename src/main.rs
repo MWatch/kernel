@@ -248,7 +248,7 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv32),
+            clock_prescale: Some(TscClockPrescaler::HclkDiv16),
             max_count_error: None,
             charge_transfer_high: None,
             charge_transfer_low: None,
