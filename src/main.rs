@@ -299,7 +299,7 @@ const APP: () = {
         cpu.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, 1.hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        let mut input = Timer::tim6(device.TIM6, (2 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
@@ -375,20 +375,33 @@ const APP: () = {
 
     #[interrupt(resources = [INPUT_IT_COUNT, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
-        let mut input_mgr = resources.INPUT_MGR;
-        input_mgr.process_result();
         *resources.INPUT_IT_COUNT += 1;
-
-        match input_mgr.output() {
-            Ok(input) => {
-                spawn.HANDLE_INPUT(input).unwrap();
+        let mut input_mgr = resources.INPUT_MGR;
+        match input_mgr.process_result() {
+            Ok(_) => {
+                match input_mgr.output() {
+                    Ok(input) => {
+                        trace!("Output => {:?}", input);
+                        match spawn.HANDLE_INPUT(input) {
+                            Ok(_) => {},
+                            Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
+                        }
+                    },
+                    Err(e) => {
+                        if e != system::input::Error::NoInput {
+                            error!("Input Error, {:?}", e);
+                        }
+                    }
+                }
             },
             Err(e) => {
-                if e != system::input::Error::NoInput {
-                    error!("Input Error, {:?}", e);
+                if e != system::input::Error::Incomplete {
+                    panic!("process_result error: {:?}", e)
                 }
             }
         }
+
+        
     }
 
     /// Handles the intermediate state where the DMA has data in it but

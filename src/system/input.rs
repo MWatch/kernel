@@ -19,7 +19,8 @@ pub enum Error {
     NoInput,
     InvalidInputVector(u8),
     InvalidInputPin,
-    AcquisitionInProgress
+    AcquisitionInProgress,
+    Incomplete
 }
 
 pub struct InputManager
@@ -45,7 +46,7 @@ impl InputManager {
         for _ in 0..NUM_SAMPLES {
             baseline += tsc.acquire(&mut left).unwrap();
         }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 40;
+        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
 
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
@@ -63,12 +64,22 @@ impl InputManager {
     }
 
     pub fn update_input(&mut self, active: bool) {
-        self.raw_vector |= match self.pin_idx {
-            0 => (active as u8) << 0,
-            1 => (active as u8) << 1,
-            2 => (active as u8) << 2,
-            _ => panic!("Invalid pin index")
-        };
+        if active {
+            self.raw_vector |= match self.pin_idx {
+                0 => 1 << 0,
+                1 => 1 << 1,
+                2 => 1 << 2,
+                _ => panic!("Invalid pin index")
+            };
+        } else {
+            self.raw_vector &= match self.pin_idx {
+                0 => !(1 << 0),
+                1 => !(1 << 1),
+                2 => !(1 << 2),
+                _ => panic!("Invalid pin index")
+            };
+        }
+        
         // update the index once the input has been set
         self.pin_idx += 1;
         if self.pin_idx > 2 {
@@ -109,16 +120,20 @@ impl InputManager {
         Ok(())
     }
 
-    pub fn process_result(&mut self) {
+    pub fn process_result(&mut self) -> Result<(), Error> {
         let value = match self.pin_idx {
             0 => self.tsc.read(&mut self.left).unwrap(),
             1 => self.tsc.read(&mut self.middle).unwrap(),
             2 => self.tsc.read(&mut self.right).unwrap(),
             _ => panic!("Invalid pin index")
         };
-        trace!("tsc {} < {}?", value, self.tsc_threshold);
-        // self.update_input(value < self.tsc_threshold); //TODO put back
-        self.update_input(true);
+        trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold);
+        self.update_input(value < self.tsc_threshold);
         self.tsc.clear(TscEvent::EndOfAcquisition);
+        if self.pin_idx == 2 { // we've read all the pins now process the output
+            Ok(())
+        } else {
+            Err(Error::Incomplete)
+        }
     }
 }
