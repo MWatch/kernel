@@ -201,6 +201,13 @@ impl Ram {
     // Reset ram
     pub fn reset(&mut self) {
         self.ram_idx = 0;
+        self.wipe();
+    }
+
+    fn wipe(&mut self) {
+        for i in 0..self.ram_idx {
+            self.ram[i] = 0u8;
+        }
     }
 
     pub fn as_ref(&self) -> &[u8] {

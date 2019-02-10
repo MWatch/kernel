@@ -31,7 +31,7 @@ use crate::hal::serial::{Event as SerialEvent, Serial};
 use crate::hal::spi::Spi;
 use crate::hal::timer::{Event as TimerEvent, Timer};
 use crate::hal::tsc::{
-    ClockPrescaler as TscClockPrescaler, Config as TscConfig, Event as TscEvent, Tsc,
+    ClockPrescaler as TscClockPrescaler, Config as TscConfig, Tsc,
 };
 use crate::rt::exception;
 use crate::rt::ExceptionFrame;
@@ -68,8 +68,10 @@ use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
 
 
 type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+
 type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
 type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
+type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 16_000_000;
@@ -91,15 +93,11 @@ const APP: () = {
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
-    static mut TOUCH: hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>> = ();
-    static mut RIGHT_BUTTON: RightButton = ();
-    static mut MIDDLE_BUTTON: MiddleButton = ();
-    static mut LEFT_BUTTON: LeftButton = ();
+
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut SYSTEM: System = ();
     static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
-    static mut WAS_TOUCHED: bool = false;
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
@@ -153,13 +151,13 @@ const APP: () = {
 
         info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
         info!("Copyright Scott Mabin 2019");
-        info!("Clocks: {:?}", clocks);
+        info!("Clocks: {:#?}", clocks);
         let mut gpioa = device.GPIOA.split(&mut rcc.ahb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = device.DMA1.split(&mut rcc.ahb1);
 
         let mut pwr = device.PWR.constrain(&mut rcc.apb1r1);
-        let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1);
+        let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1, clocks);
 
         let date = Date::new(1.day(), 07.date(), 10.month(), 2018.year());
         rtc.set_date(&date);
@@ -231,7 +229,7 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut middle_button =
+        let middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -240,18 +238,12 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv32),
+            clock_prescale: Some(TscClockPrescaler::HclkDiv16),
             max_count_error: None,
+            charge_transfer_high: None,
+            charge_transfer_low: None,
         };
-        let mut tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
-
-        // Acquire for rough estimate of capacitance
-        const NUM_SAMPLES: u16 = 25;
-        let mut baseline = 0;
-        for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut middle_button).unwrap();
-        }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
+        let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -310,16 +302,12 @@ const APP: () = {
         cpu.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, (8 * 1).hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        let mut input = Timer::tim6(device.TIM6, (2 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
-        tsc.listen(TscEvent::EndOfAcquisition);
-        // tsc.listen(TscEvent::MaxCountError); // TODO
-        // we do this to kick off the tsc loop - the interrupt starts a reading everytime one completes
-        // rtfm::pend(stm32l4x2::Interrupt::TSC);
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
 
-        let input_mgr = InputManager::new();
+        let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
         let wmng = WindowManager::new();
 
@@ -329,11 +317,6 @@ const APP: () = {
         CB = rx.circ_read(channels.6, buffer);
         IMNG = imgr;
         DISPLAY = display;
-        TOUCH = tsc;
-        RIGHT_BUTTON = right_button;
-        MIDDLE_BUTTON = middle_button;
-        LEFT_BUTTON = left_button;
-        TOUCH_THRESHOLD = threshold;
         SYSTEM = system;
         BT_CONN = bt_conn;
         SYS_TICK = systick;
@@ -376,37 +359,35 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [MIDDLE_BUTTON, TOUCH, TOUCH_THRESHOLD, INPUT_IT_COUNT, WAS_TOUCHED, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
+    #[interrupt(resources = [INPUT_IT_COUNT, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
-        let input_mgr = resources.INPUT_MGR;
         *resources.INPUT_IT_COUNT += 1;
-        let reading = resources.TOUCH.read(&mut *resources.MIDDLE_BUTTON).unwrap();
-        let threshold = *resources.TOUCH_THRESHOLD;
-        let current_touched = reading < threshold;
-
-        // TODO make this genric accross all pins
-        if current_touched != *resources.WAS_TOUCHED {
-            *resources.WAS_TOUCHED = current_touched;
-            if current_touched == true {
-                input_mgr.update_input(system::input::MIDDLE, true);
-            } else {
-                input_mgr.update_input(system::input::MIDDLE, false);
-            }
-        }
-
-
-        match input_mgr.output() {
-            Ok(input) => {
-                spawn.HANDLE_INPUT(input).unwrap();
+        let mut input_mgr = resources.INPUT_MGR;
+        match input_mgr.process_result() {
+            Ok(_) => {
+                match input_mgr.output() {
+                    Ok(input) => {
+                        trace!("Output => {:?}", input);
+                        match spawn.HANDLE_INPUT(input) {
+                            Ok(_) => {},
+                            Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
+                        }
+                    },
+                    Err(e) => {
+                        if e != system::input::Error::NoInput {
+                            error!("Input Error, {:?}", e);
+                        }
+                    }
+                }
             },
             Err(e) => {
-                if e != system::input::Error::NoInput {
-                    error!("Input Error, {:?}", e);
+                if e != system::input::Error::Incomplete {
+                    panic!("process_result error: {:?}", e)
                 }
             }
         }
 
-        resources.TOUCH.clear(TscEvent::EndOfAcquisition);
+        
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -428,9 +409,16 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [TIM6, MIDDLE_BUTTON, TOUCH], priority = 2)]
+    #[interrupt(resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
     fn TIM6_DACUNDER() {
-        resources.TOUCH.start(&mut *resources.MIDDLE_BUTTON);
+        match resources.INPUT_MGR.start_new() {
+            Ok(_) => {},
+            Err(e) => {
+                if e != system::input::Error::AcquisitionInProgress {
+                    panic!("{:?}", e);
+                }
+            }
+        }
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
