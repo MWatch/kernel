@@ -78,7 +78,7 @@ const SYS_CLK: u32 = 16_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
 #[cfg(feature = "itm")]
-const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Trace;
+const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
 #[cfg(not(feature = "itm"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
@@ -366,7 +366,7 @@ const APP: () = {
             Ok(_) => {
                 match input_mgr.output() {
                     Ok(input) => {
-                        trace!("Output => {:?}", input);
+                        info!("Output => {:?}", input);
                         match spawn.HANDLE_INPUT(input) {
                             Ok(_) => {},
                             Err(e) => panic!("Failed to spawn input task. Input {:?}", e)

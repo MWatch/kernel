@@ -37,7 +37,7 @@ pub trait ScopedState: State {
     /// Start 
     fn start(&mut self, system: &mut System);
     /// Is the application running yet?
-    fn is_running(&self) -> bool;
+    fn is_running(&self, system: &mut System) -> bool;
     /// Stop
     fn stop(&mut self, system: &mut System);
 }
@@ -72,7 +72,7 @@ impl WindowManager
                 }
             },
             1 => {
-                let exit_code = if self.app_state.is_running() {
+                let exit_code = if self.app_state.is_running(system) {
                     self.app_state.render(system, display)
                 } else {
                     self.app_state.preview(system, display)
@@ -94,8 +94,8 @@ impl WindowManager
                 }
             },
             1 => {
-                let exit_code = if self.app_state.is_running() {
-                    self.app_state.render(system, display)
+                let exit_code = if self.app_state.is_running(system) {
+                    self.app_state.input(system, display, input)
                 } else {
                     match input {
                         InputEvent::Middle => {
@@ -120,7 +120,7 @@ impl WindowManager
         match code {
             Signal::Next => self.next(),
             Signal::Previous => self.prev(),
-            Signal::Home => unimplemented!(),
+            Signal::Home => self.state_idx = 0,
         }
     }
 

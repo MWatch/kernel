@@ -216,7 +216,7 @@ impl Ram {
 }
 
 extern "C" fn application_logger(string: &str) -> i32 {
-    trace!("{}", string);
+    info!("{}", string);
     0
 }
 

@@ -15,15 +15,13 @@ use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
 pub struct AppState {
-    buffer: String<U256>,
-    running: bool
+    buffer: String<U256>
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             buffer: String::new(),
-            running: false,
         }
     }
 }
@@ -35,8 +33,16 @@ impl State for AppState {
     }
 
     fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
-        system.am().service_input(display, input).unwrap();
-        None
+        match input {
+            InputEvent::Multi => {
+                system.am().pause();
+                Some(Signal::Home) // signal to wm to go home
+            }
+            _ => {
+                system.am().service_input(display, input).unwrap();
+                None
+            }
+        }
     }
 }
 
@@ -54,22 +60,20 @@ impl ScopedState for AppState {
         None
     }
 
-    fn is_running(&self) -> bool {
-        self.running
+    fn is_running(&self, system: &mut System) -> bool {
+        system.am().status().is_running
     }
 
     /// Start 
     fn start(&mut self, system: &mut System) {
         match system.am().execute() {
-            Ok(_) => self.running = true,
+            Ok(_) => {},
             Err(err) => error!("Failed to launch application {:?}", err)
         }
-        
     }
 
     /// Stop
     fn stop(&mut self, system: &mut System) {
         system.am().stop().unwrap();
-        self.running = false;
     }
 }
