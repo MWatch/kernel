@@ -96,7 +96,6 @@ const APP: () = {
 
     static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
     static mut SYSTEM: System = ();
-    static mut TOUCH_THRESHOLD: u16 = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
