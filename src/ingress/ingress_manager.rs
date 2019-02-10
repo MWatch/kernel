@@ -27,16 +27,20 @@ const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
     buffer: Buffer,
-    rb: &'static mut Queue<u8, U256>,
+    rb: &'static mut Queue<u8, U512>,
     state: State,
+    hex_chars: [u8; 2],
+    hex_idx: usize,
 }
 
 impl IngressManager {
-    pub fn new(ring: &'static mut Queue<u8, U256>) -> Self {
+    pub fn new(ring: &'static mut Queue<u8, U512>) -> Self {
         IngressManager {
             buffer: Buffer::default(),
             rb: ring,
             state: State::Init,
+            hex_chars: [0u8; 2],
+            hex_idx: 0,
         }
     }
 
@@ -58,9 +62,7 @@ impl IngressManager {
         notification_mgr: &mut NotificationManager,
         amng: &mut ApplicationManager,
     ) {
-        let mut hex_chars = [0u8; 2];
-        let mut hex_idx = 0;
-        if !self.rb.is_empty() && self.rb.len() > 2 {
+        if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => {
@@ -68,6 +70,7 @@ impl IngressManager {
                             warn!("Partial buffer detected: {:?}", self.buffer);
                         }
                         /* Start of packet */
+                        self.hex_idx = 0;
                         self.buffer.clear();
                         self.state = State::Init; // activate processing
                     }
@@ -128,25 +131,25 @@ impl IngressManager {
                                 self.buffer.write(byte);
                             }
                             State::ApplicationChecksum => {
-                                hex_chars[hex_idx] = byte;
-                                hex_idx += 1;
-                                if hex_idx > 1 {
+                                self.hex_chars[self.hex_idx] = byte;
+                                self.hex_idx += 1;
+                                if self.hex_idx > 1 {
                                     amng.write_checksum_byte(
-                                        hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap(),
+                                        hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
                                     )
                                     .unwrap();
-                                    hex_idx = 0;
+                                    self.hex_idx = 0;
                                 }
                             }
                             State::ApplicationStore => {
-                                hex_chars[hex_idx] = byte;
-                                hex_idx += 1;
-                                if hex_idx > 1 {
+                                self.hex_chars[self.hex_idx] = byte;
+                                self.hex_idx += 1;
+                                if self.hex_idx > 1 {
                                     amng.write_ram_byte(
-                                        hex_byte_to_byte(hex_chars[0], hex_chars[1]).unwrap(),
+                                        hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
                                     )
                                     .unwrap();
-                                    hex_idx = 0;
+                                    self.hex_idx = 0;
                                 }
                             }
                             State::Wait => {

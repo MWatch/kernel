@@ -75,7 +75,7 @@ type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<
 type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
 
 const DMA_HAL_SIZE: usize = 64;
-const SYS_CLK: u32 = 32_000_000;
+const SYS_CLK: u32 = 16_000_000;
 const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
 #[cfg(feature = "itm")]
@@ -92,7 +92,7 @@ const APP: () = {
     static mut INPUT_MGR: InputManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
-    static mut RB: Option<Queue<u8, heapless::consts::U256>> = None;
+    static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
     static mut RTC: hal::rtc::Rtc = ();
@@ -124,14 +124,23 @@ const APP: () = {
         core.DWT.enable_cycle_counter();
         let mut flash = device.FLASH.constrain();
         let mut rcc = device.RCC.constrain();
-        let clocks = rcc
-            .cfgr
-            .sysclk(SYS_CLK.hz())
-            .pclk1(32.mhz())
-            .pclk2(32.mhz())
-            .lsi(true)
-            .freeze(&mut flash.acr);
-        // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        // let clocks = rcc
+        //     .cfgr
+        //     .sysclk(SYS_CLK.hz())
+        //     .pclk1(32.mhz())
+        //     .pclk2(32.mhz())
+        //     .freeze(&mut flash.acr); // 31% cpu usage~
+        
+        // let clocks = rcc
+        //     .cfgr
+        //     .sysclk(2.mhz())
+        //     .pclk1(2.mhz())
+        //     .pclk2(2.mhz())
+        //     .lsi(true)
+        //     .msi(stm32l4xx_hal::rcc::MsiFreq::RANGE2M)
+        //     .freeze(&mut flash.acr); // this config is too slow - cant use lprun etc
+        
+        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
         // initialize the logging framework
         let itm = core.ITM;
@@ -175,7 +184,7 @@ const APP: () = {
             device.SPI1,
             (sck, miso, mosi),
             SSD1351_SPI_MODE,
-            16.mhz(),
+            8.mhz(),
             clocks,
             &mut rcc.apb2,
         );
@@ -276,7 +285,7 @@ const APP: () = {
 
         /* Static RB for Msg recieving */
         *resources.RB = Some(Queue::new());
-        let rb: &'static mut Queue<u8, U256> = resources.RB.as_mut().unwrap();
+        let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
         let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
 
         // Give the RB to the ingress manager
@@ -515,7 +524,7 @@ const APP: () = {
                         .into_iter(),
                 );
                 buffer.clear(); // reset the buffer
-                let soc = resources.BMS.soc().unwrap(); /*  bodged_soc(); */
+                let soc = bodged_soc(resources.BMS.soc().unwrap());
                 write!(buffer, "{:02}%", soc).unwrap();
                 display.draw(
                     Font6x12::render_str(buffer.as_str())
@@ -661,10 +670,9 @@ fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
 }
 
-fn _bodged_soc(raw: u16) -> u16 {
+fn bodged_soc(raw: u16) -> u16 {
     let rawf = raw as f32;
-    // let min = 0.0;
-    let max = 80.0;
+    let max = 94.0; // based on current battery
     let mut soc = ((rawf / max) * 100.0) as u16;
     if soc > 100 {
         soc = 100; // cap at 100
