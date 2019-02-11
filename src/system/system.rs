@@ -12,6 +12,7 @@ pub struct System {
     bms: BatteryManagement,
     nm: NotificationManager,
     am: ApplicationManager,
+    stats: Stats,
 }
 
 impl System {
@@ -20,7 +21,8 @@ impl System {
             rtc: rtc,
             bms: bms,
             nm: nm,
-            am: am
+            am: am,
+            stats: Stats::default(),
         }
     }
 
@@ -44,6 +46,11 @@ impl System {
         &mut self.nm
     }
 
+    /// System stats
+    pub fn ss(&mut self) -> &mut Stats {
+        &mut self.stats
+    }
+
     pub fn get_free_stack() -> usize {
         unsafe {
             extern "C" {
@@ -54,6 +61,21 @@ impl System {
             let start = &__sdata as *const u32 as usize;
             let total = ebss - start;
             (16 * 1024) - total // ram for stack in linker script
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Stats {
+    pub cpu_usage: f32,
+    pub tsc_events: u32
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            cpu_usage: 0.0,
+            tsc_events: 0,
         }
     }
 }

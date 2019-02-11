@@ -1,7 +1,10 @@
 //! Push notification parsing
 //!
 
-use crate::ingress::{buffer::Buffer, ingress_manager::BUFF_COUNT};
+use crate::ingress::buffer::Buffer;
+
+pub const BUFF_SIZE: usize = 256;
+pub const BUFF_COUNT: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct Notification {
@@ -20,7 +23,7 @@ impl Notification {
             // text_idx: 0,
             inner: Buffer {
                 btype: crate::ingress::buffer::Type::Unknown,
-                payload: [0u8; crate::ingress::ingress_manager::BUFF_SIZE],
+                payload: [0u8; BUFF_SIZE],
                 payload_idx: 0,
             },
         }

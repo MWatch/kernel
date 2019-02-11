@@ -8,9 +8,6 @@ use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
 use crate::system::system::System;
 
-pub const BUFF_SIZE: usize = 256;
-pub const BUFF_COUNT: usize = 8;
-
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
     Wait, /* Waiting for data */

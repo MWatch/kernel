@@ -51,7 +51,7 @@ use hm11::Hm11;
 use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
-use crate::ingress::ingress_manager::BUFF_COUNT;
+use crate::system::notification::BUFF_COUNT;
 use crate::system::notification::Notification;
 use crate::system::notification::NotificationManager;
 
@@ -72,6 +72,7 @@ type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<
 type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
 type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
 type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
+type BluetoothConnectedPin = hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 16_000_000;
@@ -94,17 +95,15 @@ const APP: () = {
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
 
-    static mut BT_CONN: hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>> = ();
+    static mut BT_CONN: BluetoothConnectedPin = ();
     static mut SYSTEM: System = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
     static mut SLEEP_TIME: u32 = 0;
-    static mut CPU_USAGE: f32 = 0.0;
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
-    static mut INPUT_IT_COUNT: u32 = 0;
-    static mut INPUT_IT_COUNT_PER_SECOND: u32 = 0;
+    static mut TSC_EVENTS: u32 = 0;
 
     static mut LOGGER: Option<LoggerType> = None;
 
@@ -358,9 +357,9 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [INPUT_IT_COUNT, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
+    #[interrupt(resources = [TSC_EVENTS, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
-        *resources.INPUT_IT_COUNT += 1;
+        *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
         match input_mgr.process_result() {
             Ok(_) => {
@@ -421,20 +420,20 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [TIM7, SLEEP_TIME, CPU_USAGE, INPUT_IT_COUNT, INPUT_IT_COUNT_PER_SECOND])]
+    #[interrupt(resources = [TIM7, SLEEP_TIME, TSC_EVENTS, SYSTEM])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
+        let mut system = resources.SYSTEM;
         let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
-        *resources.CPU_USAGE = cpu;
-        let it_count = resources.INPUT_IT_COUNT.lock(|val| {
+        system.ss().tsc_events = resources.TSC_EVENTS.lock(|val| {
             let value = *val;
             *val = 0; // reset the value
             value
         });
-        *resources.INPUT_IT_COUNT_PER_SECOND = it_count;
+        system.ss().cpu_usage = cpu;
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
@@ -450,7 +449,7 @@ const APP: () = {
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, CPU_USAGE, INPUT_IT_COUNT_PER_SECOND, WMNG])]
+    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, WMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut wmng = resources.WMNG;
