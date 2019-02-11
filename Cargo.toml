@@ -68,7 +68,7 @@ bench = false
 [profile.dev]
 codegen-units = 1
 incremental = false
-opt-level = 0 # also can be 1
+opt-level = 0 # 0 or 1 for debug
 
 [profile.release]
 codegen-units = 1
