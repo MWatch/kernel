@@ -288,7 +288,7 @@ const APP: () = {
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
         let amgr = ApplicationManager::new(ram);
 
-        let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
+        let mut systick = Timer::tim2(device.TIM2, 3.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
 
         let mut cpu = Timer::tim7(
@@ -300,7 +300,7 @@ const APP: () = {
         cpu.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, (2 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        let mut input = Timer::tim6(device.TIM6, (3 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
         input.listen(TimerEvent::TimeOut);
 
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
@@ -453,9 +453,15 @@ const APP: () = {
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut wmng = resources.WMNG;
+        let cs = crc::crc16::checksum_x25(display.fb());
+        trace!("WM - CS before: {}", cs);
         display.clear(false);
         wmng.process(&mut resources.SYSTEM, &mut display);
-        display.flush();
+        let cs_after = crc::crc16::checksum_x25(display.fb());
+        trace!("WM - CS after: {}", cs_after);
+        if cs != cs_after {
+            display.flush();
+        }
     }
 
     // Interrupt handlers used to dispatch software tasks
