@@ -342,7 +342,7 @@ const APP: () = {
     #[task(resources = [SYSTEM, DISPLAY, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
         let mut display = resources.DISPLAY;
-        resources.WMNG.service_input(&mut display, &mut resources.SYSTEM, input);
+        resources.WMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -455,7 +455,7 @@ const APP: () = {
         let mut display = resources.DISPLAY;
         let mut wmng = resources.WMNG;
         display.clear(false);
-        wmng.process(&mut display, &mut resources.SYSTEM);
+        wmng.process(&mut resources.SYSTEM, &mut display);
         display.flush();
     }
 

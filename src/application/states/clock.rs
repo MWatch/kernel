@@ -1,6 +1,6 @@
 
 
-use crate::application::wm::{State, Signal};
+use crate::application::wm::{State, StaticState, Signal};
 use crate::Ssd1351;
 use crate::system::system::System;
 
@@ -85,3 +85,5 @@ impl State for ClockState {
         }
     }
 }
+
+impl StaticState for ClockState {}

@@ -30,6 +30,11 @@ pub trait State: Default {
     fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal>; //TODO can we remove the need for the display?
 }
 
+/// Marker trait for static states
+pub trait StaticState: State {
+
+}
+
 /// This state only exists whilst its running, and is destroyed on exit
 pub trait ScopedState: State {
     /// Render a preview or Icon before launching the whole application
@@ -63,56 +68,35 @@ impl WindowManager
         }
     }
 
-    pub fn process(&mut self, display: &mut Ssd1351, system: &mut System) {
-        // TODO can we automate this boiler plate with a macro?
-        match self.state_idx {
+    pub fn process(&mut self, system: &mut System, display: &mut Ssd1351) {
+        let signal = match self.state_idx {
             0 => {
-                if let Some(exit_code) = self.clock_state.render(system, display) {
-                    self.handle_exit(exit_code);
-                }
+                WindowManager::static_state_render(&mut self.clock_state, system, display)
             },
             1 => {
-                let exit_code = if self.app_state.is_running(system) {
-                    self.app_state.render(system, display)
-                } else {
-                    self.app_state.preview(system, display)
-                };
-                if let Some(exit_code) = exit_code {
-                    self.handle_exit(exit_code);
-                }
+                WindowManager::scoped_state_render(&mut self.app_state, system, display)
             },
             _ => panic!("Unhandled state")
+        };
+
+        if let Some(signal) = signal {
+            self.handle_exit(signal);
         }
     }
 
-    pub fn service_input(&mut self, display: &mut Ssd1351, system: &mut System, input: InputEvent) {
-        // TODO can we automate this boiler plate with a macro?
-        match self.state_idx {
+    pub fn service_input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) {
+        let signal = match self.state_idx {
             0 => {
-                if let Some(exit_code) = self.clock_state.input(system, display, input) {
-                    self.handle_exit(exit_code);
-                }
+                WindowManager::static_state_input(&mut self.clock_state, system, display, input)
             },
             1 => {
-                let exit_code = if self.app_state.is_running(system) {
-                    self.app_state.input(system, display, input)
-                } else {
-                    match input {
-                        InputEvent::Middle => {
-                            self.app_state.start(system);
-                            None
-                        }
-                        InputEvent::Left => Some(Signal::Previous),
-                        InputEvent::Right => Some(Signal::Next),
-                        _ => None
-                    }
-                };
-                
-                if let Some(exit_code) = exit_code {
-                    self.handle_exit(exit_code);
-                }
+                WindowManager::scoped_state_input(&mut self.app_state, system, display, input)
             }
             _ => panic!("Unhandled state")
+        };
+
+        if let Some(signal) = signal {
+            self.handle_exit(signal);
         }
     }
 
@@ -135,6 +119,46 @@ impl WindowManager
         self.state_idx += 1;
         if self.state_idx > MAX_STATES - 1 {
             self.state_idx = 0;
+        }
+    }
+
+    fn static_state_render<S>(state: &mut S, system: &mut System, display: &mut Ssd1351) -> Option<Signal> 
+        where S : StaticState
+    {
+        state.render(system, display)
+    }
+
+    fn scoped_state_render<S>(state: &mut S, system: &mut System, display: &mut Ssd1351) -> Option<Signal> 
+        where S : ScopedState
+    {
+        if state.is_running(system) {
+            state.render(system, display)
+        } else {
+            state.preview(system, display)
+        }
+    }
+
+    fn static_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
+        where S : StaticState
+    {
+        state.input(system, display, input)
+    }
+
+    fn scoped_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
+        where S : ScopedState
+    {
+        if state.is_running(system) {
+            state.input(system, display, input)
+        } else {
+            match input {
+                InputEvent::Middle => {
+                    state.start(system);
+                    None
+                }
+                InputEvent::Left => Some(Signal::Previous),
+                InputEvent::Right => Some(Signal::Next),
+                _ => None
+            }
         }
     }
 }
