@@ -6,7 +6,7 @@ use crate::Ssd1351;
 use crate::system::system::System;
 use crate::application::states::{
                                     clock::ClockState,
-                                    // info::InfoState,
+                                    info::InfoState,
                                     app::AppState,
                                 };
 
@@ -47,13 +47,13 @@ pub trait ScopedState: State {
     fn stop(&mut self, system: &mut System);
 }
 
-const MAX_STATES: i8 = 2;
+const MAX_STATES: i8 = 3;
 
 pub struct WindowManager 
 {
     state_idx: i8,
     clock_state: ClockState,
-    // info_state: InfoState,
+    info_state: InfoState,
     app_state: AppState,
 }
 
@@ -63,7 +63,7 @@ impl WindowManager
         Self {
             state_idx: 0,
             clock_state: ClockState::default(),
-            // info_state: InfoState::default(),
+            info_state: InfoState::default(),
             app_state: AppState::default(),
         }
     }
@@ -75,6 +75,9 @@ impl WindowManager
             },
             1 => {
                 WindowManager::scoped_state_render(&mut self.app_state, system, display)
+            },
+            2 => {
+                WindowManager::static_state_render(&mut self.info_state, system, display)
             },
             _ => panic!("Unhandled state")
         };
@@ -92,6 +95,9 @@ impl WindowManager
             1 => {
                 WindowManager::scoped_state_input(&mut self.app_state, system, display, input)
             }
+            2 => {
+                WindowManager::static_state_input(&mut self.info_state, system, display, input)
+            },
             _ => panic!("Unhandled state")
         };
 

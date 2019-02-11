@@ -1,6 +1,6 @@
 //! Buffer
 
-use crate::ingress::ingress_manager::BUFF_SIZE;
+use crate::system::notification::BUFF_SIZE;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Type {
