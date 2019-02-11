@@ -10,12 +10,13 @@ use crate::system::bms::State as BmsState;
 use core::fmt::Write;
 
 use embedded_graphics::Drawing;
-use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x12;
 // use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
 
 use mwatch_kernel_api::InputEvent;
+
+use crate::application::seven_segment::SevenSegments;
 
 pub struct ClockState {
     buffer: String<U256>,
@@ -34,19 +35,22 @@ impl State for ClockState {
         let time = system.rtc().get_time();
         let soc = system.bms().soc();
         let bms_state = system.bms().state();
-        write!(
-            self.buffer,
-            "{:02}:{:02}:{:02}",
-            time.hours, time.minutes, time.seconds
-        )
-        .unwrap();
-        display.draw(
-            Font12x16::render_str(self.buffer.as_str())
-                .translate(Coord::new(10, 40))
-                .with_stroke(Some(0x2679_u16.into()))
-                .into_iter(),
-        );
-        self.buffer.clear(); // reset the buffer
+        {
+            let mut clock_digits = SevenSegments::new(display, 6, 40, 0x2C78);
+            write!(
+                self.buffer,
+                "{:02}{:02}",
+                time.hours, time.minutes
+            ).unwrap();
+            for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
+                clock_digits.digit(digit - b'0');
+                if idx == (self.buffer.len() / 2) - 1 { // put a colon between hours and mins
+                    clock_digits.colon();
+                }
+            }
+
+            self.buffer.clear(); // reset the buffer
+        }
                         // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
         write!(self.buffer, "{:02}%", soc).unwrap();
         display.draw(
