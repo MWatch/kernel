@@ -52,6 +52,8 @@ The TSC (touch sense controller) builtin to the `mwatch` provides three inputs. 
 
 ## [Documentation](https://docs.rs/mwatch_kernel/latest/mwatch_kernel/)
 
+## [Changelog](https://github.com/mwatch/kernel/blob/master/CHANGELOG.md)
+
 ## Building
 
 - Requires the `thumbv7em-none-eabi` target to be installed, use `rustup target add thumbv7em-none-eabi` to do so.
