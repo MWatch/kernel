@@ -7,6 +7,8 @@ use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
 use crate::system::system::System;
+use crate::system::syscall::Syscall;
+use core::str::FromStr;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
@@ -83,6 +85,11 @@ impl IngressManager {
                             Type::Notification => {
                                 info!("Adding notification from: {:?}", self.buffer);
                                 system.nm().add(&self.buffer).unwrap();
+                            },
+                            Type::Syscall => {
+                                info!("Parsing syscall from: {:?}", self.buffer);
+                                let syscall = Syscall::from_str(&self.buffer.as_str()).unwrap();
+                                syscall.execute().unwrap();
                             }
                             _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
@@ -155,9 +162,7 @@ impl IngressManager {
     fn determine_type(&mut self, type_byte: u8) -> Type {
         self.buffer.btype = match type_byte {
             b'N' => Type::Notification, /* NOTIFICATION i.e FB Msg */
-            b'W' => Type::Weather,      /* Weather packet */
-            b'D' => Type::Date,         /* Date packet */
-            b'M' => Type::Music,        /* Spotify controls */
+            b'S' => Type::Syscall,
             b'A' => Type::Application,  /* Load Application */
             _ => Type::Unknown,
         };
