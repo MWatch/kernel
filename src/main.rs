@@ -91,6 +91,7 @@ const APP: () = {
     static mut WMNG: WindowManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
+
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
@@ -98,14 +99,16 @@ const APP: () = {
     static mut BT_CONN: BluetoothConnectedPin = ();
     static mut SYSTEM: System = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
+    static mut LOGGER: Option<LoggerType> = None;
+
+    static mut TSC_EVENTS: u32 = 0;
+    static mut SLEEP_TIME: u32 = 0;
+
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
-
-    static mut SLEEP_TIME: u32 = 0;
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
-    static mut TSC_EVENTS: u32 = 0;
+    static mut RENDER_TIM: hal::timer::Timer<hal::stm32::TIM15> = ();
 
-    static mut LOGGER: Option<LoggerType> = None;
 
     #[link_section = ".fb_section.fb"]
     static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
@@ -288,7 +291,7 @@ const APP: () = {
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
         let amgr = ApplicationManager::new(ram);
 
-        let mut systick = Timer::tim2(device.TIM2, 4.hz(), clocks, &mut rcc.apb1r1);
+        let mut systick = Timer::tim2(device.TIM2, 2.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
 
         let mut cpu = Timer::tim7(
@@ -298,6 +301,14 @@ const APP: () = {
             &mut rcc.apb1r1,
         );
         cpu.listen(TimerEvent::TimeOut);
+
+        let mut tim15 = Timer::tim15(
+            device.TIM15,
+            4.hz(),
+            clocks,
+            &mut rcc.apb2,
+        );
+        tim15.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
         let mut input = Timer::tim6(device.TIM6, (2 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
@@ -322,6 +333,7 @@ const APP: () = {
         TIM6 = input;
         INPUT_MGR = input_mgr;
         WMNG = wmng;
+        RENDER_TIM = tim15;
     }
 
     #[idle(resources = [SLEEP_TIME])]
@@ -437,6 +449,13 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
+    #[interrupt(resources = [SYSTEM, RENDER_TIM], spawn = [WM])]
+    fn TIM1_BRK_TIM15 () {
+        let mut system = resources.SYSTEM;
+        spawn.WM().unwrap();
+        resources.RENDER_TIM.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+    }
+
     #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK], spawn = [WM])]
     fn TIM2() {
         let mut system = resources.SYSTEM;
@@ -445,7 +464,7 @@ const APP: () = {
         mgr.lock(|m| {
             m.process(&mut system);
         });
-        spawn.WM().unwrap();
+        // spawn.WM().unwrap();
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
