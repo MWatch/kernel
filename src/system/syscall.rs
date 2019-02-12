@@ -13,9 +13,13 @@ pub enum Error {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Syscall {
-    /// Set the date
+    /// Set the date - example: 
+    /// "D0/12/02/2019"
+    ///  day in week, date, month, year                         
     Date(Date),
-    /// Set the time
+    /// Set the time - example:
+    /// "T12:21:11"
+    /// hours, minutes, seconds
     Time(Time),
 }
 
