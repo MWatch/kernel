@@ -6,9 +6,7 @@ use crate::system::notification::BUFF_SIZE;
 pub enum Type {
     Unknown, /* NULL */
     Notification,
-    Weather,
-    Date,
-    Music,
+    Syscall,
     Application,
 }
 
@@ -53,6 +51,10 @@ impl Buffer {
     // Resets the index of the buffer, does not blank the memory
     pub fn clear(&mut self) {
         self.payload_idx = 0;
+    }
+
+    pub fn as_str(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.payload[0..self.payload_idx]) }
     }
 }
 

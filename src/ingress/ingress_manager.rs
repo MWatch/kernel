@@ -7,6 +7,8 @@ use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
 use crate::system::system::System;
+use crate::system::syscall::Syscall;
+use core::str::FromStr;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
@@ -83,8 +85,14 @@ impl IngressManager {
                             Type::Notification => {
                                 info!("Adding notification from: {:?}", self.buffer);
                                 system.nm().add(&self.buffer).unwrap();
+                            },
+                            Type::Syscall => {
+                                info!("Parsing syscall from: {:?}", self.buffer);
+                                match Syscall::from_str(self.buffer.as_str()) {
+                                    Ok(syscall) => syscall.execute(system),
+                                    Err(e) => error!("Failed to parse syscall {:?}", e)
+                                }
                             }
-                            _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
                     }
                     PAYLOAD => {
@@ -112,6 +120,7 @@ impl IngressManager {
                         match self.state {
                             State::Init => {
                                 self.buffer.btype = self.determine_type(byte);
+                                info!("New buffer of type {:?}", self.buffer.btype);
                                 match self.buffer.btype {
                                     Type::Unknown => self.state = State::Wait,
                                     _ => {} // carry on
@@ -155,9 +164,7 @@ impl IngressManager {
     fn determine_type(&mut self, type_byte: u8) -> Type {
         self.buffer.btype = match type_byte {
             b'N' => Type::Notification, /* NOTIFICATION i.e FB Msg */
-            b'W' => Type::Weather,      /* Weather packet */
-            b'D' => Type::Date,         /* Date packet */
-            b'M' => Type::Music,        /* Spotify controls */
+            b'S' => Type::Syscall,
             b'A' => Type::Application,  /* Load Application */
             _ => Type::Unknown,
         };
