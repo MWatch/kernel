@@ -301,7 +301,10 @@ const APP: () = {
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
         let mut input = Timer::tim6(device.TIM6, (3 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
-        input.listen(TimerEvent::TimeOut);
+        #[cfg(not(feature = "disable-input"))]
+        {
+            input.listen(TimerEvent::TimeOut);
+        }
 
         let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
 

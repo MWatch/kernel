@@ -88,7 +88,8 @@ impl IngressManager {
                             },
                             Type::Syscall => {
                                 info!("Parsing syscall from: {:?}", self.buffer);
-                                let syscall = Syscall::from_str(&self.buffer.as_str()).unwrap();
+                                let syscall = Syscall::from_str(self.buffer.clone().as_str()).unwrap();
+                                // let syscall = Syscall::from_str("T21:21:11").unwrap();
                                 syscall.execute().unwrap();
                             }
                             _ => panic!("Unhandled buffer in {:?}", self.state),
@@ -119,6 +120,7 @@ impl IngressManager {
                         match self.state {
                             State::Init => {
                                 self.buffer.btype = self.determine_type(byte);
+                                info!("New buffer of type {:?}", self.buffer.btype);
                                 match self.buffer.btype {
                                     Type::Unknown => self.state = State::Wait,
                                     _ => {} // carry on

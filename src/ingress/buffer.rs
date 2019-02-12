@@ -53,8 +53,8 @@ impl Buffer {
         self.payload_idx = 0;
     }
 
-    pub fn as_str(&mut self) -> &str {
-        unsafe { core::str::from_utf8_unchecked_mut(&mut self.payload) }
+    pub fn as_str(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.payload[0..self.payload_idx]) }
     }
 }
 
