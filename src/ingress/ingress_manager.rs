@@ -88,11 +88,11 @@ impl IngressManager {
                             },
                             Type::Syscall => {
                                 info!("Parsing syscall from: {:?}", self.buffer);
-                                let syscall = Syscall::from_str(self.buffer.clone().as_str()).unwrap();
-                                // let syscall = Syscall::from_str("T21:21:11").unwrap();
-                                syscall.execute().unwrap();
+                                match Syscall::from_str(self.buffer.as_str()) {
+                                    Ok(syscall) => syscall.execute(system),
+                                    Err(e) => error!("Failed to parse syscall {:?}", e)
+                                }
                             }
-                            _ => panic!("Unhandled buffer in {:?}", self.state),
                         }
                     }
                     PAYLOAD => {

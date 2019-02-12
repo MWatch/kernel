@@ -2,6 +2,7 @@
 use crate::hal::datetime::{Date, Time};
 use core::str::FromStr;
 use crate::hal::prelude::*;
+use crate::system::system::System;
 
 
 #[derive(Debug, Copy, Clone)]
@@ -16,8 +17,6 @@ pub enum Syscall {
     Date(Date),
     /// Set the time
     Time(Time),
-    /// Turn on or off the bluetooth
-    Bluetooth(bool),
 }
 
 impl FromStr for Syscall {
@@ -30,7 +29,6 @@ impl FromStr for Syscall {
         match t {
             b'D' => Ok(Syscall::Date(Syscall::date_from_str(s)?)),
             b'T' => Ok(Syscall::Time(Syscall::time_from_str(s)?)),
-            b'B' => Ok(Syscall::Date(Syscall::bluetooth_from_str(s)?)),
             _ => Err(Error::UnknownSyscall)
         }
     }
@@ -38,19 +36,31 @@ impl FromStr for Syscall {
 
 impl Syscall {
 
-    pub fn execute(self /* probs need system or something passed into it */) -> Result<(), Error> {
+    pub fn execute(self, system: &mut System) {
         match self {
-            Syscall::Date(_date) => {},
-            Syscall::Time(time) => {
-                info!("Setting the time to {:?}", time)
+            Syscall::Date(date) => {
+                info!("Setting the date to {:?}", date);
+                system.rtc().set_date(&date);
             },
-            Syscall::Bluetooth(_val) => {},
+            Syscall::Time(time) => {
+                info!("Setting the time to {:?}", time);
+                system.rtc().set_time(&time);
+            },
         }
-        Ok(())
     }
 
     pub fn date_from_str(s: &str) -> Result<Date, Error> {
-        unimplemented!();
+        let mut vals = [0u32; 4];
+        for (idx, number) in s.split("/").enumerate() {
+            match number.parse() {
+                Ok(val) => vals[idx] = val,
+                Err(e) => {
+                    error!("Failed to convert {} into a integer due to {:?}", number, e);
+                    return Err(Error::ParseError)
+                }
+            }
+        }
+        Ok(Date::new(vals[0].day(), vals[1].date(), vals[2].month(), vals[3].year()))
     }
 
     pub fn time_from_str(s: &str) -> Result<Time, Error> {
@@ -65,8 +75,5 @@ impl Syscall {
             }
         }
         Ok(Time::new(vals[0].hours(), vals[1].minutes(), vals[2].seconds(), false))
-    }
-    pub fn bluetooth_from_str(s: &str) -> Result<Date, Error> {
-        unimplemented!();
     }
 }
