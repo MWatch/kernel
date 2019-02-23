@@ -74,21 +74,21 @@ pub struct Context<'a> {
     pub log: extern "C" fn(&str) -> i32,
 }
 
-// is this safe?
+/// WARNING only safe if we guarentee the safety ourselves, i.e context doesn't live longer than the &mut references that it contains
 unsafe impl<'a> Send for Context<'a> {}
 
 #[repr(C)]
 /// The callbacks supplied by the OS.
 pub struct Table {
     /// Draw a colour on the display - x, y, colour
-    pub draw_pixel: extern "C" fn(*mut Context, u8, u8, u16) -> i32,
+    pub draw_pixel: unsafe extern "C" fn(*mut Context, u8, u8, u16) -> i32,
     /// Draw a colour on the display - x, y, colour
-    pub print: extern "C" fn(*mut Context, &str) -> i32,
+    pub print: unsafe extern "C" fn(*mut Context, &str) -> i32,
 }
 
 pub static CALLBACK_TABLE: Table = Table {
-    draw_pixel: draw_pixel,
-    print: print
+    draw_pixel,
+    print
 };
 
 impl<'a> Context<'a> {
@@ -105,13 +105,14 @@ impl<'a> Context<'a> {
 
 //TODO is this safe? It's only safe if when we launch an application we never draw anything else
 // i.e we give control of the display to the application
-pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
+/// Warning this assume control over the display, it is up to use to make sure the display is not borrowed by anything else
+pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
     let ctx = unsafe { &mut *context };
-    ctx.display.set_pixel(x as u32, y as u32, colour);
+    ctx.display.set_pixel(u32::from(x), u32::from(y), colour);
     0
 }
 
-pub extern "C" fn print(context: *mut Context, string: &str) -> i32 {
+pub unsafe extern "C" fn print(context: *mut Context, string: &str) -> i32 {
     let ctx = unsafe { &mut *context };
     (ctx.log)(string);
     0

@@ -24,7 +24,7 @@ impl<'a> SevenSegments<'a> {
             space:7,
             x,
             y,
-            colour: colour,
+            colour,
         }
     }
     

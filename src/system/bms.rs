@@ -23,9 +23,9 @@ impl BatteryManagement {
 
     pub fn new(bms: BatteryManagementIC, csp: ChargeStatusPin, ssp: StandbyStatusPin) -> Self {
         Self {
-            bms: bms,
-            csp: csp,
-            ssp: ssp,
+            bms,
+            csp,
+            ssp,
             state: State::Draining,
         }
     }
@@ -51,7 +51,7 @@ impl BatteryManagement {
 
 
 fn bodged_soc(raw: u16) -> u16 {
-    let rawf = raw as f32;
+    let rawf = f32::from(raw);
     let max = 94.0; // based on current battery
     let mut soc = ((rawf / max) * 100.0) as u16;
     if soc > 100 {

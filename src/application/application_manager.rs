@@ -72,10 +72,10 @@ impl ApplicationManager {
 
     pub fn verify(&mut self) -> Result<(), Error> {
         // reversed order becaused the bytes arrive in the reversed order
-        let digest = ((self.target_cs[0] as u32) << 24)
-            | ((self.target_cs[1] as u32) << 16)
-            | ((self.target_cs[2] as u32) << 8)
-            | ((self.target_cs[3] as u32) << 0);
+        let digest = ((u32::from(self.target_cs[0])) << 24)
+            | ((u32::from(self.target_cs[1])) << 16)
+            | ((u32::from(self.target_cs[2])) << 8)
+            | (u32::from(self.target_cs[3]));
         // trace!("{:?}", self.ram);
         info!("Digest: {}", digest);
         let ram_cs = self.ram.cs();
@@ -113,7 +113,7 @@ impl ApplicationManager {
     pub fn service(&mut self, display: &mut Ssd1351) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
         let mut ctx = Context {
-            display: display,
+            display,
             log: application_logger,
         };
         self.status.service_result = service_fn(&mut ctx);
@@ -127,7 +127,7 @@ impl ApplicationManager {
     pub fn service_input(&mut self, display: &mut Ssd1351, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            display: display,
+            display,
             log: application_logger,
         };
         let _ = input_fn(&mut ctx, input);
@@ -158,10 +158,10 @@ impl ApplicationManager {
     /// convert 4 byte slice into a const ptr
     fn fn_ptr_from_slice(bytes: &[u8]) -> *const () {
         assert!(bytes.len() == 4);
-        let addr = ((bytes[3] as u32) << 24)
-            | ((bytes[2] as u32) << 16)
-            | ((bytes[1] as u32) << 8)
-            | ((bytes[0] as u32) << 0);
+        let addr = ((u32::from(bytes[3])) << 24)
+            | ((u32::from(bytes[2])) << 16)
+            | ((u32::from(bytes[1])) << 8)
+            | (u32::from(bytes[0]));
         addr as *const ()
     }
 
@@ -181,7 +181,7 @@ impl Ram {
     /// Create a new Ram instance with the size of the provided buffer
     pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
-            ram: ram,
+            ram,
             ram_idx: 0,
         }
     }

@@ -52,28 +52,28 @@ impl InputManager {
         // tsc.listen(TscEvent::MaxCountError); // TODO
 
         Self {
-            tsc: tsc,
+            tsc,
             tsc_threshold: threshold,
             raw_vector: 0,
             last_vector: 0,
             pin_idx: 0,
-            left: left,
-            middle: middle,
-            right: right,
+            left,
+            middle,
+            right,
         }
     }
 
     pub fn update_input(&mut self, active: bool) {
         if active {
             self.raw_vector |= match self.pin_idx {
-                0 => 1 << 0,
+                0 => 1 ,
                 1 => 1 << 1,
                 2 => 1 << 2,
                 _ => panic!("Invalid pin index")
             };
         } else {
             self.raw_vector &= match self.pin_idx {
-                0 => !(1 << 0),
+                0 => !1,
                 1 => !(1 << 1),
                 2 => !(1 << 2),
                 _ => panic!("Invalid pin index")

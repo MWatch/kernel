@@ -157,7 +157,7 @@ const APP: () = {
         let mut pwr = device.PWR.constrain(&mut rcc.apb1r1);
         let rtc = Rtc::rtc(device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1, clocks);
 
-        let date = Date::new(1.day(), 07.date(), 10.month(), 2018.year());
+        let date = Date::new(1.day(), 7.date(), 10.month(), 2018.year());
         rtc.set_date(&date);
 
         /* Ssd1351 Display */
@@ -195,7 +195,7 @@ const APP: () = {
         let mut serial = Serial::usart2(
             device.USART2,
             (tx, rx),
-            115200.bps(),
+            115_200.bps(),
             clocks,
             &mut rcc.apb1r1,
         );
@@ -310,7 +310,7 @@ const APP: () = {
 
         let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
-        let wmng = WindowManager::new();
+        let wmng = WindowManager::default();
 
         let system = System::new(rtc, bms, nmgr, amgr);
 

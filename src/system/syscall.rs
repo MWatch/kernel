@@ -55,7 +55,7 @@ impl Syscall {
 
     pub fn date_from_str(s: &str) -> Result<Date, Error> {
         let mut vals = [0u32; 4];
-        for (idx, number) in s.split("/").enumerate() {
+        for (idx, number) in s.split('/').enumerate() {
             match number.parse() {
                 Ok(val) => vals[idx] = val,
                 Err(e) => {
@@ -69,7 +69,7 @@ impl Syscall {
 
     pub fn time_from_str(s: &str) -> Result<Time, Error> {
         let mut vals = [0u32; 3];
-        for (idx, number) in s.split(":").enumerate() {
+        for (idx, number) in s.split(':').enumerate() {
             match number.parse() {
                 Ok(val) => vals[idx] = val,
                 Err(e) => {

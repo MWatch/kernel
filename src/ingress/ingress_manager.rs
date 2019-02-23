@@ -121,9 +121,9 @@ impl IngressManager {
                             State::Init => {
                                 self.buffer.btype = self.determine_type(byte);
                                 info!("New buffer of type {:?}", self.buffer.btype);
-                                match self.buffer.btype {
-                                    Type::Unknown => self.state = State::Wait,
-                                    _ => {} // carry on
+                                if let Type::Unknown = self.buffer.btype {
+                                    error!("Buffer type is unknown. Going back to wait state.");
+                                    self.state = State::Wait 
                                 }
                             }
                             State::Payload => {

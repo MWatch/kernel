@@ -57,9 +57,8 @@ pub struct WindowManager
     app_state: AppState,
 }
 
-impl WindowManager
-{
-    pub fn new() -> Self {
+impl Default for WindowManager {
+    fn default() -> Self {
         Self {
             state_idx: 0,
             clock_state: ClockState::default(),
@@ -67,6 +66,10 @@ impl WindowManager
             app_state: AppState::default(),
         }
     }
+}
+
+impl WindowManager
+{
 
     pub fn process(&mut self, system: &mut System, display: &mut Ssd1351) {
         let signal = match self.state_idx {

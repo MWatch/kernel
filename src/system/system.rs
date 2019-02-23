@@ -18,10 +18,10 @@ pub struct System {
 impl System {
     pub fn new(rtc: Rtc, bms: BatteryManagement, nm: NotificationManager, am: ApplicationManager) -> Self {
         Self {
-            rtc: rtc,
-            bms: bms,
-            nm: nm,
-            am: am,
+            rtc,
+            bms,
+            nm,
+            am,
             stats: Stats::default(),
         }
     }
