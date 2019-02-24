@@ -77,9 +77,8 @@ impl ApplicationManager {
             | ((u32::from(self.target_cs[2])) << 8)
             | (u32::from(self.target_cs[3]));
         // trace!("{:?}", self.ram);
-        info!("Digest: {}", digest);
         let ram_cs = self.ram.cs();
-        info!("Current Ram Digest: {}", ram_cs);
+        info!("Current Ram Digest: {}, stored ram Digest: {}", ram_cs, digest);
         if digest == ram_cs {
             self.status.is_loaded = true;
             Ok(())
