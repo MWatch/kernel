@@ -1,3 +1,5 @@
+![travis](https://travis-ci.org/MWatch/kernel.svg?branch=master)
+
 # `mwatch`
 
 > An embedded smartwatch written with Rust, using the RTFM framework for multithreading.
