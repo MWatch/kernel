@@ -33,6 +33,7 @@ impl Default for ClockState {
 impl State for ClockState {
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         let time = system.rtc().get_time();
+        let date = system.rtc().get_date();
         let soc = system.bms().soc();
         let bms_state = system.bms().state();
         {
@@ -51,7 +52,14 @@ impl State for ClockState {
 
             self.buffer.clear(); // reset the buffer
         }
-                        // write!(buffer, "{:02}:{:02}:{:04}", date.date, date.month, date.year).unwrap();
+        write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
+        display.draw(
+            Font6x12::render_str(self.buffer.as_str())
+                .translate(Coord::new(30, 128 - 12))
+                .with_stroke(Some(0x2679_u16.into()))
+                .into_iter(),
+        );
+        self.buffer.clear();
         write!(self.buffer, "{:02}%", soc).unwrap();
         display.draw(
             Font6x12::render_str(self.buffer.as_str())
