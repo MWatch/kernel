@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
 #[macro_use]
 extern crate cortex_m;
@@ -10,6 +10,7 @@ extern crate embedded_graphics;
 extern crate heapless;
 extern crate hm11;
 extern crate max17048;
+#[cfg(not(test))]
 extern crate panic_semihosting;
 extern crate ssd1351;
 #[macro_use]
@@ -83,6 +84,9 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
 #[cfg(not(feature = "itm"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
+#[cfg(test)]
+const APP: () = ();
+#[cfg(not(test))]
 #[app(device = crate::hal::stm32)]
 const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();

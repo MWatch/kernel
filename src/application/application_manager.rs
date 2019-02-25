@@ -71,13 +71,8 @@ impl ApplicationManager {
     }
 
     pub fn verify(&mut self) -> Result<(), Error> {
-        // reversed order becaused the bytes arrive in the reversed order
-        let digest = ((u32::from(self.target_cs[0])) << 24)
-            | ((u32::from(self.target_cs[1])) << 16)
-            | ((u32::from(self.target_cs[2])) << 8)
-            | (u32::from(self.target_cs[3]));
-        // trace!("{:?}", self.ram);
-        let ram_cs = self.ram.cs();
+       let ram_cs = self.ram.cs();
+       let digest = ApplicationManager::digest_from_bytes(&self.target_cs); 
         info!("Current Ram Digest: {}, stored ram Digest: {}", ram_cs, digest);
         if digest == ram_cs {
             self.status.is_loaded = true;
@@ -86,6 +81,16 @@ impl ApplicationManager {
             error!("Application checksum failed!");
             Err(Error::ChecksumFailed)
         }
+    }
+
+    fn digest_from_bytes(bytes: &[u8]) -> u32 {
+        assert_eq!(bytes.len(), 4);
+        // bytes arrive in reversed order                
+        let digest = ((u32::from(bytes[0])) << 24)
+            | ((u32::from(bytes[1])) << 16)
+            | ((u32::from(bytes[2])) << 8)
+            | (u32::from(bytes[3]));
+        digest
     }
 
     pub fn execute(&mut self) -> Result<(), Error> {
@@ -156,7 +161,7 @@ impl ApplicationManager {
 
     /// convert 4 byte slice into a const ptr
     fn fn_ptr_from_slice(bytes: &[u8]) -> *const () {
-        assert!(bytes.len() == 4);
+        assert!(bytes.len() == 8);
         let addr = ((u32::from(bytes[3])) << 24)
             | ((u32::from(bytes[2])) << 16)
             | ((u32::from(bytes[1])) << 8)
@@ -219,4 +224,12 @@ extern "C" fn application_logger(string: &str) -> i32 {
     0
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
 
+    #[test]
+    fn checksum_parsing_works() {
+        assert_eq!(ApplicationManager::digest_from_bytes(&[50, 51, 54, 50, 65, 55, 54, 50]), 0x2362A762);
+    }
+}

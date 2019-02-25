@@ -63,7 +63,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "mwatch_kernel"
-test = false
+test = true 
 bench = false
 
 [profile.dev]
