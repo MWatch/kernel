@@ -8,6 +8,7 @@ use crate::application::states::{
                                     clock::ClockState,
                                     info::InfoState,
                                     app::AppState,
+                                    uop::UopState,
                                 };
 
 use mwatch_kernel_api::InputEvent;
@@ -55,6 +56,7 @@ pub struct WindowManager
     clock_state: ClockState,
     info_state: InfoState,
     app_state: AppState,
+    uop_state: UopState,
 }
 
 impl Default for WindowManager {
@@ -64,6 +66,7 @@ impl Default for WindowManager {
             clock_state: ClockState::default(),
             info_state: InfoState::default(),
             app_state: AppState::default(),
+            uop_state: UopState::default(),
         }
     }
 }
@@ -81,6 +84,9 @@ impl WindowManager
             },
             2 => {
                 WindowManager::static_state_render(&mut self.info_state, system, display)
+            },
+            3 => {
+                WindowManager::static_state_render(&mut self.uop_state, system, display)
             },
             _ => panic!("Unhandled state")
         };
@@ -101,6 +107,10 @@ impl WindowManager
             2 => {
                 WindowManager::static_state_input(&mut self.info_state, system, display, input)
             },
+            3  => {
+                WindowManager::static_state_input(&mut self.uop_state, system, display, input)
+            },
+
             _ => panic!("Unhandled state")
         };
 
