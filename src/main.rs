@@ -84,28 +84,36 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
 #[cfg(not(feature = "itm"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
-#[cfg(test)]
-const APP: () = ();
-#[cfg(not(test))]
-#[app(device = crate::hal::stm32)]
+#[cfg_attr(not(test), app(device = crate::hal::stm32))]
 const APP: () = {
+    #[cfg(not(test))]
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
+    #[cfg(not(test))]
     static mut IMNG: IngressManager = ();
+    #[cfg(not(test))]
     static mut INPUT_MGR: InputManager = ();
+    #[cfg(not(test))]
     static mut WMNG: WindowManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
+    #[cfg(not(test))]
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
+    #[cfg(not(test))]
     static mut DISPLAY: Ssd1351 = ();
 
+    #[cfg(not(test))]
     static mut BT_CONN: BluetoothConnectedPin = ();
+    #[cfg(not(test))]
     static mut SYSTEM: System = ();
     static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
+    #[cfg(not(test))]
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
+    #[cfg(not(test))]
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
     static mut SLEEP_TIME: u32 = 0;
+    #[cfg(not(test))]
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
     static mut TSC_EVENTS: u32 = 0;
 
@@ -115,7 +123,7 @@ const APP: () = {
     static mut FRAME_BUFFER: [u8; 32 * 1024] = [0u8; 32 * 1024];
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
-    
+    #[cfg(not(test))]
     #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
     fn init() {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
@@ -331,6 +339,7 @@ const APP: () = {
         WMNG = wmng;
     }
 
+    #[cfg(not(test))]
     #[idle(resources = [SLEEP_TIME])]
     fn idle() -> ! {
         loop {
@@ -345,6 +354,7 @@ const APP: () = {
         }
     }
 
+    #[cfg(not(test))]
     #[task(resources = [SYSTEM, DISPLAY, WMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
         let mut display = resources.DISPLAY;
@@ -353,6 +363,7 @@ const APP: () = {
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
+    #[cfg(not(test))]
     #[interrupt(resources = [CB, IMNG], priority = 2)]
     fn DMA1_CH6() {
         let mut mgr = resources.IMNG;
@@ -364,6 +375,7 @@ const APP: () = {
             .unwrap();
     }
 
+    #[cfg(not(test))]
     #[interrupt(resources = [TSC_EVENTS, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
         *resources.TSC_EVENTS += 1;
@@ -397,6 +409,7 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
+    #[cfg(not(test))]
     #[interrupt(resources = [CB, IMNG, USART2_RX], priority = 2)]
     fn USART2() {
         let mut mgr = resources.IMNG;
@@ -414,6 +427,7 @@ const APP: () = {
         }
     }
 
+    #[cfg(not(test))]
     #[interrupt(resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
     fn TIM6_DACUNDER() {
         match resources.INPUT_MGR.start_new() {
@@ -427,6 +441,7 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
+    #[cfg(not(test))]
     #[interrupt(resources = [TIM7, SLEEP_TIME, TSC_EVENTS, SYSTEM])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
@@ -444,6 +459,7 @@ const APP: () = {
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
+    #[cfg(not(test))]
     #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK], spawn = [WM])]
     fn TIM2() {
         let mut system = resources.SYSTEM;
@@ -456,6 +472,7 @@ const APP: () = {
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
+    #[cfg(not(test))]
     #[task(resources = [DISPLAY, SYSTEM, BT_CONN, WMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
