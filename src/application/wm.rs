@@ -48,7 +48,7 @@ pub trait ScopedState: State {
     fn stop(&mut self, system: &mut System);
 }
 
-const MAX_STATES: i8 = 3;
+const MAX_STATES: i8 = 4;
 
 pub struct WindowManager 
 {
