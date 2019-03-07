@@ -106,13 +106,13 @@ impl<'a> Context<'a> {
 //TODO is this safe? It's only safe if when we launch an application we never draw anything else
 // i.e we give control of the display to the application
 /// Warning this assume control over the display, it is up to use to make sure the display is not borrowed by anything else
-pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
+pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
     let ctx = unsafe { &mut *context };
     ctx.display.set_pixel(u32::from(x), u32::from(y), colour);
     0
 }
 
-pub unsafe extern "C" fn print(context: *mut Context, string: &str) -> i32 {
+pub extern "C" fn print(context: *mut Context, string: &str) -> i32 {
     let ctx = unsafe { &mut *context };
     (ctx.log)(string);
     0

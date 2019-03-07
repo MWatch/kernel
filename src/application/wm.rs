@@ -9,6 +9,7 @@ use crate::application::states::{
                                     info::InfoState,
                                     app::AppState,
                                     uop::UopState,
+                                    mwatch::MWState,
                                 };
 
 use mwatch_kernel_api::InputEvent;
@@ -48,7 +49,7 @@ pub trait ScopedState: State {
     fn stop(&mut self, system: &mut System);
 }
 
-const MAX_STATES: i8 = 4;
+const MAX_STATES: i8 = 5;
 
 pub struct WindowManager 
 {
@@ -57,6 +58,7 @@ pub struct WindowManager
     info_state: InfoState,
     app_state: AppState,
     uop_state: UopState,
+    mwatch_state: MWState,
 }
 
 impl Default for WindowManager {
@@ -67,6 +69,7 @@ impl Default for WindowManager {
             info_state: InfoState::default(),
             app_state: AppState::default(),
             uop_state: UopState::default(),
+            mwatch_state: MWState::default(),
         }
     }
 }
@@ -86,6 +89,9 @@ impl WindowManager
                 WindowManager::static_state_render(&mut self.info_state, system, display)
             },
             3 => {
+                WindowManager::static_state_render(&mut self.mwatch_state, system, display)
+            },
+            4 => {
                 WindowManager::static_state_render(&mut self.uop_state, system, display)
             },
             _ => panic!("Unhandled state")
@@ -108,6 +114,9 @@ impl WindowManager
                 WindowManager::static_state_input(&mut self.info_state, system, display, input)
             },
             3  => {
+                WindowManager::static_state_input(&mut self.mwatch_state, system, display, input)
+            },
+            4  => {
                 WindowManager::static_state_input(&mut self.uop_state, system, display, input)
             },
 

@@ -113,7 +113,7 @@ const APP: () = {
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
     
     #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
-    fn init() {
+    fn init() -> init::LateResources {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
         let mut flash = device.FLASH.constrain();
@@ -314,17 +314,20 @@ const APP: () = {
 
         let system = System::new(rtc, bms, nmgr, amgr);
 
-        USART2_RX = rx;
-        CB = rx.circ_read(channels.6, buffer);
-        IMNG = imgr;
-        DISPLAY = display;
-        SYSTEM = system;
-        BT_CONN = bt_conn;
-        SYS_TICK = systick;
-        TIM7 = cpu;
-        TIM6 = input;
-        INPUT_MGR = input_mgr;
-        WMNG = wmng;
+        // Resources that need to be initialized are passed back here
+        init::LateResources {
+            CB: rx.circ_read(channels.6, buffer),
+            USART2_RX: rx,
+            IMNG: imgr,
+            DISPLAY: display,
+            SYSTEM: system,
+            BT_CONN: bt_conn,
+            SYS_TICK: systick,
+            TIM7: cpu,
+            TIM6: input,
+            INPUT_MGR: input_mgr,
+            WMNG: wmng,
+        }
     }
 
     #[idle(resources = [SLEEP_TIME])]

@@ -48,13 +48,19 @@ impl State for AppState {
 
 impl ScopedState for AppState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn preview(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         self.buffer.clear();
-        write!(self.buffer, "Open App").unwrap();
-        display.draw(
-            Font6x12::render_str(self.buffer.as_str())
-                .translate(Coord::new(24, 24))
-                .with_stroke(Some(0xF818_u16.into()))
+        let status = system.am().status();
+        if status.is_loaded {
+            write!(self.buffer, "Open loaded App").unwrap();
+        } else {
+            write!(self.buffer, "No App loaded!").unwrap();
+        }
+
+        let text = Font6x12::render_str(self.buffer.as_str());
+        display.draw(text
+                .translate(Coord::new(64 - text.size().0 as i32 / 2, 24))
+                .with_stroke(Some(0x02D4_u16.into()))
                 .into_iter(),
         );
         None
