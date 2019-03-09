@@ -46,7 +46,7 @@ impl InputManager {
         for _ in 0..NUM_SAMPLES {
             baseline += tsc.acquire(&mut left).unwrap();
         }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 152; // 90 //TODO revert this
+        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
 
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
