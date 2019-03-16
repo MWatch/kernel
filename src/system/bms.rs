@@ -2,7 +2,7 @@
 //! 
 //! 
 
-use crate::{BatteryManagementIC, ChargeStatusPin, StandbyStatusPin};
+use crate::types::{BatteryManagementIC, ChargeStatusPin, StandbyStatusPin};
 use stm32l4xx_hal::prelude::*;
 
 #[derive(Debug, Clone, Copy)]

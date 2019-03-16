@@ -2,7 +2,7 @@
 //!
 //! Handles app switching, between built in apps and custom apps
 
-use crate::Ssd1351;
+use crate::types::Ssd1351;
 use crate::system::system::System;
 use crate::application::states::{
                                     clock::ClockState,
@@ -12,7 +12,7 @@ use crate::application::states::{
                                     mwatch::MWState,
                                 };
 
-use mwatch_kernel_api::InputEvent;
+use crate::types::InputEvent;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Signal {

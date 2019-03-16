@@ -1,7 +1,7 @@
 
 
 use crate::application::wm::{State, StaticState, Signal};
-use crate::Ssd1351;
+use crate::types::Ssd1351;
 use crate::system::system::System;
 
 use heapless::String;
@@ -12,7 +12,7 @@ use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
-use mwatch_kernel_api::InputEvent;
+use crate::types::InputEvent;
 
 pub struct InfoState {
     buffer: String<U256>,

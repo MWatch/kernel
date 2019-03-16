@@ -3,4 +3,5 @@ pub mod system;
 pub mod bms;
 pub mod notification;
 pub mod syscall;
+pub mod types;
 

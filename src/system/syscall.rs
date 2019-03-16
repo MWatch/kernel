@@ -1,7 +1,7 @@
 
-use crate::hal::datetime::{Date, Time};
+use crate::types::hal::datetime::{Date, Time};
 use core::str::FromStr;
-use crate::hal::prelude::*;
+use crate::types::hal::prelude::*;
 use crate::system::system::System;
 
 
