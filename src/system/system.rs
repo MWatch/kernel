@@ -65,7 +65,7 @@ impl System {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stats {
     pub cpu_usage: f32,
     pub tsc_events: u32

@@ -81,3 +81,50 @@ impl Syscall {
         Ok(Time::new(vals[0].hours(), vals[1].minutes(), vals[2].seconds(), false))
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn syscall_date_works() {
+        let actual = Date::new(1.day(), 1.date(), 4.month(), 2019.year());
+
+        let working = Syscall::from_str("D01/01/04/2019").unwrap();
+        match working {
+            Syscall::Date(d) => {
+                assert_eq!(actual, d);
+            }
+            _ => panic!("wrong syscall type")
+        }
+
+        let wrong = Syscall::from_str("D02/01/04/2019").unwrap();
+        match wrong {
+            Syscall::Date(d) => {
+                assert_ne!(actual, d);
+            }
+            _ => panic!("wrong syscall type")
+        }
+    }
+
+    #[test]
+    fn syscall_time_works() {
+        let actual = Time::new(0.hours(), 0.minutes(), 0.seconds(), false);
+
+        let working = Syscall::from_str("T00:00:00").unwrap();
+        match working {
+            Syscall::Time(t) => {
+                assert_eq!(actual, t);
+            }
+            _ => panic!("wrong syscall type")
+        }
+
+        let working = Syscall::from_str("T01:00:00").unwrap();
+        match working {
+            Syscall::Time(t) => {
+                assert_ne!(actual, t);
+            }
+            _ => panic!("wrong syscall type")
+        }
+    }
+}

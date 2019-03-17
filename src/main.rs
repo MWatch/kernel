@@ -3,7 +3,9 @@
 
 
 extern crate rtfm;
-// extern crate panic_itm;
+#[cfg(feature = "itm")]
+extern crate panic_itm;
+#[cfg(not(feature = "itm"))]
 extern crate panic_semihosting;
 #[macro_use]
 extern crate log;
@@ -32,8 +34,6 @@ use crate::hal::tsc::{
 
 use crate::rt::{exception, ExceptionFrame};
 
-use heapless::consts::*;
-use heapless::spsc::Queue;
 use rtfm::app;
 
 use ssd1351::builder::Builder;
@@ -48,17 +48,15 @@ use hm11::Hm11;
 use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
-use crate::system::notification::{BUFF_COUNT, Notification, NotificationManager};
 
 use crate::application::application_manager::ApplicationManager;
 use crate::application::display_manager::DisplayManager;
-
 use crate::system::{ 
     input::InputManager,
     bms::BatteryManagement,
-    system::System
+    system::System,
+    notification::NotificationManager
 };
-
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -79,9 +77,6 @@ const APP: () = {
     static mut IMNG: IngressManager = ();
     static mut INPUT_MGR: InputManager = ();
     static mut DMNG: DisplayManager = ();
-    static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
-        [Notification::default(); crate::BUFF_COUNT];
-    static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
     static mut USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2> = ();
     static mut DISPLAY: Ssd1351 = ();
 
@@ -102,7 +97,7 @@ const APP: () = {
     #[link_section = ".app_section.data"]
     static mut APPLICATION_RAM: [u8; 16 * 1024] = [0u8; 16 * 1024];
     
-    #[init(resources = [RB, NOTIFICATIONS, DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
+    #[init(resources = [DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
     fn init() -> init::LateResources {
         core.DCB.enable_trace(); // required for DWT cycle clounter to work when not connected to the debugger
         core.DWT.enable_cycle_counter();
@@ -248,16 +243,11 @@ const APP: () = {
 
         let bms = BatteryManagement::new(max17048, chrg, stdby);
 
-        /* Static RB for Msg recieving */
-        *resources.RB = Some(Queue::new());
-        let rb: &'static mut Queue<u8, U512> = resources.RB.as_mut().unwrap();
-        let buffers: &'static mut [Notification; crate::BUFF_COUNT] = resources.NOTIFICATIONS;
-
         // Give the RB to the ingress manager
-        let imgr = IngressManager::new(rb);
+        let imgr = IngressManager::new();
 
         /* Pass messages to the Message Manager */
-        let nmgr = NotificationManager::new(buffers);
+        let nmgr = NotificationManager::new();
 
         /* Give the application manager its ram */
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
@@ -314,7 +304,6 @@ const APP: () = {
                 let after = DWT::get_cycle_count();
                 *sleep += after.wrapping_sub(before);
             });
-
             // interrupts are serviced here
         }
     }

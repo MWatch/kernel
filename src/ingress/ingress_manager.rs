@@ -1,6 +1,3 @@
-extern crate cortex_m;
-extern crate heapless;
-extern crate rtfm;
 
 use crate::ingress::buffer::{Buffer, Type};
 use heapless::consts::*;
@@ -25,17 +22,17 @@ const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
     buffer: Buffer,
-    rb: &'static mut Queue<u8, U512>,
+    rb: Queue<u8, U512>,
     state: State,
     hex_chars: [u8; 2],
     hex_idx: usize,
 }
 
 impl IngressManager {
-    pub fn new(ring: &'static mut Queue<u8, U512>) -> Self {
+    pub fn new() -> Self {
         IngressManager {
             buffer: Buffer::default(),
-            rb: ring,
+            rb: Queue::new(),
             state: State::Init,
             hex_chars: [0u8; 2],
             hex_idx: 0,
@@ -51,10 +48,35 @@ impl IngressManager {
         }
     }
 
-    pub fn process(
-        &mut self,
-        system: &mut System
-    ) {
+    pub fn process(&mut self, system: &mut System) {
+        match self.run_state_machine(system) {
+            Some(buffer_type) => {
+                match buffer_type {
+                    Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
+                    Type::Application => {
+                        match system.am().verify() {
+                            Ok(_) => {}
+                            Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
+                        }
+                    }
+                    Type::Notification => {
+                        info!("Adding notification from: {:?}", self.buffer);
+                        system.nm().add(&self.buffer).unwrap();
+                    },
+                    Type::Syscall => {
+                        info!("Parsing syscall from: {:?}", self.buffer);
+                        match Syscall::from_str(self.buffer.as_str()) {
+                            Ok(syscall) => syscall.execute(system),
+                            Err(e) => error!("Failed to parse syscall {:?}", e)
+                        }
+                    }
+                }
+            },
+            None => {}
+        }
+    }
+
+    fn run_state_machine(&mut self, system: &mut System) -> Option<Type> {
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
@@ -71,29 +93,7 @@ impl IngressManager {
                         /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.state = State::Wait;
-                        match self.buffer.btype {
-                            Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
-                            Type::Application => {
-                                match system.am().verify() {
-                                    Ok(_) =>
-                                    {
-                                        
-                                    }
-                                    Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
-                                }
-                            }
-                            Type::Notification => {
-                                info!("Adding notification from: {:?}", self.buffer);
-                                system.nm().add(&self.buffer).unwrap();
-                            },
-                            Type::Syscall => {
-                                info!("Parsing syscall from: {:?}", self.buffer);
-                                match Syscall::from_str(self.buffer.as_str()) {
-                                    Ok(syscall) => syscall.execute(system),
-                                    Err(e) => error!("Failed to parse syscall {:?}", e)
-                                }
-                            }
-                        }
+                        return Some(self.buffer.btype);
                     }
                     PAYLOAD => {
                         match self.buffer.btype {
@@ -159,6 +159,7 @@ impl IngressManager {
                 }
             }
         }
+        None
     }
 
     fn determine_type(&mut self, type_byte: u8) -> Type {
@@ -183,3 +184,27 @@ impl IngressManager {
         }
     }
 }
+
+
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+//     use heapless::consts::*;
+//     use heapless::spsc::Queue;
+//     #[test]
+//     fn ingress_syscall() {
+//         let system = {
+//             System::new(rtc, bms, nmgr, amgr)
+//         };
+//         let mut imgr = IngressManager::new();
+//         let mut data = vec![STX, b'S', PAYLOAD];
+//         for byte in "T00:00:00".bytes() {
+//             data.push(byte);
+//         }
+//         data.push(ETX);
+//         imgr.write(&data);
+//         imgr.process();
+
+//         assert_eq!(imgr.state, State::Wait);
+//     }
+// }

@@ -45,14 +45,14 @@ pub enum NotificationError {
 }
 
 pub struct NotificationManager {
-    pool: &'static mut [Notification; BUFF_COUNT],
+    pool: [Notification; BUFF_COUNT],
     idx: usize,
 }
 
 impl NotificationManager {
-    pub fn new(notifications: &'static mut [Notification; BUFF_COUNT]) -> NotificationManager {
+    pub fn new() -> NotificationManager {
         NotificationManager {
-            pool: notifications,
+            pool: [Notification::default(); BUFF_COUNT],
             idx: 0,
         }
     }
@@ -84,3 +84,5 @@ impl NotificationManager {
         Ok(())
     }
 }
+
+// TODO testing of parsing
