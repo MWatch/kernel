@@ -1,8 +1,8 @@
 //! Input
 
-use mwatch_kernel_api::InputEvent;
-use crate::{LeftButton, MiddleButton, RightButton, TouchSenseController};
-use crate::hal::tsc::Event as TscEvent;
+use crate::types::InputEvent;
+use crate::types::{LeftButton, MiddleButton, RightButton, TouchSenseController};
+use crate::types::hal::tsc::Event as TscEvent;
 
 pub const LEFT: u8 = 1;
 pub const MIDDLE: u8 = 2;

@@ -5,22 +5,18 @@
 extern crate cortex_m;
 extern crate rtfm;
 // extern crate panic_itm;
-extern crate cortex_m_rt as rt;
-extern crate embedded_graphics;
-extern crate heapless;
-extern crate hm11;
-extern crate max17048;
 extern crate panic_semihosting;
-extern crate ssd1351;
 #[macro_use]
 extern crate log;
 
-mod application;
-mod ingress;
-mod system;
+use cortex_m_rt as rt;
+use mwatch_kernel_api::types::{hal, BatteryManagementIC, LeftButton, MiddleButton, 
+                                RightButton, Ssd1351, InputEvent, BluetoothConnectedPin,
+                                LoggerType};
+use mwatch_kernel_api::system;
+use mwatch_kernel_api::application;
+use mwatch_kernel_api::ingress;
 
-
-use mwatch_kernel_api::{hal, BatteryManagementIC, LeftButton, MiddleButton, RightButton, Ssd1351, InputEvent};
 use crate::hal::datetime::Date;
 use crate::hal::delay::Delay;
 use crate::hal::dma::{dma1, CircBuffer, Event};
@@ -65,14 +61,6 @@ use crate::application::wm::WindowManager;
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
 use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
-
-
-type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
-
-type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
-type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
-type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
-type BluetoothConnectedPin = hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>>;
 
 const DMA_HAL_SIZE: usize = 64;
 const SYS_CLK: u32 = 16_000_000;

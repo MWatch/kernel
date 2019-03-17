@@ -1,10 +1,10 @@
 //! System info state - debugging
 
 use crate::application::wm::{State, ScopedState, Signal};
-use crate::Ssd1351;
+use crate::types::Ssd1351;
 use crate::system::system::System;
 
-use mwatch_kernel_api::InputEvent;
+use crate::types::InputEvent;
 
 use heapless::String;
 use heapless::consts::*;

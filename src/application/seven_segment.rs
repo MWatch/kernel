@@ -1,7 +1,7 @@
 use embedded_graphics::coord::Coord;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::Rect;
-use crate::Ssd1351;
+use crate::types::Ssd1351;
 
 pub struct SevenSegments<'a> {
     display: &'a mut Ssd1351,
