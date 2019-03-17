@@ -54,17 +54,21 @@ use crate::application::display_manager::DisplayManager;
 use crate::system::{ 
     input::InputManager,
     bms::BatteryManagement,
-    system::System,
-    notification::NotificationManager
+    system::{
+        System,
+        CPU_USAGE_POLL_HZ,
+        TSC_HZ,
+        SYSTICK_HZ,
+        DMA_HALF_BYTES,
+        SPI_MHZ,
+        I2C_KHZ,
+    },
+    notification::NotificationManager,
 };
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
 use cortex_m_log::printer::itm::InterruptSync as InterruptSyncItm;
-
-const DMA_HAL_SIZE: usize = 64;
-const SYS_CLK: u32 = 16_000_000;
-const CPU_USAGE_POLL_FREQ: u32 = 1; // hz
 
 #[cfg(feature = "itm")]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -73,7 +77,7 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
 #[app(device = crate::hal::stm32)]
 const APP: () = {
-    static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
+    static mut CB: CircBuffer<&'static mut [[u8; DMA_HALF_BYTES]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
     static mut INPUT_MGR: InputManager = ();
     static mut DMNG: DisplayManager = ();
@@ -82,13 +86,15 @@ const APP: () = {
 
     static mut BT_CONN: BluetoothConnectedPin = ();
     static mut SYSTEM: System = ();
-    static mut DMA_BUFFER: [[u8; crate::DMA_HAL_SIZE]; 2] = [[0; crate::DMA_HAL_SIZE]; 2];
+    static mut DMA_BUFFER: [[u8; crate::DMA_HALF_BYTES]; 2] = [[0; crate::DMA_HALF_BYTES]; 2];
     static mut SYS_TICK: hal::timer::Timer<hal::stm32::TIM2> = ();
     static mut TIM6: hal::timer::Timer<hal::stm32::TIM6> = ();
 
     static mut SLEEP_TIME: u32 = 0;
     static mut TIM7: hal::timer::Timer<hal::stm32::TIM7> = ();
     static mut TSC_EVENTS: u32 = 0;
+    static mut IDLE_COUNT: u32 = 0;
+    static mut LAST_BATT_PERCENT: u16 = 0;
 
     static mut LOGGER: Option<LoggerType> = None;
 
@@ -148,7 +154,7 @@ const APP: () = {
             device.SPI1,
             (sck, miso, mosi),
             SSD1351_SPI_MODE,
-            8.mhz(),
+            SPI_MHZ.mhz(),
             clocks,
             &mut rcc.apb2,
         );
@@ -237,7 +243,7 @@ const APP: () = {
         sda.internal_pull_up(&mut gpioa.pupdr, true);
         let sda = sda.into_af4(&mut gpioa.moder, &mut gpioa.afrh);
 
-        let i2c = I2c::i2c1(device.I2C1, (scl, sda), 100.khz(), clocks, &mut rcc.apb1r1);
+        let i2c = I2c::i2c1(device.I2C1, (scl, sda), I2C_KHZ.khz(), clocks, &mut rcc.apb1r1);
 
         let max17048 = Max17048::new(i2c);
 
@@ -253,25 +259,25 @@ const APP: () = {
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
         let amgr = ApplicationManager::new(ram);
 
-        let mut systick = Timer::tim2(device.TIM2, 3.hz(), clocks, &mut rcc.apb1r1);
+        let mut systick = Timer::tim2(device.TIM2, SYSTICK_HZ.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
 
         let mut cpu = Timer::tim7(
             device.TIM7,
-            CPU_USAGE_POLL_FREQ.hz(),
+            CPU_USAGE_POLL_HZ.hz(),
             clocks,
             &mut rcc.apb1r1,
         );
         cpu.listen(TimerEvent::TimeOut);
 
         // input 'thread' poll the touch buttons - could we impl a proper hardare solution with the TSC?
-        let mut input = Timer::tim6(device.TIM6, (3 * 3).hz(), clocks, &mut rcc.apb1r1); // hz * button count
+        let mut input = Timer::tim6(device.TIM6, TSC_HZ.hz(), clocks, &mut rcc.apb1r1); // hz * button count
         #[cfg(not(feature = "disable-input"))]
         {
             input.listen(TimerEvent::TimeOut);
         }
 
-        let buffer: &'static mut [[u8; crate::DMA_HAL_SIZE]; 2] = resources.DMA_BUFFER;
+        let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
 
         let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
@@ -327,7 +333,7 @@ const APP: () = {
             .unwrap();
     }
 
-    #[interrupt(resources = [TSC_EVENTS, INPUT_MGR], priority = 2, spawn = [HANDLE_INPUT])]
+    #[interrupt(resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 2, spawn = [HANDLE_INPUT])]
     fn TSC() {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
@@ -335,6 +341,7 @@ const APP: () = {
             Ok(_) => {
                 match input_mgr.output() {
                     Ok(input) => {
+                        *resources.IDLE_COUNT = 0; // we are no longer idle
                         info!("Output => {:?}", input);
                         match spawn.HANDLE_INPUT(input) {
                             Ok(_) => {},
@@ -390,11 +397,11 @@ const APP: () = {
         resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [TIM7, SLEEP_TIME, TSC_EVENTS, SYSTEM])]
+    #[interrupt(resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM])]
     fn TIM7() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let mut system = resources.SYSTEM;
-        let total = SYS_CLK / CPU_USAGE_POLL_FREQ;
+        let total = SYSTICK_HZ / CPU_USAGE_POLL_HZ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
@@ -404,14 +411,30 @@ const APP: () = {
             value
         });
         system.ss().cpu_usage = cpu;
+
+        let current_soc = system.bms().soc();
+        let last_soc = *resources.LAST_BATT_PERCENT;
+        if current_soc != last_soc {
+            info!("SoC has {} to {}", if current_soc < last_soc {
+                "fallen"
+            } else {
+                "risen"
+            }, current_soc);
+            *resources.LAST_BATT_PERCENT = current_soc;
+        }
         resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK], spawn = [WM])]
+    #[interrupt(resources = [IMNG, SYSTEM, SYS_TICK, IDLE_COUNT], spawn = [WM])]
     fn TIM2() {
         let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
         system.bms().process();
+        system.ss().idle_count = resources.IDLE_COUNT.lock(|val| {
+            let value = *val;
+            *val += 1; // append to idle count
+            value
+        });
         mgr.lock(|m| {
             m.process(&mut system);
         });
@@ -423,15 +446,25 @@ const APP: () = {
     fn WM() {
         let mut display = resources.DISPLAY;
         let mut dmng = resources.DMNG;
-        let cs = crc::crc16::checksum_x25(display.fb());
-        trace!("WM - CS before: {}", cs);
-        display.clear(false);
-        dmng.process(&mut resources.SYSTEM, &mut display);
-        let cs_after = crc::crc16::checksum_x25(display.fb());
-        trace!("WM - CS after: {}", cs_after);
-        if cs != cs_after {
+        #[cfg(feature = "crc-fb")]
+        {
+            let cs = crc::crc16::checksum_x25(display.fb());
+            trace!("WM - CS before: {}", cs);
+            display.clear(false);
+            dmng.process(&mut resources.SYSTEM, &mut display);
+            let cs_after = crc::crc16::checksum_x25(display.fb());
+            trace!("WM - CS after: {}", cs_after);
+            if cs != cs_after {
+                display.flush();
+            }
+        }
+        #[cfg(not(feature = "crc-fb"))]
+        {
+            display.clear(false);
+            dmng.process(&mut resources.SYSTEM, &mut display);
             display.flush();
         }
+        
     }
 
     // Interrupt handlers used to dispatch software tasks

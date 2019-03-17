@@ -35,56 +35,57 @@ impl State for ClockState {
         let date = system.rtc().get_date();
         let soc = system.bms().soc();
         let bms_state = system.bms().state();
-        {
-            let mut clock_digits = SevenSegments::new(display, 6, 40, 0x2C78);
-            write!(
-                self.buffer,
-                "{:02}{:02}",
-                time.hours, time.minutes
-            ).unwrap();
-            for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
-                clock_digits.digit(digit - b'0');
-                if idx == (self.buffer.len() / 2) - 1 { // put a colon between hours and mins
-                    clock_digits.colon();
-                }
+        let mut clock_digits = SevenSegments::new(display, 18, 48, 0x2C78);
+        write!(
+            self.buffer,
+            "{:02}{:02}",
+            time.hours, time.minutes
+        ).unwrap();
+        for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
+            clock_digits.digit(digit - b'0');
+            if idx == (self.buffer.len() / 2) - 1 { // put a colon between hours and mins
+                clock_digits.colon();
             }
+        }
 
+        self.buffer.clear(); // reset the buffer
+        if !system.ss().is_idle() {
+            write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
+            display.draw(
+                Font6x12::render_str(self.buffer.as_str())
+                    .translate(Coord::new(30, 128 - 12))
+                    .with_stroke(Some(0x2C78_u16.into()))
+                    .into_iter(),
+            );
+            self.buffer.clear();
+            write!(self.buffer, "{:02}%", soc).unwrap();
+            display.draw(
+                Font6x12::render_str(self.buffer.as_str())
+                    .translate(Coord::new(110, 12))
+                    .with_stroke(Some(0x2C78_u16.into()))
+                    .into_iter(),
+            );
+            self.buffer.clear(); // reset the buffer
+            match bms_state {
+                BmsState::Charging => {
+                    write!(self.buffer, "CHARGING").unwrap();
+                },
+                BmsState::Draining => {
+                    write!(self.buffer, "DRAINING").unwrap();
+                },
+                BmsState::Charged => {
+                    write!(self.buffer, "DONE").unwrap();
+                },
+            }
+            display.draw(
+                Font6x12::render_str(self.buffer.as_str())
+                    .translate(Coord::new(0, 12))
+                    .with_stroke(Some(0x2C78_u16.into()))
+                    .into_iter(),
+            );
             self.buffer.clear(); // reset the buffer
         }
-        write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
-        display.draw(
-            Font6x12::render_str(self.buffer.as_str())
-                .translate(Coord::new(30, 128 - 12))
-                .with_stroke(Some(0x2679_u16.into()))
-                .into_iter(),
-        );
-        self.buffer.clear();
-        write!(self.buffer, "{:02}%", soc).unwrap();
-        display.draw(
-            Font6x12::render_str(self.buffer.as_str())
-                .translate(Coord::new(110, 12))
-                .with_stroke(Some(0x2679_u16.into()))
-                .into_iter(),
-        );
-        self.buffer.clear(); // reset the buffer
-        match bms_state {
-            BmsState::Charging => {
-                write!(self.buffer, "CHARGING").unwrap();
-            },
-            BmsState::Draining => {
-                write!(self.buffer, "DRAINING").unwrap();
-            },
-            BmsState::Charged => {
-                write!(self.buffer, "DONE").unwrap();
-            },
-        }
-        display.draw(
-            Font6x12::render_str(self.buffer.as_str())
-                .translate(Coord::new(0, 12))
-                .with_stroke(Some(0x2679_u16.into()))
-                .into_iter(),
-        );
-        self.buffer.clear(); // reset the buffer
+        
         None
     }
 
@@ -121,10 +122,10 @@ mod seven_segment {
         pub fn new(display: &'a mut Ssd1351, x: i32, y: i32, colour: u16) -> Self {
             Self {
                 display,
-                width: 20,
-                height: 50,
-                thickness: 6,
-                space:7,
+                width: 16,
+                height: 35,
+                thickness: 4,
+                space:5,
                 x,
                 y,
                 colour,

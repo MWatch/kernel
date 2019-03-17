@@ -56,6 +56,7 @@ default-features = false
 default = []
 itm = []
 disable-input = []
+crc-fb = []
 
 [lib]
 name = "mwatch_kernel_api"

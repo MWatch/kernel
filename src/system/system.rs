@@ -7,6 +7,19 @@ use crate::system::bms::BatteryManagement;
 use crate::system::notification::NotificationManager;
 use crate::application::application_manager::ApplicationManager;
 
+
+pub const DMA_HALF_BYTES: usize = 64;
+
+pub const CPU_USAGE_POLL_HZ: u32 = 1; // hz
+pub const SYSTICK_HZ: u32 = 3; // hz
+pub const TSC_HZ: u32 = (3 * 3); // 3 polls per second (for 3 inputs)
+
+pub const SYS_CLK_HZ: u32 = 16_000_000;
+pub const SPI_MHZ: u32 = SYS_CLK_HZ / 2_000_000; // spi is always half of sysclock
+pub const I2C_KHZ: u32 = 100;
+
+pub const IDLE_TIMEOUT_SECONDS: u32 = 15;
+
 pub struct System {
     rtc: Rtc,
     bms: BatteryManagement,
@@ -68,7 +81,15 @@ impl System {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stats {
     pub cpu_usage: f32,
-    pub tsc_events: u32
+    pub tsc_events: u32,
+    pub idle_count: u32,
+}
+
+impl Stats {
+
+    pub fn is_idle(&self) -> bool {
+        (self.idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
+    }
 }
 
 impl Default for Stats {
@@ -76,6 +97,7 @@ impl Default for Stats {
         Self {
             cpu_usage: 0.0,
             tsc_events: 0,
+            idle_count: 0,
         }
     }
 }
