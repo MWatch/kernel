@@ -1,8 +1,7 @@
 #![no_std]
 #![no_main]
 
-#[macro_use]
-extern crate cortex_m;
+
 extern crate rtfm;
 // extern crate panic_itm;
 extern crate panic_semihosting;
@@ -10,9 +9,10 @@ extern crate panic_semihosting;
 extern crate log;
 
 use cortex_m_rt as rt;
-use mwatch_kernel_api::types::{hal, BatteryManagementIC, LeftButton, MiddleButton, 
-                                RightButton, Ssd1351, InputEvent, BluetoothConnectedPin,
-                                LoggerType};
+use mwatch_kernel_api::types::{
+    hal, Ssd1351, InputEvent,
+    BluetoothConnectedPin, LoggerType
+};
 use mwatch_kernel_api::system;
 use mwatch_kernel_api::application;
 use mwatch_kernel_api::ingress;
@@ -29,8 +29,9 @@ use crate::hal::timer::{Event as TimerEvent, Timer};
 use crate::hal::tsc::{
     ClockPrescaler as TscClockPrescaler, Config as TscConfig, Tsc,
 };
-use crate::rt::exception;
-use crate::rt::ExceptionFrame;
+
+use crate::rt::{exception, ExceptionFrame};
+
 use heapless::consts::*;
 use heapless::spsc::Queue;
 use rtfm::app;
@@ -47,16 +48,17 @@ use hm11::Hm11;
 use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
-use crate::system::notification::BUFF_COUNT;
-use crate::system::notification::Notification;
-use crate::system::notification::NotificationManager;
+use crate::system::notification::{BUFF_COUNT, Notification, NotificationManager};
 
 use crate::application::application_manager::ApplicationManager;
-use crate::system::input::InputManager;
-use crate::system::bms::BatteryManagement;
-use crate::system::system::System;
+use crate::application::display_manager::DisplayManager;
 
-use crate::application::wm::WindowManager;
+use crate::system::{ 
+    input::InputManager,
+    bms::BatteryManagement,
+    system::System
+};
+
 
 use cortex_m_log::log::{Logger, trick_init};
 use cortex_m_log::destination::Itm as ItmDestination;
@@ -76,7 +78,7 @@ const APP: () = {
     static mut CB: CircBuffer<&'static mut [[u8; DMA_HAL_SIZE]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
     static mut INPUT_MGR: InputManager = ();
-    static mut WMNG: WindowManager = ();
+    static mut DMNG: DisplayManager = ();
     static mut NOTIFICATIONS: [Notification; crate::BUFF_COUNT] =
         [Notification::default(); crate::BUFF_COUNT];
     static mut RB: Option<Queue<u8, heapless::consts::U512>> = None;
@@ -106,21 +108,6 @@ const APP: () = {
         core.DWT.enable_cycle_counter();
         let mut flash = device.FLASH.constrain();
         let mut rcc = device.RCC.constrain();
-        // let clocks = rcc
-        //     .cfgr
-        //     .sysclk(SYS_CLK.hz())
-        //     .pclk1(32.mhz())
-        //     .pclk2(32.mhz())
-        //     .freeze(&mut flash.acr); // 31% cpu usage~
-        
-        // let clocks = rcc
-        //     .cfgr
-        //     .sysclk(2.mhz())
-        //     .pclk1(2.mhz())
-        //     .pclk2(2.mhz())
-        //     .lsi(true)
-        //     .msi(stm32l4xx_hal::rcc::MsiFreq::RANGE2M)
-        //     .freeze(&mut flash.acr); // this config is too slow - cant use lprun etc
         
         let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
@@ -298,7 +285,7 @@ const APP: () = {
 
         let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
 
-        let wmng = WindowManager::default();
+        let dmng = DisplayManager::default();
 
         let system = System::new(rtc, bms, nmgr, amgr);
 
@@ -314,7 +301,7 @@ const APP: () = {
             TIM7: cpu,
             TIM6: input,
             INPUT_MGR: input_mgr,
-            WMNG: wmng,
+            DMNG: dmng,
         }
     }
 
@@ -332,10 +319,10 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [SYSTEM, DISPLAY, WMNG])]
+    #[task(resources = [SYSTEM, DISPLAY, DMNG])]
     fn HANDLE_INPUT(input: InputEvent) {
         let mut display = resources.DISPLAY;
-        resources.WMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
+        resources.DMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
     }
 
     /// Handles a full or hal full dma buffer of serial data,
@@ -443,14 +430,14 @@ const APP: () = {
         resources.SYS_TICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
-    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, WMNG])]
+    #[task(resources = [DISPLAY, SYSTEM, BT_CONN, DMNG])]
     fn WM() {
         let mut display = resources.DISPLAY;
-        let mut wmng = resources.WMNG;
+        let mut dmng = resources.DMNG;
         let cs = crc::crc16::checksum_x25(display.fb());
         trace!("WM - CS before: {}", cs);
         display.clear(false);
-        wmng.process(&mut resources.SYSTEM, &mut display);
+        dmng.process(&mut resources.SYSTEM, &mut display);
         let cs_after = crc::crc16::checksum_x25(display.fb());
         trace!("WM - CS after: {}", cs_after);
         if cs != cs_after {

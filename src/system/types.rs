@@ -85,7 +85,7 @@ unsafe impl<'a> Send for Context<'a> {}
 pub struct Table {
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: unsafe extern "C" fn(*mut Context, u8, u8, u16) -> i32,
-    /// Draw a colour on the display - x, y, colour
+    /// Print a string using th info! macro
     pub print: unsafe extern "C" fn(*mut Context, &str) -> i32,
 }
 

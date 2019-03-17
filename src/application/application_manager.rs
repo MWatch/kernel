@@ -168,11 +168,6 @@ impl ApplicationManager {
             | (u32::from(bytes[0]));
         addr as *const ()
     }
-
-    //TODO Expose an interface like below to allow the kernel to set input events
-    // pub fn update_input(someEnum: InputVariant)
-
-    //TODO call the relevant input handlers when the kernel notifies us of a change
 }
 
 /// A structure for manipulating application memory
@@ -227,9 +222,8 @@ extern "C" fn application_logger(string: &str) -> i32 {
 #[cfg(test)]
 mod test {
     use super::*;
-
     #[test]
     fn checksum_parsing_works() {
-        assert_eq!(ApplicationManager::digest_from_bytes(&[50, 51, 54, 50, 65, 55, 54, 50]), 0x2362A762);
+        assert_eq!(ApplicationManager::digest_from_bytes(&[35, 98, 167, 98]), 0x2362A762);
     }
 }

@@ -1,6 +1,6 @@
 
 
-use crate::application::wm::{State, StaticState, Signal};
+use crate::application::display_manager::{State, StaticState, Signal};
 use crate::types::Ssd1351;
 use crate::system::system::System;
 
@@ -11,7 +11,6 @@ use core::fmt::Write;
 
 use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
-// use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
 
 use crate::types::InputEvent;

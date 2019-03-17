@@ -51,7 +51,7 @@ pub trait ScopedState: State {
 
 const MAX_STATES: i8 = 5;
 
-pub struct WindowManager 
+pub struct DisplayManager 
 {
     state_idx: i8,
     clock_state: ClockState,
@@ -61,7 +61,7 @@ pub struct WindowManager
     mwatch_state: MWState,
 }
 
-impl Default for WindowManager {
+impl Default for DisplayManager {
     fn default() -> Self {
         Self {
             state_idx: 0,
@@ -74,25 +74,25 @@ impl Default for WindowManager {
     }
 }
 
-impl WindowManager
+impl DisplayManager
 {
 
     pub fn process(&mut self, system: &mut System, display: &mut Ssd1351) {
         let signal = match self.state_idx {
             0 => {
-                WindowManager::static_state_render(&mut self.clock_state, system, display)
+                DisplayManager::static_state_render(&mut self.clock_state, system, display)
             },
             1 => {
-                WindowManager::scoped_state_render(&mut self.app_state, system, display)
+                DisplayManager::scoped_state_render(&mut self.app_state, system, display)
             },
             2 => {
-                WindowManager::static_state_render(&mut self.info_state, system, display)
+                DisplayManager::static_state_render(&mut self.info_state, system, display)
             },
             3 => {
-                WindowManager::static_state_render(&mut self.mwatch_state, system, display)
+                DisplayManager::static_state_render(&mut self.mwatch_state, system, display)
             },
             4 => {
-                WindowManager::static_state_render(&mut self.uop_state, system, display)
+                DisplayManager::static_state_render(&mut self.uop_state, system, display)
             },
             _ => panic!("Unhandled state")
         };
@@ -105,19 +105,19 @@ impl WindowManager
     pub fn service_input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) {
         let signal = match self.state_idx {
             0 => {
-                WindowManager::static_state_input(&mut self.clock_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.clock_state, system, display, input)
             },
             1 => {
-                WindowManager::scoped_state_input(&mut self.app_state, system, display, input)
+                DisplayManager::scoped_state_input(&mut self.app_state, system, display, input)
             }
             2 => {
-                WindowManager::static_state_input(&mut self.info_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.info_state, system, display, input)
             },
             3  => {
-                WindowManager::static_state_input(&mut self.mwatch_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.mwatch_state, system, display, input)
             },
             4  => {
-                WindowManager::static_state_input(&mut self.uop_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.uop_state, system, display, input)
             },
 
             _ => panic!("Unhandled state")

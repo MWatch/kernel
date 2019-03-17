@@ -1,6 +1,6 @@
 
 
-use crate::application::wm::{State, StaticState, Signal};
+use crate::application::display_manager::{State, StaticState, Signal};
 use crate::types::Ssd1351;
 use crate::system::system::System;
 

@@ -1,6 +1,9 @@
-//! System info state - debugging
+//! Application state
+//!
+//! Wraps the application manager in a display manager state
+//!  
 
-use crate::application::wm::{State, ScopedState, Signal};
+use crate::application::display_manager::{State, ScopedState, Signal};
 use crate::types::Ssd1351;
 use crate::system::system::System;
 
@@ -36,7 +39,7 @@ impl State for AppState {
         match input {
             InputEvent::Multi => {
                 system.am().pause();
-                Some(Signal::Home) // signal to wm to go home
+                Some(Signal::Home) // signal to dm to go home
             }
             _ => {
                 system.am().service_input(display, input).unwrap();
