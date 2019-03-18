@@ -10,7 +10,7 @@ extern crate panic_semihosting;
 #[macro_use]
 extern crate log;
 
-use mwatch_kernel_api::{
+use mwatch_kernel_lib::{
     types::{
         hal, Ssd1351, InputEvent,
         BluetoothConnectedPin, LoggerType,

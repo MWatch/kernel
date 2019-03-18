@@ -29,6 +29,8 @@ hm11 = "0.2.1"
 simple-hex = "0.1.0"
 cortex-m-log = {  version = "0.4.0", features = ["itm", "log-integration"] }
 log = "0.4.6"
+crc = { version = "1.8.1", default-features = false }
+heapless = "0.4.2"
 
 [dependencies.ssd1351]
 version = "0.2.1"
@@ -37,20 +39,11 @@ version = "0.2.1"
 # path = "../../drivers/ssd1351"
 features = ["embedded-graphics", "buffered"]
 
-[dependencies.heapless]
-version = "0.4.1"
-# features = ["const-fn"]
-
 [dependencies.stm32l4xx-hal]
 version = "0.3.6"
 # path = "../../hal/stm32l432xx-hal"
 git = "https://github.com/mabezdev/stm32l4xx-hal"
 features = ["rt", "stm32l4x2"]
-
-[dependencies.crc]
-version = "1.8.1"
-default-features = false
-
 
 [features]
 default = []
@@ -59,7 +52,7 @@ disable-input = []
 crc-fb = []
 
 [lib]
-name = "mwatch_kernel_api"
+name = "mwatch_kernel_lib"
 path = "src/lib.rs"
 
 [[bin]]
