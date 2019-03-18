@@ -1,5 +1,6 @@
+//! Notification
+//! 
 //! Push notification parsing
-//!
 
 use crate::ingress::buffer::Buffer;
 
@@ -39,7 +40,7 @@ impl Notification {
         Ok(())
     }
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum NotificationError {
     Parsing,
 }

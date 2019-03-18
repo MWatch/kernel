@@ -10,9 +10,11 @@ extern crate panic_semihosting;
 #[macro_use]
 extern crate log;
 
-use mwatch_kernel_api::types::{
-    hal, Ssd1351, InputEvent,
-    BluetoothConnectedPin, LoggerType,
+use mwatch_kernel_api::{
+    types::{
+        hal, Ssd1351, InputEvent,
+        BluetoothConnectedPin, LoggerType,
+    },
     system, application, ingress
 };
 
@@ -51,7 +53,11 @@ use hm11::{command::Command, Hm11};
 use max17048::Max17048;
 
 use crate::ingress::ingress_manager::IngressManager;
-use crate::application::{application_manager::ApplicationManager, display_manager::DisplayManager};
+use crate::application::{
+    application_manager::{ApplicationManager, Ram},
+    display_manager::DisplayManager
+};
+
 use crate::system::{ 
     input::InputManager,
     bms::BatteryManagement,
@@ -250,7 +256,7 @@ const APP: () = {
 
         /* Give the application manager its ram */
         let ram: &'static mut [u8] = resources.APPLICATION_RAM;
-        let amgr = ApplicationManager::new(ram);
+        let amgr = ApplicationManager::new(Ram::new(ram));
 
         let mut systick = Timer::tim2(device.TIM2, SYSTICK_HZ.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
@@ -296,7 +302,7 @@ const APP: () = {
         loop {
             resources.SLEEP_TIME.lock(|sleep| {
                 let before = DWT::get_cycle_count();
-                asm::wfi();
+                asm::wfi(); /* CPU is idle here waiting for interrupt */
                 let after = DWT::get_cycle_count();
                 *sleep += after.wrapping_sub(before);
             });
@@ -310,8 +316,8 @@ const APP: () = {
 
     /// The main thread of the watch, this is called `SYSTIC_HZ` times a second, to perform 
     /// housekeeping operations
-    #[interrupt(binds = TIM2, resources = [IMNG, SYSTEM, SYSTICK, IDLE_COUNT], spawn = [WM])]
-    fn SYSTICK_THREAD() {
+    #[interrupt(binds = TIM2, resources = [IMNG, SYSTEM, SYSTICK, IDLE_COUNT], spawn = [display_manager])]
+    fn systick() {
         let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
         system.bms().process();
@@ -323,13 +329,13 @@ const APP: () = {
         mgr.lock(|m| {
             m.process(&mut system);
         });
-        spawn.WM().unwrap();
+        spawn.display_manager().unwrap();
         resources.SYSTICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
     /// Hardware timer, initiates tsc aquisitions
     #[interrupt(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
-    fn TSC_INTIATOR_THREAD() {
+    fn tsc_initiator() {
         match resources.INPUT_MGR.start_new() {
             Ok(_) => {},
             Err(e) => {
@@ -343,7 +349,7 @@ const APP: () = {
 
     /// Thread runs once a second and collates stats about the system
     #[interrupt(binds = TIM7, resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM])]
-    fn STATUS_THREAD() {
+    fn status() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let mut system = resources.SYSTEM;
         let total = SYSTICK_HZ / CPU_USAGE_POLL_HZ;
@@ -374,22 +380,9 @@ const APP: () = {
         Hardware Interrupt service routines
     */
 
-    /// Handles a full or hal full dma buffer of serial data,
-    /// and writes it into the MessageManager rb
-    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 2)]
-    fn SERIAL_FULL_DMA() {
-        let mut mgr = resources.IMNG;
-        resources
-            .CB
-            .peek(|buf, _half| {
-                mgr.write(buf);
-            })
-            .unwrap();
-    }
-
     /// When a TSC aquisition completes, the result is processed by the input manager
     /// If the result is a valid output, the input handler task is spawned to act upon it
-    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 2, spawn = [HANDLE_INPUT])]
+    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 2, spawn = [input_handler])]
     fn TSC_RESULT() {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
@@ -399,7 +392,7 @@ const APP: () = {
                     Ok(input) => {
                         *resources.IDLE_COUNT = 0; // we are no longer idle
                         info!("Output => {:?}", input);
-                        match spawn.HANDLE_INPUT(input) {
+                        match spawn.input_handler(input) {
                             Ok(_) => {},
                             Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
                         }
@@ -424,9 +417,11 @@ const APP: () = {
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
     #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 2)]
-    fn SERIAL_PARTIAL_DMA() {
+    fn serial_partial_dma() {
         let mut mgr = resources.IMNG;
-        if resources.USART2_RX.is_idle(true) {
+        // If the idle flag is set then we take what we have and push
+        // it into the ingress manager
+        if resources.USART2_RX.is_idle(true) { 
             resources
                 .CB
                 .partial_peek(|buf, _half| {
@@ -439,6 +434,19 @@ const APP: () = {
                 .unwrap();
         }
     }
+
+    /// Handles a full or hal full dma buffer of serial data,
+    /// and writes it into the MessageManager rb
+    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 2)]
+    fn serial_full_dma() {
+        let mut mgr = resources.IMNG;
+        resources
+            .CB
+            .peek(|buf, _half| {
+                mgr.write(buf);
+            })
+            .unwrap();
+    }
     
     /* 
         Software tasks
@@ -446,17 +454,17 @@ const APP: () = {
 
     /// Task that services the display manager
     #[task(resources = [DISPLAY, SYSTEM, BT_CONN, DMNG])]
-    fn WM() {
+    fn display_manager() {
         let mut display = resources.DISPLAY;
         let mut dmng = resources.DMNG;
         #[cfg(feature = "crc-fb")]
         {
             let cs = crc::crc16::checksum_x25(display.fb());
-            trace!("WM - CS before: {}", cs);
+            trace!("DM - CS before: {}", cs);
             display.clear(false);
             dmng.process(&mut resources.SYSTEM, &mut display);
             let cs_after = crc::crc16::checksum_x25(display.fb());
-            trace!("WM - CS after: {}", cs_after);
+            trace!("DM - CS after: {}", cs_after);
             if cs != cs_after {
                 display.flush();
             }
@@ -472,7 +480,7 @@ const APP: () = {
 
     /// This task is dispatched via the hardware TSC isr
     #[task(resources = [SYSTEM, DISPLAY, DMNG])]
-    fn HANDLE_INPUT(input: InputEvent) {
+    fn input_handler(input: InputEvent) {
         let mut display = resources.DISPLAY;
         resources.DMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
     }

@@ -3,13 +3,16 @@
 //! Handles loading and running of custom applications
 //!
 //! - Load information from the binary
-//! - Start executing
 //! - Setup input callbacks from the kernel which then are passed to the application
-//!
+//! - Start executing
+//! 
+//! Due to the abstract nature of the `ApplicationManager` it is possible to run more than one simultaneously
+//! provided you have the available RAM
 
 use crc::crc32::checksum_ieee;
 use crate::types::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputEvent};
 
+/// Application manager
 pub struct ApplicationManager {
     ram: Ram,
     target_cs: [u8; 4],
@@ -19,12 +22,17 @@ pub struct ApplicationManager {
     status: Status,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
+    /// The applicaton is running
     Executing,
+    /// Failed checksum of ram
     ChecksumFailed,
+    /// No application has been loaded
     NoApplication,
+    /// The FFI function pointer for service is invalid
     InvalidServiceFn,
+    /// The FFI function pointer for input is invalid
     InvalidInputFn,
 }
 
@@ -48,9 +56,11 @@ impl Default for Status {
 }
 
 impl ApplicationManager {
-    pub fn new(ram: &'static mut [u8]) -> Self {
+    
+    /// Create a new application manager from a chunk of ram
+    pub fn new(ram: Ram) -> Self {
         Self {
-            ram: Ram::new(ram),
+            ram: ram,
             target_cs: [0u8; 4],
             target_cs_idx: 0,
             service_fn: None,
@@ -59,17 +69,20 @@ impl ApplicationManager {
         }
     }
 
+    /// Write a byte into the managers internal ram
     pub fn write_ram_byte(&mut self, byte: u8) -> Result<(), Error> {
         self.ram.write(byte)?;
         Ok(())
     }
 
+    /// Write a checksum byte into the manager internal cs buffer
     pub fn write_checksum_byte(&mut self, byte: u8) -> Result<(), Error> {
         self.target_cs[self.target_cs_idx] = byte;
         self.target_cs_idx += 1;
         Ok(())
     }
 
+    /// Verify the contents of ram using a crc against the checksum
     pub fn verify(&mut self) -> Result<(), Error> {
        let ram_cs = self.ram.cs();
        let digest = ApplicationManager::digest_from_bytes(&self.target_cs); 
@@ -83,6 +96,7 @@ impl ApplicationManager {
         }
     }
 
+    /// Reconstruct a CRC32 from four bytes
     fn digest_from_bytes(bytes: &[u8]) -> u32 {
         assert_eq!(bytes.len(), 4);
         // bytes arrive in reversed order                
@@ -93,6 +107,7 @@ impl ApplicationManager {
         digest
     }
 
+    /// Run the application
     pub fn execute(&mut self) -> Result<(), Error> {
         if !self.status.is_loaded {
             return Err(Error::NoApplication);
@@ -141,11 +156,13 @@ impl ApplicationManager {
        }
     }
 
+    /// Pause the application
     pub fn pause(&mut self) {
         self.status.is_running = false;
     }
 
-    pub fn stop(&mut self) -> Result<(), Error> {
+    /// Kill the current application and unload from memory
+    pub fn kill(&mut self) -> Result<(), Error> {
         self.ram.reset();
         self.target_cs_idx = 0;
         self.status.is_loaded = false;
@@ -155,6 +172,7 @@ impl ApplicationManager {
         Ok(())
     }
 
+    /// Return the status of the manager
     pub fn status(&self) -> Status {
         self.status
     }
@@ -197,23 +215,26 @@ impl Ram {
         checksum_ieee(&self.ram[..self.ram_idx])
     }
 
-    // Reset ram
+    /// Reset ram
     pub fn reset(&mut self) {
         self.ram_idx = 0;
         self.wipe();
     }
 
+    /// Zero the internal buffer
     fn wipe(&mut self) {
         for i in 0..self.ram_idx {
             self.ram[i] = 0u8;
         }
     }
 
+    /// Get an immutable reference to the internal ram buffer
     pub fn as_ref(&self) -> &[u8] {
         &self.ram
     }
 }
 
+/// FFI for application debugging
 extern "C" fn application_logger(string: &str) -> i32 {
     info!("{}", string);
     0

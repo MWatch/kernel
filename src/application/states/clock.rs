@@ -1,8 +1,6 @@
 
 
-use crate::application::display_manager::{State, StaticState, Signal};
-use crate::types::Ssd1351;
-use crate::system::system::System;
+use crate::application::states::prelude::*;
 
 use heapless::String;
 use heapless::consts::*;
@@ -12,8 +10,6 @@ use core::fmt::Write;
 use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
-
-use crate::types::InputEvent;
 
 use seven_segment::SevenSegments;
 

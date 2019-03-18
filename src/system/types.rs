@@ -1,4 +1,4 @@
-//! API for SDK
+//! API for SDK and type exports
 
 
 pub use stm32l4xx_hal as hal;

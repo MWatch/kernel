@@ -3,11 +3,7 @@
 //! Wraps the application manager in a display manager state
 //!  
 
-use crate::application::display_manager::{State, ScopedState, Signal};
-use crate::types::Ssd1351;
-use crate::system::system::System;
-
-use crate::types::InputEvent;
+use crate::application::states::prelude::*;
 
 use heapless::String;
 use heapless::consts::*;
@@ -83,6 +79,6 @@ impl ScopedState for AppState {
 
     /// Stop
     fn stop(&mut self, system: &mut System) {
-        system.am().stop().unwrap();
+        system.am().kill().unwrap();
     }
 }

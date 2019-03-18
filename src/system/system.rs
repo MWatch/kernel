@@ -1,4 +1,4 @@
-//! System.rs
+//! System
 //! 
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
@@ -20,6 +20,7 @@ pub const I2C_KHZ: u32 = 100;
 
 pub const IDLE_TIMEOUT_SECONDS: u32 = 15;
 
+/// A grouping of core sysem peripherals
 pub struct System {
     rtc: Rtc,
     bms: BatteryManagement,

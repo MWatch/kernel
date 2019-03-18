@@ -1,3 +1,7 @@
+//! Syscall
+//! 
+//! All possible system calls via the serial interface will be parsed and executed here
+
 
 use crate::types::hal::datetime::{Date, Time};
 use core::str::FromStr;
@@ -5,13 +9,13 @@ use crate::types::hal::prelude::*;
 use crate::system::system::System;
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     ParseError,
     UnknownSyscall
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Syscall {
     /// Set the date - example: 
     /// "D0/12/02/2019"
@@ -26,6 +30,7 @@ pub enum Syscall {
 impl FromStr for Syscall {
     type Err = Error;
 
+    /// Converts a string to a syscall
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // first charater is the type
         let t = s.as_bytes()[0];

@@ -1,4 +1,7 @@
 //! Input
+//! 
+//! Here we multiplex all the hardware inputs (3) to create a series of
+//! unique output combinations (7)
 
 use crate::types::InputEvent;
 use crate::types::{LeftButton, MiddleButton, RightButton, TouchSenseController};
@@ -23,6 +26,7 @@ pub enum Error {
     Incomplete
 }
 
+/// Input manager, assumes control over the tsc peripheral and handles the raw inputs
 pub struct InputManager
 {
     raw_vector: u8,
@@ -37,6 +41,7 @@ pub struct InputManager
 
 impl InputManager {
 
+    /// Creates a new instance of the InputManager
     pub fn new(tsc: TouchSenseController, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
         // Acquire for rough estimate of capacitance
         let mut left = left;
@@ -63,6 +68,7 @@ impl InputManager {
         }
     }
 
+    /// Update thes the internal state of the manager with the raw hardware input
     pub fn update_input(&mut self, active: bool) {
         if active {
             self.raw_vector |= match self.pin_idx {
@@ -87,6 +93,7 @@ impl InputManager {
         }
     }
 
+    /// Based on the current state of the inputmanager's internal vector, produce an output
     pub fn output(&mut self) -> Result<InputEvent, Error> {
         if self.raw_vector != self.last_vector {
             let result = match self.raw_vector {
@@ -107,6 +114,7 @@ impl InputManager {
         }
     }
 
+    /// Begin a new hardware (tsc) acquisition
     pub fn start_new(&mut self) -> Result<(), Error> {
         if self.tsc.in_progress() {
             return Err(Error::AcquisitionInProgress);
@@ -120,6 +128,8 @@ impl InputManager {
         Ok(())
     }
 
+    /// Call when the aquisition is complete, this function read
+    /// the registers and update the interal state
     pub fn process_result(&mut self) -> Result<(), Error> {
         let value = match self.pin_idx {
             0 => self.tsc.read(&mut self.left).unwrap(),
