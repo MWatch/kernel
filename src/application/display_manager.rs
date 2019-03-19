@@ -2,17 +2,16 @@
 //!
 //! Handles app switching, between built in apps and custom apps
 
-use crate::types::Ssd1351;
-use crate::system::system::System;
-use crate::application::states::{
-                                    clock::ClockState,
-                                    info::InfoState,
-                                    app::AppState,
-                                    uop::UopState,
-                                    mwatch::MWState,
-                                };
-
-use crate::types::InputEvent;
+use crate::application::{
+    states::{
+        clock::ClockState,
+        info::InfoState,
+        app::AppState,
+        uop::UopState,
+        mwatch::MWState,
+    },
+    states::prelude::*
+};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Signal {
@@ -24,33 +23,9 @@ pub enum Signal {
     Home
 }
 
-/// All built in states must implement this trait to be renderable by the WM
-pub trait State: Default {
-    /// To draw the state to the display
-    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal>;
-    /// Allows the state to take control of inputs from the kernel
-    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal>; //TODO can we remove the need for the display?
-}
-
-/// Marker trait for static states
-pub trait StaticState: State {
-
-}
-
-/// This state only exists whilst its running, and is destroyed on exit
-pub trait ScopedState: State {
-    /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal>;
-    /// Start 
-    fn start(&mut self, system: &mut System);
-    /// Is the application running yet?
-    fn is_running(&self, system: &mut System) -> bool;
-    /// Stop
-    fn stop(&mut self, system: &mut System);
-}
-
 const MAX_STATES: i8 = 5;
 
+/// The display manager
 pub struct DisplayManager 
 {
     state_idx: i8,
@@ -62,6 +37,8 @@ pub struct DisplayManager
 }
 
 impl Default for DisplayManager {
+
+    /// Create the display manager
     fn default() -> Self {
         Self {
             state_idx: 0,
@@ -77,6 +54,7 @@ impl Default for DisplayManager {
 impl DisplayManager
 {
 
+    /// Services the current application
     pub fn process(&mut self, system: &mut System, display: &mut Ssd1351) {
         let signal = match self.state_idx {
             0 => {
@@ -102,6 +80,7 @@ impl DisplayManager
         }
     }
 
+    /// Services input to the current application
     pub fn service_input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) {
         let signal = match self.state_idx {
             0 => {
@@ -128,6 +107,7 @@ impl DisplayManager
         }
     }
 
+    /// Handle the exit code of a running application
     fn handle_exit(&mut self, code: Signal) {
         match code {
             Signal::Next => self.next(),
@@ -136,6 +116,7 @@ impl DisplayManager
         }
     }
 
+    /// Move to the previous state in a wrapping fashion
     fn prev(&mut self) {
         self.state_idx -= 1;
         if self.state_idx < 0 {
@@ -143,6 +124,7 @@ impl DisplayManager
         }
     }
 
+    /// Move to the next state in a wrapping fashion
     fn next(&mut self) {
         self.state_idx += 1;
         if self.state_idx > MAX_STATES - 1 {
@@ -150,12 +132,15 @@ impl DisplayManager
         }
     }
 
+    /// Render a static state
     fn static_state_render<S>(state: &mut S, system: &mut System, display: &mut Ssd1351) -> Option<Signal> 
         where S : StaticState
     {
         state.render(system, display)
     }
 
+    /// Render a scoped state, this state may or may not be running hence we have different functionality
+    /// depending on the `is_running()` state
     fn scoped_state_render<S>(state: &mut S, system: &mut System, display: &mut Ssd1351) -> Option<Signal> 
         where S : ScopedState
     {
@@ -166,12 +151,15 @@ impl DisplayManager
         }
     }
 
+    /// Handle input for a static state
     fn static_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
         where S : StaticState
     {
         state.input(system, display, input)
     }
 
+    /// Handle the input for a scoped state, this state may or may not be running hence we have different functionality
+    /// depending on the `is_running()` state
     fn scoped_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
         where S : ScopedState
     {

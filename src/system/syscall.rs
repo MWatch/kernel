@@ -1,3 +1,7 @@
+//! Syscall
+//! 
+//! All possible system calls via the serial interface will be parsed and executed here
+
 
 use crate::types::hal::datetime::{Date, Time};
 use core::str::FromStr;
@@ -5,13 +9,13 @@ use crate::types::hal::prelude::*;
 use crate::system::system::System;
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     ParseError,
     UnknownSyscall
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Syscall {
     /// Set the date - example: 
     /// "D0/12/02/2019"
@@ -26,6 +30,7 @@ pub enum Syscall {
 impl FromStr for Syscall {
     type Err = Error;
 
+    /// Converts a string to a syscall
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // first charater is the type
         let t = s.as_bytes()[0];
@@ -79,5 +84,52 @@ impl Syscall {
             }
         }
         Ok(Time::new(vals[0].hours(), vals[1].minutes(), vals[2].seconds(), false))
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn syscall_date_works() {
+        let actual = Date::new(1.day(), 1.date(), 4.month(), 2019.year());
+
+        let working = Syscall::from_str("D01/01/04/2019").unwrap();
+        match working {
+            Syscall::Date(d) => {
+                assert_eq!(actual, d);
+            }
+            _ => panic!("wrong syscall type")
+        }
+
+        let wrong = Syscall::from_str("D02/01/04/2019").unwrap();
+        match wrong {
+            Syscall::Date(d) => {
+                assert_ne!(actual, d);
+            }
+            _ => panic!("wrong syscall type")
+        }
+    }
+
+    #[test]
+    fn syscall_time_works() {
+        let actual = Time::new(0.hours(), 0.minutes(), 0.seconds(), false);
+
+        let working = Syscall::from_str("T00:00:00").unwrap();
+        match working {
+            Syscall::Time(t) => {
+                assert_eq!(actual, t);
+            }
+            _ => panic!("wrong syscall type")
+        }
+
+        let working = Syscall::from_str("T01:00:00").unwrap();
+        match working {
+            Syscall::Time(t) => {
+                assert_ne!(actual, t);
+            }
+            _ => panic!("wrong syscall type")
+        }
     }
 }

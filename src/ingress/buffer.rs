@@ -1,4 +1,6 @@
 //! Buffer
+//! 
+//! A thin abstraction over a static array, with some meta data
 
 use crate::system::notification::BUFF_SIZE;
 
@@ -38,6 +40,7 @@ impl Buffer {
         }
     }
 
+    /// returns the type of the buffer, defaults to unknown
     pub fn get_type(&self) -> Type {
         self.btype
     }
@@ -53,6 +56,7 @@ impl Buffer {
         self.payload_idx = 0;
     }
 
+    /// Buffer as &str
     pub fn as_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(&self.payload[0..self.payload_idx]) }
     }

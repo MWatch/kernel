@@ -1,15 +1,10 @@
 
 
-use crate::application::display_manager::{State, StaticState, Signal};
-use crate::types::Ssd1351;
-use crate::system::system::System;
+use crate::application::states::prelude::*;
 
 use embedded_graphics::Drawing;
 use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
-
-use crate::types::InputEvent;
-
 
 pub struct UopState {}
 
