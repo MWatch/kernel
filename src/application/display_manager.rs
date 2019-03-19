@@ -9,6 +9,7 @@ use crate::application::{
         app::AppState,
         uop::UopState,
         mwatch::MWState,
+        notifications::NotificationState,
     },
     states::prelude::*
 };
@@ -23,7 +24,7 @@ pub enum Signal {
     Home
 }
 
-const MAX_STATES: i8 = 5;
+const MAX_STATES: i8 = 6;
 
 /// The display manager
 pub struct DisplayManager 
@@ -34,6 +35,7 @@ pub struct DisplayManager
     app_state: AppState,
     uop_state: UopState,
     mwatch_state: MWState,
+    notification_state: NotificationState,
 }
 
 impl Default for DisplayManager {
@@ -47,6 +49,7 @@ impl Default for DisplayManager {
             app_state: AppState::default(),
             uop_state: UopState::default(),
             mwatch_state: MWState::default(),
+            notification_state: NotificationState::default(),
         }
     }
 }
@@ -71,6 +74,9 @@ impl DisplayManager
             },
             4 => {
                 DisplayManager::static_state_render(&mut self.uop_state, system, display)
+            },
+            5 => {
+                DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
             },
             _ => panic!("Unhandled state")
         };
@@ -98,7 +104,9 @@ impl DisplayManager
             4  => {
                 DisplayManager::static_state_input(&mut self.uop_state, system, display, input)
             },
-
+            5 => {
+                DisplayManager::scoped_state_input(&mut self.notification_state, system, display, input)
+            },
             _ => panic!("Unhandled state")
         };
 

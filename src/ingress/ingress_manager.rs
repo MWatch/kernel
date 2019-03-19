@@ -12,16 +12,24 @@ use core::str::FromStr;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
-    /// Waiting for a STX byte
+    /// Waiting for a STX byte, or just received an ETX, or entered an invalid state
     Wait,
     /// Init state, just after receiving and STX
     Init,
-    /// Write into an internal buffer to parsing
+    /// Write into an internal buffer for parsing
     Payload,
+
     /// Parse the application checksum
     ApplicationChecksum,
     /// Store the application in ram
     ApplicationStore,
+
+    /// Notification Source - what generated the push notification
+    NotificationSource,
+    /// Notification title
+    NotificationTitle,
+    /// Notification body
+    NotificationBody,
 }
 
 const STX: u8 = 2;
@@ -32,8 +40,12 @@ pub struct IngressManager {
     buffer: Buffer,
     rb: Queue<u8, U512>,
     state: State,
+
     hex_chars: [u8; 2],
     hex_idx: usize,
+
+    nsi: [usize; 3],
+    nsi_idx: usize,
 }
 
 impl IngressManager {
@@ -46,6 +58,8 @@ impl IngressManager {
             state: State::Init,
             hex_chars: [0u8; 2],
             hex_idx: 0,
+            nsi: [0usize; 3], // notification section pointers
+            nsi_idx: 0,
         }
     }
 
@@ -77,7 +91,7 @@ impl IngressManager {
                     }
                     Type::Notification => {
                         info!("Adding notification from: {:?}", self.buffer);
-                        system.nm().add(&self.buffer).unwrap();
+                        system.nm().add(&self.buffer, &self.nsi).unwrap();
                     },
                     Type::Syscall => {
                         info!("Parsing syscall from: {:?}", self.buffer);
@@ -106,27 +120,31 @@ impl IngressManager {
             State::Payload => {
                 self.buffer.write(byte);
             }
-            State::ApplicationChecksum => {
+            State::ApplicationChecksum | State::ApplicationStore => {
                 self.hex_chars[self.hex_idx] = byte;
                 self.hex_idx += 1;
                 if self.hex_idx > 1 {
-                    system.am().write_checksum_byte(
-                        hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
-                    )
-                    .unwrap();
+                    match self.state {
+                        State::ApplicationChecksum => {
+                            system.am().write_checksum_byte(
+                                hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
+                            )
+                            .unwrap();
+                        }
+                        State::ApplicationStore => {
+                            system.am().write_ram_byte(
+                                hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
+                            )
+                            .unwrap();
+                        }
+                        _ => unreachable!()
+                    }
                     self.hex_idx = 0;
                 }
             }
-            State::ApplicationStore => {
-                self.hex_chars[self.hex_idx] = byte;
-                self.hex_idx += 1;
-                if self.hex_idx > 1 {
-                    system.am().write_ram_byte(
-                        hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
-                    )
-                    .unwrap();
-                    self.hex_idx = 0;
-                }
+            State::NotificationBody | State::NotificationTitle | State::NotificationSource => {
+                self.nsi_idx += 1;
+                self.buffer.write(byte);
             }
             State::Wait => {
                 // do nothing, useless bytes
@@ -145,6 +163,7 @@ impl IngressManager {
                         }
                         /* Start of packet */
                         self.hex_idx = 0;
+                        self.nsi_idx = 0;
                         self.buffer.clear();
                         self.state = State::Init; // activate processing
                     }
@@ -169,6 +188,17 @@ impl IngressManager {
                                     system.am().kill().unwrap();
                                     // parse the checksum
                                     self.state = State::ApplicationChecksum;
+                                }
+                            }
+                            Type::Notification => {
+                                if self.state == State::NotificationSource { // we've parsed the app source
+                                    self.nsi[0] = self.nsi_idx;
+                                    self.state = State::NotificationTitle;
+                                } else if self.state == State::NotificationTitle { // weve parsed the title
+                                    self.nsi[1] = self.nsi_idx;
+                                    self.state = State::NotificationBody;
+                                } else {
+                                    self.state = State::NotificationSource; // new parse
                                 }
                             }
                             _ => self.state = State::Payload,

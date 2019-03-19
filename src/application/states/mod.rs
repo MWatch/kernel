@@ -7,6 +7,7 @@ pub mod info;
 pub mod app;
 pub mod mwatch;
 pub mod uop;
+pub mod notifications;
 
 
 use prelude::*;
