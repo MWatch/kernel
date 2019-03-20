@@ -1,6 +1,6 @@
-//! Application state
+//! Notification state
 //!
-//! Wraps the application manager in a display manager state
+//! A simple notification manager
 //!  
 
 use crate::application::states::prelude::*;
@@ -13,16 +13,19 @@ use crate::system::notification::Notification;
 use crate::application::render_util::{DISPLAY_WIDTH, DISPLAY_HEIGHT};
 
 
+/// How many menu items can fit on a page at a time
 const MAX_ITEMS: i8 = 8;
 const CHAR_WIDTH: i32 = 6;
 const CHAR_HEIGHT: i32 = 12;
 const LINE_WIDTH: i32 = DISPLAY_WIDTH / CHAR_WIDTH;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+/// The internal state of the notification application
 enum InternalState {
     Menu,
     Body,
 }
+
 
 pub struct NotificationState {
     is_running: bool,
@@ -32,6 +35,7 @@ pub struct NotificationState {
 }
 
 impl State for NotificationState {
+    /// Render the notification state
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         self.menu.update_count(system.nm().idx() as i8 + 1);
         match self.state {
@@ -67,6 +71,7 @@ impl State for NotificationState {
         None     
     }
 
+    /// Handle the input for the notification
     fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
         if input == InputEvent::Multi {
             self.stop(system);
@@ -136,6 +141,7 @@ impl ScopedState for NotificationState {
         None
     }
 
+    /// Is the notification app opened?
     fn is_running(&self, _system: &mut System) -> bool {
         self.is_running
     }
@@ -159,6 +165,7 @@ struct Body {
 
 impl Body {
     
+    /// Create a new body, with a maximum vertical scroll
     pub fn new(max_scroll: i32) -> Self {
         let max_scroll = if max_scroll < (DISPLAY_HEIGHT / CHAR_HEIGHT) / 2 { // no scroll required if it doesnt go past a page
             0
@@ -172,6 +179,7 @@ impl Body {
         }
     }
 
+    /// Render the notification
     pub fn render(&mut self, display: &mut Ssd1351, notification: &Notification) {
         let body = notification.body().as_bytes();
         for (idx, line) in body[0..body.len()].chunks(LINE_WIDTH as usize).enumerate() { // screen pixels / character width
@@ -210,13 +218,14 @@ struct Menu {
 }
 
 impl Menu {
-
+    /// create a new menu
     pub const fn new() -> Self {
         Menu {
             state_idx: 0,
             item_count: MAX_ITEMS
         }
     }
+
     /// Move to the previous item in a wrapping fashion
     fn prev(&mut self) {
         self.state_idx -= 1;
@@ -233,10 +242,12 @@ impl Menu {
         }
     }
 
+    /// The currently selected index
     fn selected(&self) -> i8 {
         self.state_idx
     }
 
+    /// Update the number of elements in the list
     fn update_count(&mut self, item_count: i8) {
         self.item_count = item_count;
     }

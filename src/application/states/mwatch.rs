@@ -7,8 +7,6 @@ use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::image::Image16BPP;
 use embedded_graphics::prelude::*;
 
-
-
 pub struct MWState {}
 
 impl Default for MWState {
@@ -27,20 +25,17 @@ impl State for MWState {
                     .into_iter(),
                 );
         let text: Font6x12<_> = Font6x12::render_str("Project by");
-        display.draw(text
-                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 86))
+        display.draw(horizontal_centre(text, 80)
                      .with_stroke(Some(0x02D4_u16.into()))
                      .into_iter());
 
         let text: Font6x12<_> = Font6x12::render_str("Scott Mabin 2019");
-        display.draw(text
-                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 102))
+        display.draw(horizontal_centre(text, 92)
                      .with_stroke(Some(0x02D4_u16.into()))
                      .into_iter());
-                     
+
         let text: Font6x12<_> = Font6x12::render_str("@MabezDev on Github");
-        display.draw(text
-                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 102))
+        display.draw(horizontal_centre(text, 118)
                      .with_stroke(Some(0x02D4_u16.into()))
                      .into_iter());
         None

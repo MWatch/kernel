@@ -146,7 +146,8 @@ impl ApplicationManager {
     pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            // TODO remove the display dependancy
+            //NOTE: this is safe because of a contract between the sdk and kernel,
+            // display is only passed in on update, not on input
             display: unsafe { core::mem::uninitialized() },
             log: application_logger,
         };

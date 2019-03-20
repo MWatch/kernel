@@ -1,4 +1,6 @@
-
+//! Clock state
+//! 
+//! The main home page
 
 use crate::application::states::prelude::*;
 

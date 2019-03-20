@@ -1,4 +1,4 @@
-
+//! Debug info state
 
 use crate::application::states::prelude::*;
 
