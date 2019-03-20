@@ -14,8 +14,57 @@ use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
 pub struct NotificationState {
-    buffer: String<U256>,
+    buffer: String<U512>,
     is_running: bool,
+    state: InternalState,
+    menu: Menu
+}
+
+const MAX_ITEMS: i8 = 8;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Menu {
+    state_idx: i8,
+    item_count: i8,
+}
+
+impl Menu {
+
+    pub const fn new() -> Self {
+        Menu {
+            state_idx: 0,
+            item_count: MAX_ITEMS
+        }
+    }
+    /// Move to the previous state in a wrapping fashion
+    fn prev(&mut self) {
+        self.state_idx -= 1;
+        if self.state_idx < 0 {
+            self.state_idx = MAX_ITEMS - 1;
+        }
+    }
+
+    /// Move to the next state in a wrapping fashion
+    fn next(&mut self) {
+        self.state_idx += 1;
+        if self.state_idx > MAX_ITEMS - 1 {
+            self.state_idx = 0;
+        }
+    }
+
+    fn selected(&self) -> i8 {
+        self.state_idx
+    }
+
+    fn update_count(&mut self, item_count: i8) {
+        self.item_count = item_count;
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum InternalState {
+    Menu,
+    Body,
 }
 
 impl Default for NotificationState {
@@ -23,6 +72,8 @@ impl Default for NotificationState {
         Self {
             buffer: String::new(),
             is_running: false,
+            state: InternalState::Menu,
+            menu: Menu::new()
         }
     }
 }
@@ -30,24 +81,70 @@ impl Default for NotificationState {
 impl State for NotificationState {
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         self.buffer.clear();
-        write!(self.buffer, "Running [{}]", system.nm().idx()).unwrap();
-        display.draw(centre(Font6x12::render_str(self.buffer.as_str()))
-                .with_stroke(Some(0x02D4_u16.into()))
-                .into_iter(),
-        );
+        self.menu.update_count(system.nm().idx() as i8 + 1);
+        match self.state {
+            InternalState::Menu => {
+                for item in 0..system.nm().idx() {
+                    system.nm().peek_notification(item, |notification| {
+                        write!(self.buffer, "{}", notification.title()).unwrap();
+                        display.draw(horizontal_centre(Font6x12::render_str(self.buffer.as_str()), item as i32 * 12)
+                                .with_stroke(Some(0x02D4_u16.into()))
+                                .into_iter(),
+                        );
+                    });
+                }
+            },
+            InternalState::Body => {
+                system.nm().peek_notification(self.menu.selected() as usize, |notification| {
+                    let body = notification.body().as_bytes();
+                    for (idx, line) in body[0..body.len()].chunks(128 / 6).enumerate() { // screen pixels / character width
+                        //TODO remove unsafe
+                        write!(self.buffer, "{}", unsafe { core::str::from_utf8_unchecked(line) }).unwrap();
+                        display.draw(horizontal_centre(Font6x12::render_str(self.buffer.as_str()), idx as i32 * 12)
+                                .with_stroke(Some(0x02D4_u16.into()))
+                                .into_iter(),
+                        );
+                        self.buffer.clear();
+                    }
+                    
+                });
+            }
+        }
         None     
     }
 
     fn input(&mut self, system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
-        match input {
-            InputEvent::Multi => {
-                self.stop(system);
-                Some(Signal::Home) // signal to dm to go home
-            }
-            _ => {//TODO
-                None
+        if input == InputEvent::Multi {
+            self.stop(system);
+            return Some(Signal::Home) // signal to dm to go home
+        }
+        self.menu.update_count(system.nm().idx() as i8 + 1);
+        match self.state {
+            InternalState::Menu => {
+                match input {
+                    InputEvent::Left => {
+                        self.menu.prev();
+                    },
+                    InputEvent::Right => {
+                        self.menu.next();
+                    },
+                    InputEvent::Middle => {
+                        self.state = InternalState::Body;
+                    }
+                    _ => {}
+                }
+                info!("In menu input {:?}", self.menu);
+            },
+            InternalState::Body => {
+                match input {
+                    InputEvent::Middle => {
+                        self.state = InternalState::Menu;
+                    }
+                    _ => {}
+                }
             }
         }
+        None
     }
 }
 

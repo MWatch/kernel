@@ -90,7 +90,8 @@ impl IngressManager {
                         }
                     }
                     Type::Notification => {
-                        info!("Adding notification from: {:?}", self.buffer);
+                        self.nsi[2] = self.nsi_idx;
+                        info!("Adding notification from: {:?}, with section indexes {:?}", self.buffer, self.nsi);
                         system.nm().add(&self.buffer, &self.nsi).unwrap();
                     },
                     Type::Syscall => {

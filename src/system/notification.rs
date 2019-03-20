@@ -9,7 +9,6 @@ pub const BUFF_COUNT: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct Notification {
-    // TODO parsing
     section_indexes: [usize; 3],
     inner: Buffer,
 }
@@ -35,6 +34,18 @@ impl Notification {
             section_indexes: idxs.clone(),
             inner: buffer.clone()
         })
+    }
+
+    pub fn source(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[0..self.section_indexes[1]]) }
+    }
+
+    pub fn title(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[self.section_indexes[0]..self.section_indexes[1]]) }
+    }
+
+    pub fn body(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[self.section_indexes[1]..self.section_indexes[2]]) }
     }
 }
 

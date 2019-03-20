@@ -59,7 +59,7 @@ pub type ServiceFn = extern "C" fn(*mut Context) -> i32;
 pub type InputFn = extern "C" fn(*mut Context, InputEvent) -> i32;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputEvent {
     Left,
     Middle,
