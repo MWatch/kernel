@@ -87,25 +87,25 @@ impl DisplayManager
     }
 
     /// Services input to the current application
-    pub fn service_input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) {
+    pub fn service_input(&mut self, system: &mut System, input: InputEvent) {
         let signal = match self.state_idx {
             0 => {
-                DisplayManager::static_state_input(&mut self.clock_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.clock_state, system, input)
             },
             1 => {
-                DisplayManager::scoped_state_input(&mut self.app_state, system, display, input)
+                DisplayManager::scoped_state_input(&mut self.app_state, system, input)
             }
             2 => {
-                DisplayManager::scoped_state_input(&mut self.notification_state, system, display, input)
+                DisplayManager::scoped_state_input(&mut self.notification_state, system, input)
             },
             3  => {
-                DisplayManager::static_state_input(&mut self.mwatch_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.mwatch_state, system, input)
             },
             4  => {
-                DisplayManager::static_state_input(&mut self.uop_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.uop_state, system, input)
             },
             5 => {
-                DisplayManager::static_state_input(&mut self.info_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.info_state, system, input)
             },
             _ => panic!("Unhandled state")
         };
@@ -160,19 +160,19 @@ impl DisplayManager
     }
 
     /// Handle input for a static state
-    fn static_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
+    fn static_state_input<S>(state: &mut S, system: &mut System, input: InputEvent) -> Option<Signal> 
         where S : StaticState
     {
-        state.input(system, display, input)
+        state.input(system, input)
     }
 
     /// Handle the input for a scoped state, this state may or may not be running hence we have different functionality
     /// depending on the `is_running()` state
-    fn scoped_state_input<S>(state: &mut S, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> 
+    fn scoped_state_input<S>(state: &mut S, system: &mut System, input: InputEvent) -> Option<Signal> 
         where S : ScopedState
     {
         if state.is_running(system) {
-            state.input(system, display, input)
+            state.input(system, input)
         } else {
             match input {
                 InputEvent::Middle => {

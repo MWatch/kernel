@@ -143,10 +143,11 @@ impl ApplicationManager {
     }
 
     /// Gives processing time to input handlers of the function
-    pub fn service_input(&mut self, display: &mut Ssd1351, input: InputEvent) -> Result<(), Error> {
+    pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            display,
+            // TODO remove the display dependancy
+            display: unsafe { core::mem::uninitialized() },
             log: application_logger,
         };
         let _ = input_fn(&mut ctx, input);

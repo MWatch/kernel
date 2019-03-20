@@ -234,7 +234,7 @@ const APP: () = {
             baseline += tsc.acquire(&mut left_button).unwrap();
             delay.delay_ms(10u8);
         }
-        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 80;
+        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 95;
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -332,21 +332,24 @@ const APP: () = {
     fn systick() {
         let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
-        system.bms().process();
-        system.ss().idle_count = resources.IDLE_COUNT.lock(|val| {
-            let value = *val;
-            *val += 1; // append to idle count
-            value
-        });
-        mgr.lock(|m| {
-            m.process(&mut system);
+        let mut idle = resources.IDLE_COUNT;
+        system.lock(|system|{
+            system.bms().process();
+            system.ss().idle_count = idle.lock(|val| {
+                let value = *val;
+                *val += 1; // append to idle count
+                value
+            });
+            mgr.lock(|m| {
+                m.process(system);
+            });
         });
         spawn.display_manager().unwrap();
         resources.SYSTICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
     }
 
     /// Hardware timer, initiates tsc aquisitions
-    #[interrupt(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
+    #[interrupt(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 3)] // TIM6
     fn tsc_initiator() {
         match resources.INPUT_MGR.start_new() {
             Ok(_) => {},
@@ -363,19 +366,23 @@ const APP: () = {
     #[interrupt(binds = TIM7, resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM])]
     fn status() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
-        let mut system = resources.SYSTEM;
+        let mut systemr = resources.SYSTEM;
+        let mut tsc_ev = resources.TSC_EVENTS;
         let total = SYS_CLK_HZ / CPU_USAGE_POLL_HZ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
-        system.ss().tsc_events = resources.TSC_EVENTS.lock(|val| {
-            let value = *val;
-            *val = 0; // reset the value
-            value
-        });
-        system.ss().cpu_usage = cpu;
 
-        let current_soc = system.bms().soc();
+        let current_soc = systemr.lock(|system|{
+            system.ss().tsc_events = tsc_ev.lock(|val| {
+                let value = *val;
+                *val = 0; // reset the value
+                value
+            });
+            system.ss().cpu_usage = cpu;
+            system.bms().soc()
+        });
+         
         let last_soc = *resources.LAST_BATT_PERCENT;
         if current_soc != last_soc {
             info!("SoC has {} to {}", if current_soc < last_soc {
@@ -394,7 +401,7 @@ const APP: () = {
 
     /// When a TSC aquisition completes, the result is processed by the input manager
     /// If the result is a valid output, the input handler task is spawned to act upon it
-    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 2, spawn = [input_handler])]
+    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 3, spawn = [input_handler])]
     fn TSC_RESULT() {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
@@ -428,7 +435,7 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 2)]
+    #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 3)]
     fn serial_partial_dma() {
         let mut mgr = resources.IMNG;
         // If the idle flag is set then we take what we have and push
@@ -449,7 +456,7 @@ const APP: () = {
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
-    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 2)]
+    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 3)]
     fn serial_full_dma() {
         let mut mgr = resources.IMNG;
         resources
@@ -468,33 +475,41 @@ const APP: () = {
     #[task(resources = [DISPLAY, SYSTEM, BT_CONN, DMNG])]
     fn display_manager() {
         let mut display = resources.DISPLAY;
-        let mut dmng = resources.DMNG;
-        #[cfg(feature = "crc-fb")]
-        {
-            let cs = crc::crc16::checksum_x25(display.fb());
-            trace!("DM - CS before: {}", cs);
-            display.clear(false);
-            dmng.process(&mut resources.SYSTEM, &mut display);
-            let cs_after = crc::crc16::checksum_x25(display.fb());
-            trace!("DM - CS after: {}", cs_after);
-            if cs != cs_after {
+        let mut dmngr = resources.DMNG;
+        let mut sys = resources.SYSTEM;
+        // let mut system = resources.SYSTEM;
+        dmngr.lock(|dmng|{
+            #[cfg(feature = "crc-fb")]
+            {
+                let cs = crc::crc16::checksum_x25(display.fb());
+                trace!("DM - CS before: {}", cs);
+                display.clear(false);
+                sys.lock(|system|{
+                    dmng.process(system, &mut display);
+                });
+                let cs_after = crc::crc16::checksum_x25(display.fb());
+                trace!("DM - CS after: {}", cs_after);
+                if cs != cs_after {
+                    display.flush();
+                }
+            }
+            #[cfg(not(feature = "crc-fb"))]
+            {
+                display.clear(false);
+                sys.lock(|system|{
+                    dmng.process(system, &mut display);
+                });
                 display.flush();
             }
-        }
-        #[cfg(not(feature = "crc-fb"))]
-        {
-            display.clear(false);
-            dmng.process(&mut resources.SYSTEM, &mut display);
-            display.flush();
-        }
+        });
         
     }
 
-    /// This task is dispatched via the hardware TSC isr
-    #[task(resources = [SYSTEM, DISPLAY, DMNG])]
+    /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
+    /// This task is very cheap, hence we can have 3 of them running at anytime
+    #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
     fn input_handler(input: InputEvent) {
-        let mut display = resources.DISPLAY;
-        resources.DMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
+        resources.DMNG.service_input(&mut resources.SYSTEM, input);
     }
 
     /// Interrupt handlers used to dispatch software tasks

@@ -31,14 +31,14 @@ impl State for AppState {
         None     
     }
 
-    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Multi => {
                 system.am().pause();
                 Some(Signal::Home) // signal to dm to go home
             }
             _ => {
-                system.am().service_input(display, input).unwrap();
+                system.am().service_input(input).unwrap();
                 None
             }
         }

@@ -10,7 +10,7 @@ use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
 use crate::system::notification::Notification;
-use crate::application::render_util::DISPLAY_WIDTH;
+use crate::application::render_util::{DISPLAY_WIDTH, DISPLAY_HEIGHT};
 
 
 const MAX_ITEMS: i8 = 8;
@@ -67,7 +67,7 @@ impl State for NotificationState {
         None     
     }
 
-    fn input(&mut self, system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
         if input == InputEvent::Multi {
             self.stop(system);
             return Some(Signal::Home) // signal to dm to go home
@@ -86,11 +86,14 @@ impl State for NotificationState {
                         InputEvent::Middle => {
                             self.state = InternalState::Body;
                             system.nm().peek_notification(self.menu.selected() as usize, |notification| {
-                                self.body =  Body::new(notification.body().len() as i32 / LINE_WIDTH);
+                                let line_count = notification.body().len() as i32 / LINE_WIDTH;
+                                self.body =  Body::new(line_count - line_count / 2);
                             });
                         }
                         _ => {}
                     }
+                } else {
+                    self.stop(system);
                 }
             },
             InternalState::Body => {
@@ -98,6 +101,12 @@ impl State for NotificationState {
                     InputEvent::Middle => {
                         self.state = InternalState::Menu;
                     }
+                    InputEvent::Left => {
+                        self.body.up();
+                    },
+                    InputEvent::Right => {
+                        self.body.down();
+                    },
                     _ => {}
                 }
             }
@@ -150,10 +159,16 @@ struct Body {
 
 impl Body {
     
-    pub const fn new(max_scroll: i32) -> Self {
+    pub fn new(max_scroll: i32) -> Self {
+        let max_scroll = if max_scroll < (DISPLAY_HEIGHT / CHAR_HEIGHT) / 2 { // no scroll required if it doesnt go past a page
+            0
+        } else {
+            max_scroll
+        };
+        info!("Creating body with max scroll of {}", -max_scroll);
         Body {
             scroll_y: 0,
-            max_scroll_y: max_scroll,
+            max_scroll_y: -max_scroll,
         }
     }
 
@@ -161,17 +176,31 @@ impl Body {
         let body = notification.body().as_bytes();
         for (idx, line) in body[0..body.len()].chunks(LINE_WIDTH as usize).enumerate() { // screen pixels / character width
             // safe because the protocol guarentees no unicode bytes will be sent
-            display.draw(
-                    horizontal_centre(
-                        Font6x12::render_str(unsafe { core::str::from_utf8_unchecked(line) }),
-                        (idx as i32 + self.scroll_y) * CHAR_HEIGHT
-                    )
-                    .with_stroke(Some(0x02D4_u16.into()))
-                    .into_iter(),
+            display.draw(Font6x12::render_str(unsafe { core::str::from_utf8_unchecked(line) })
+                // https://github.com/jamwaffles/embedded-graphics/issues/81 +1 is required due to this bug 
+                .translate(Coord::new(0, ((idx as i32) + self.scroll_y) * (CHAR_HEIGHT + 1)))
+                .with_stroke(Some(0x02D4_u16.into()))
+                .into_iter()
             );
         }
     }
     
+    /// Move to the previous line
+    fn up(&mut self) {
+        self.scroll_y -= 1;
+        if self.scroll_y < self.max_scroll_y {
+            self.scroll_y = self.max_scroll_y;
+        }
+    }
+
+    /// Move to the next line
+    fn down(&mut self) {
+        self.scroll_y += 1;
+        if self.scroll_y > 0 {
+            self.scroll_y = 0;
+        }
+    }
+
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -188,7 +217,7 @@ impl Menu {
             item_count: MAX_ITEMS
         }
     }
-    /// Move to the previous state in a wrapping fashion
+    /// Move to the previous item in a wrapping fashion
     fn prev(&mut self) {
         self.state_idx -= 1;
         if self.state_idx < 0 {
@@ -196,7 +225,7 @@ impl Menu {
         }
     }
 
-    /// Move to the next state in a wrapping fashion
+    /// Move to the next item in a wrapping fashion
     fn next(&mut self) {
         self.state_idx += 1;
         if self.state_idx > MAX_ITEMS - 1 {

@@ -23,24 +23,30 @@ impl State for MWState {
     fn render(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         display.draw(
                 Image16BPP::new(include_bytes!("../../../data/mwatch.raw"), 64, 64)
-                    .translate(Coord::new(32, 22))
+                    .translate(Coord::new(32, 10))
                     .into_iter(),
                 );
         let text: Font6x12<_> = Font6x12::render_str("Project by");
         display.draw(text
-                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 96))
+                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 86))
                      .with_stroke(Some(0x02D4_u16.into()))
                      .into_iter());
 
         let text: Font6x12<_> = Font6x12::render_str("Scott Mabin 2019");
         display.draw(text
-                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 112))
+                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 102))
+                     .with_stroke(Some(0x02D4_u16.into()))
+                     .into_iter());
+                     
+        let text: Font6x12<_> = Font6x12::render_str("@MabezDev on Github");
+        display.draw(text
+                     .translate(Coord::new(64 - text.size().0 as i32 / 2, 102))
                      .with_stroke(Some(0x02D4_u16.into()))
                      .into_iter());
         None
     }
 
-    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

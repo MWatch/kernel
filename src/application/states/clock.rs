@@ -85,7 +85,7 @@ impl State for ClockState {
         None
     }
 
-    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),
