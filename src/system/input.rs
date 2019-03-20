@@ -15,7 +15,8 @@ pub const RIGHT_MIDDLE: u8 = RIGHT | MIDDLE;
 pub const LEFT_RIGHT: u8 = LEFT | RIGHT;
 pub const ALL: u8 = LEFT | MIDDLE | RIGHT;
 pub const NONE: u8 = 0;
-const NUM_SAMPLES: u16 = 25;
+
+pub const TSC_SAMPLES: u16 = 25;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
@@ -40,19 +41,9 @@ pub struct InputManager
 }
 
 impl InputManager {
-
     /// Creates a new instance of the InputManager
-    pub fn new(tsc: TouchSenseController, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
-        // Acquire for rough estimate of capacitance
-        let mut left = left;
+    pub fn new(tsc: TouchSenseController, threshold: u16, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
         let mut tsc = tsc;
-
-        let mut baseline = 0;
-        for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut left).unwrap();
-        }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
-
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
 

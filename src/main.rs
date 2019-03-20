@@ -59,7 +59,10 @@ use crate::application::{
 };
 
 use crate::system::{ 
-    input::InputManager,
+    input::{
+        InputManager,
+        TSC_SAMPLES
+    },
     bms::BatteryManagement,
     system::{
         System,
@@ -69,6 +72,7 @@ use crate::system::{
         DMA_HALF_BYTES,
         SPI_MHZ,
         I2C_KHZ,
+        SYS_CLK_HZ,
     },
     notification::NotificationManager,
 };
@@ -212,7 +216,7 @@ const APP: () = {
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let left_button =
+        let mut left_button =
             gpiob
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -223,6 +227,14 @@ const APP: () = {
             charge_transfer_low: None,
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
+
+        // Acquire for rough estimate of capacitance
+        let mut baseline = 0;
+        for _ in 0..TSC_SAMPLES {
+            baseline += tsc.acquire(&mut left_button).unwrap();
+            delay.delay_ms(10u8);
+        }
+        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 80;
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -276,7 +288,7 @@ const APP: () = {
         }
 
         let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
-        let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
+        let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
         let system = System::new(rtc, bms, nmgr, amgr);
 
@@ -352,7 +364,7 @@ const APP: () = {
     fn status() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let mut system = resources.SYSTEM;
-        let total = SYSTICK_HZ / CPU_USAGE_POLL_HZ;
+        let total = SYS_CLK_HZ / CPU_USAGE_POLL_HZ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;

@@ -67,7 +67,7 @@ impl DisplayManager
                 DisplayManager::scoped_state_render(&mut self.app_state, system, display)
             },
             2 => {
-                DisplayManager::static_state_render(&mut self.info_state, system, display)
+                DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
             },
             3 => {
                 DisplayManager::static_state_render(&mut self.mwatch_state, system, display)
@@ -76,7 +76,7 @@ impl DisplayManager
                 DisplayManager::static_state_render(&mut self.uop_state, system, display)
             },
             5 => {
-                DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
+                DisplayManager::static_state_render(&mut self.info_state, system, display)
             },
             _ => panic!("Unhandled state")
         };
@@ -96,7 +96,7 @@ impl DisplayManager
                 DisplayManager::scoped_state_input(&mut self.app_state, system, display, input)
             }
             2 => {
-                DisplayManager::static_state_input(&mut self.info_state, system, display, input)
+                DisplayManager::scoped_state_input(&mut self.notification_state, system, display, input)
             },
             3  => {
                 DisplayManager::static_state_input(&mut self.mwatch_state, system, display, input)
@@ -105,7 +105,7 @@ impl DisplayManager
                 DisplayManager::static_state_input(&mut self.uop_state, system, display, input)
             },
             5 => {
-                DisplayManager::scoped_state_input(&mut self.notification_state, system, display, input)
+                DisplayManager::static_state_input(&mut self.info_state, system, display, input)
             },
             _ => panic!("Unhandled state")
         };

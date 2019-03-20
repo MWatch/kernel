@@ -5,6 +5,9 @@
 use embedded_graphics::prelude::*;
 
 pub const DISPLAY_CENTRE: i32 = 64;
+pub const DISPLAY_WIDTH: i32 = 128;
+pub const DISPLAY_HEIGHT: i32 = 128;
+
 
 pub fn horizontal_centre<F>(text: F, y: i32) -> F
     where F: Dimensions + Transform

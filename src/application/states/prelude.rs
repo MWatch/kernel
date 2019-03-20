@@ -9,5 +9,5 @@ pub(crate) use crate::types::Ssd1351;
 pub(crate) use crate::system::system::System;
 pub(crate) use crate::types::InputEvent;
 
-pub(crate) use crate::application::util::*;
+pub(crate) use crate::application::render_util::*;
 
