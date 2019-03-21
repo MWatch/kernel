@@ -92,7 +92,9 @@ impl IngressManager {
                     Type::Notification => {
                         self.nsi[2] = self.nsi_idx;
                         info!("Adding notification from: {:?}, with section indexes {:?}", self.buffer, self.nsi);
-                        system.nm().add(&self.buffer, &self.nsi).unwrap();
+                        system.nm().add(&self.buffer, &self.nsi).unwrap_or_else(|err|{
+                            error!("Failed to add notification {:?}", err);
+                        });
                     },
                     Type::Syscall => {
                         info!("Parsing syscall from: {:?}", self.buffer);
@@ -127,16 +129,32 @@ impl IngressManager {
                 if self.hex_idx > 1 {
                     match self.state {
                         State::ApplicationChecksum => {
-                            system.am().write_checksum_byte(
-                                hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
-                            )
-                            .unwrap();
+                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
+                                Ok(byte) => {
+                                    system.am().write_checksum_byte(byte).unwrap_or_else(|err|{
+                                        error!("Failed to write checksum byte {:?}", err);
+                                        self.state = State::Wait;
+                                    });
+                                }
+                                Err(err) => {
+                                    error!("Failed to parse hex bytes to byte {:?}", err);
+                                    self.state = State::Wait; // abort
+                                }
+                            }
                         }
                         State::ApplicationStore => {
-                            system.am().write_ram_byte(
-                                hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]).unwrap(),
-                            )
-                            .unwrap();
+                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
+                                Ok(byte) => {
+                                    system.am().write_ram_byte(byte).unwrap_or_else(|err|{
+                                        error!("Failed to write ram byte {:?}", err);
+                                        self.state = State::Wait;
+                                    });
+                                }
+                                Err(err) => {
+                                    error!("Failed to parse hex bytes to byte {:?}", err);
+                                    self.state = State::Wait; // abort
+                                }
+                            }
                         }
                         _ => unreachable!()
                     }
@@ -186,7 +204,9 @@ impl IngressManager {
                                     self.state = State::ApplicationStore
                                 } else {
                                     // reset before we load the new application
-                                    system.am().kill().unwrap();
+                                    system.am().kill().unwrap_or_else(|err| {
+                                        warn!("Failed to kill application, writing over live data! {:?}", err);
+                                    });
                                     // parse the checksum
                                     self.state = State::ApplicationChecksum;
                                 }

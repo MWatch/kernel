@@ -129,8 +129,14 @@ const APP: () = {
         };
 
         *resources.LOGGER = Some(logger);
-        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap();
-        unsafe { trick_init(&log).unwrap(); }
+        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap_or_else(|| {
+            panic!("Failed to get the static logger");
+        });
+        unsafe { 
+            trick_init(&log).unwrap_or_else(|err| {
+                panic!("Failed to get initializr the logger {:?}", err);
+            });
+        }
 
         info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
         info!("Copyright Scott Mabin 2019");
@@ -170,8 +176,8 @@ const APP: () = {
         let fb: &'static mut [u8] = resources.FRAME_BUFFER;
         let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
         display.reset(&mut rst, &mut delay);
-        display.init().unwrap();
-        display.set_rotation(DisplayRotation::Rotate0).unwrap();
+        display.init().expect("Failed to initialize the display");
+        display.set_rotation(DisplayRotation::Rotate0).expect("Failed to set the display rotation");
         display.clear(true);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -189,15 +195,19 @@ const APP: () = {
 
         delay.delay_ms(100_u8); // allow module to boot
         let mut hm11 = Hm11::new(tx, rx); // tx, rx into hm11 for configuration
-        hm11.send_with_delay(Command::Test, &mut delay).unwrap();
-        hm11.send_with_delay(Command::Notify(false), &mut delay).unwrap();
+        hm11.send_with_delay(Command::Test, &mut delay)
+            .expect("HM11 - Not communicating, is the baud correct?");
+        hm11.send_with_delay(Command::Notify(false), &mut delay)
+            .expect("HM11 - Failed to turn off connection notification");
         hm11.send_with_delay(Command::SetName("MWatch"), &mut delay)
-            .unwrap();
+            .expect("Failed to set name to MWatch");
         hm11.send_with_delay(Command::SystemLedMode(true), &mut delay)
-            .unwrap();
-        hm11.send_with_delay(Command::Reset, &mut delay).unwrap();
+            .expect("HM11 - Failed to set GPIO mode");
+        hm11.send_with_delay(Command::Reset, &mut delay)
+            .expect("HM11 - Failed to reset module");
         delay.delay_ms(100_u8); // allow module to reset
-        hm11.send_with_delay(Command::Test, &mut delay).unwrap(); // has the module come back up?
+        hm11.send_with_delay(Command::Test, &mut delay)
+            .expect("HM11 - Module did not responde after reboot");
         let (_, rx) = hm11.release();
 
         channels.6.listen(Event::HalfTransfer);
@@ -231,7 +241,9 @@ const APP: () = {
         // Acquire for rough estimate of capacitance
         let mut baseline = 0;
         for _ in 0..TSC_SAMPLES {
-            baseline += tsc.acquire(&mut left_button).unwrap();
+            baseline += tsc.acquire(&mut left_button).unwrap_or_else(|err|{
+                panic!("Failed to calibrate tsc {:?}", err);
+            });
             delay.delay_ms(10u8);
         }
         let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 95;
@@ -292,6 +304,8 @@ const APP: () = {
         let dmng = DisplayManager::default();
         let system = System::new(rtc, bms, nmgr, amgr);
 
+        // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
+
         // Resources that need to be initialized are passed back here
         init::LateResources {
             CB: rx.circ_read(channels.6, buffer),
@@ -344,8 +358,11 @@ const APP: () = {
                 m.process(system);
             });
         });
-        spawn.display_manager().unwrap();
-        resources.SYSTICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        // spawn.display_manager().expect("Failed to spawn display manager");
+        spawn.display_manager().unwrap_or_else(|_err| {
+            error!("Failed to spawn display manager");
+        });
+        resources.SYSTICK.wait().expect("systick timer was already cleared"); // this should never panic as if we are in the IT the uif bit is set
     }
 
     /// Hardware timer, initiates tsc aquisitions
@@ -359,7 +376,8 @@ const APP: () = {
                 }
             }
         }
-        resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        // this should never panic as if we are in the IT the uif bit is set
+        resources.TIM6.wait().expect("TIM6 clear() failed"); 
     }
 
     /// Thread runs once a second and collates stats about the system
@@ -392,7 +410,7 @@ const APP: () = {
             }, current_soc);
             *resources.LAST_BATT_PERCENT = current_soc;
         }
-        resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        resources.TIM7.wait().expect("TIM7 wait() failed");
     }
 
     /* 
@@ -440,7 +458,7 @@ const APP: () = {
         let mut mgr = resources.IMNG;
         // If the idle flag is set then we take what we have and push
         // it into the ingress manager
-        if resources.USART2_RX.is_idle(true) { 
+        if resources.USART2_RX.is_idle(true) {
             resources
                 .CB
                 .partial_peek(|buf, _half| {
@@ -449,8 +467,9 @@ const APP: () = {
                         mgr.write(buf);
                     }
                     Ok((len, ()))
-                })
-                .unwrap();
+                }).unwrap_or_else(|err|{
+                    error!("Failed to partial peek into circular buffer {:?}", err);
+                });
         }
     }
 
@@ -463,8 +482,9 @@ const APP: () = {
             .CB
             .peek(|buf, _half| {
                 mgr.write(buf);
-            })
-            .unwrap();
+            }).unwrap_or_else(|err|{
+                error!("Failed to full peek into circular buffer {:?}", err);
+            });
     }
     
     /* 

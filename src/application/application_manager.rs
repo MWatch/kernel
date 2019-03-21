@@ -34,6 +34,8 @@ pub enum Error {
     InvalidServiceFn,
     /// The FFI function pointer for input is invalid
     InvalidInputFn,
+    /// The application doesnt fit in memory
+    NoMemory
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -77,9 +79,13 @@ impl ApplicationManager {
 
     /// Write a checksum byte into the manager internal cs buffer
     pub fn write_checksum_byte(&mut self, byte: u8) -> Result<(), Error> {
-        self.target_cs[self.target_cs_idx] = byte;
-        self.target_cs_idx += 1;
-        Ok(())
+        if self.target_cs_idx > self.target_cs.len() {
+            Err(Error::NoMemory)
+        } else {
+            self.target_cs[self.target_cs_idx] = byte;
+            self.target_cs_idx += 1;
+            Ok(())
+        }
     }
 
     /// Verify the contents of ram using a crc against the checksum
@@ -207,9 +213,13 @@ impl Ram {
 
     /// Write a byte into Ram
     pub fn write(&mut self, byte: u8) -> Result<(), Error> {
-        self.ram[self.ram_idx] = byte;
-        self.ram_idx += 1;
-        Ok(())
+        if self.ram_idx > self.ram.len() {
+            Err(Error::NoMemory)
+        } else {
+            self.ram[self.ram_idx] = byte;
+            self.ram_idx += 1;
+            Ok(())
+        }
     }
 
     /// ieee crc32 of the ram buffer

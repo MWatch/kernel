@@ -27,7 +27,9 @@ impl Default for AppState {
 
 impl State for AppState {
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
-        system.am().service(display).unwrap();
+        system.am().service(display).unwrap_or_else(|err| {
+            error!("Failed to render app {:?}", err);
+        });
         None     
     }
 
@@ -38,7 +40,9 @@ impl State for AppState {
                 Some(Signal::Home) // signal to dm to go home
             }
             _ => {
-                system.am().service_input(input).unwrap();
+                system.am().service_input(input).unwrap_or_else(|err|{
+                    error!("Failed to service input for app {:?}", err);
+                });
                 None
             }
         }
@@ -79,6 +83,8 @@ impl ScopedState for AppState {
 
     /// Stop
     fn stop(&mut self, system: &mut System) {
-        system.am().kill().unwrap();
+        system.am().kill().unwrap_or_else(|err|{
+            error!("Failed to kill app {:?}", err);
+        });
     }
 }

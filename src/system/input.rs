@@ -123,9 +123,9 @@ impl InputManager {
     /// the registers and update the interal state
     pub fn process_result(&mut self) -> Result<(), Error> {
         let value = match self.pin_idx {
-            0 => self.tsc.read(&mut self.left).unwrap(),
-            1 => self.tsc.read(&mut self.middle).unwrap(),
-            2 => self.tsc.read(&mut self.right).unwrap(),
+            0 => self.tsc.read(&mut self.left).expect("Expected TSC pin 0"),
+            1 => self.tsc.read(&mut self.middle).expect("Expected TSC pin 1"),
+            2 => self.tsc.read(&mut self.right).expect("Expected TSC pin 2"),
             _ => panic!("Invalid pin index")
         };
         trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold);

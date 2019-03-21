@@ -4,6 +4,7 @@
 
 use crate::ingress::buffer::Buffer;
 
+// TODO increasing this borks the watch
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
 
