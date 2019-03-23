@@ -222,31 +222,31 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let middle_button =
+        let mut middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut left_button =
+        let left_button =
             gpiob
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv16),
+            clock_prescale: Some(TscClockPrescaler::HclkDiv2),
             max_count_error: None,
-            charge_transfer_high: None,
-            charge_transfer_low: None,
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C8),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C8),
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
         // Acquire for rough estimate of capacitance
         let mut baseline = 0;
         for _ in 0..TSC_SAMPLES {
-            baseline += tsc.acquire(&mut left_button).unwrap_or_else(|err|{
+            baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
                 panic!("Failed to calibrate tsc {:?}", err);
             });
-            delay.delay_ms(10u8);
+            delay.delay_ms(20u8);
         }
-        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 95;
+        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 90;
 
         /* T4056 input pins */
         let stdby = gpioa
