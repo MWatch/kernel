@@ -302,8 +302,8 @@ const APP: () = {
         let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
         let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
-        let system = System::new(rtc, bms, nmgr, amgr);
-
+        let mut system = System::new(rtc, bms, nmgr, amgr);
+        system.ss().tsc_threshold = input_mgr.threshold();
         // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         // Resources that need to be initialized are passed back here

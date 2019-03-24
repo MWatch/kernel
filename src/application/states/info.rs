@@ -49,6 +49,14 @@ impl State for InfoState {
                 .into_iter(),
         );
         self.buffer.clear();
+        write!(self.buffer, "TSC THRES: {}", system.ss().tsc_threshold).unwrap();
+        display.draw(
+            Font6x12::render_str(self.buffer.as_str())
+                .translate(Coord::new(0, 48))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter(),
+        );
+        self.buffer.clear();
         None
     }
 

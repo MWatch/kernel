@@ -65,6 +65,10 @@ impl System {
         &mut self.stats
     }
 
+    pub fn is_idle(&mut self) -> bool {
+        (self.ss().idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
+    }
+
     pub fn get_free_stack() -> usize {
         unsafe {
             extern "C" {
@@ -84,14 +88,9 @@ pub struct Stats {
     pub cpu_usage: f32,
     pub tsc_events: u32,
     pub idle_count: u32,
+    pub tsc_threshold: u16,
 }
-
-impl Stats {
-
-    pub fn is_idle(&self) -> bool {
-        (self.idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
-    }
-}
+    
 
 impl Default for Stats {
     fn default() -> Self {
@@ -99,6 +98,7 @@ impl Default for Stats {
             cpu_usage: 0.0,
             tsc_events: 0,
             idle_count: 0,
+            tsc_threshold: 0,
         }
     }
 }

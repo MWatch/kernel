@@ -61,8 +61,7 @@ impl ScopedState for AppState {
         }
 
         let text = Font6x12::render_str(self.buffer.as_str());
-        display.draw(text
-                .translate(Coord::new(64 - text.size().0 as i32 / 2, 24))
+        display.draw(horizontal_centre(text, 24)
                 .with_stroke(Some(0x02D4_u16.into()))
                 .into_iter(),
         );

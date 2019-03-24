@@ -47,7 +47,7 @@ impl State for ClockState {
         }
 
         self.buffer.clear(); // reset the buffer
-        if !system.ss().is_idle() {
+        if !system.is_idle() {
             write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
             display.draw(
                 Font6x12::render_str(self.buffer.as_str())

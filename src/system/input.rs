@@ -137,4 +137,9 @@ impl InputManager {
             Err(Error::Incomplete)
         }
     }
+
+    /// returns the threshold value required to identify a touch
+    pub fn threshold(&self) -> u16 {
+        self.tsc_threshold
+    }
 }
