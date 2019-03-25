@@ -46,7 +46,7 @@ git = "https://github.com/mabezdev/stm32l4xx-hal"
 features = ["rt", "stm32l4x2"]
 
 [features]
-default = []
+default = ["crc-fb"]
 itm = []
 disable-input = []
 crc-fb = []

@@ -33,7 +33,7 @@ impl State for InfoState {
         );
         self.buffer.clear();
         let stack_space = System::get_free_stack();
-        write!(self.buffer, "RAM: {} bytes", stack_space).unwrap();
+        write!(self.buffer, "FREE: {} bytes", stack_space).unwrap();
         display.draw(
             Font6x12::render_str(self.buffer.as_str())
                 .translate(Coord::new(0, 24))

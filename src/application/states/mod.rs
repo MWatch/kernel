@@ -21,9 +21,7 @@ pub trait State: Default {
 }
 
 /// Marker trait for static states
-pub trait StaticState: State {
-
-}
+pub trait StaticState: State {}
 
 /// This state only exists whilst its running, and is destroyed on exit
 pub trait ScopedState: State {

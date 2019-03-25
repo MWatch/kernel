@@ -218,7 +218,7 @@ const APP: () = {
             gpiob
                 .pb4
                 .into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let right_button =
+        let mut right_button =
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -226,15 +226,16 @@ const APP: () = {
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let left_button =
+        let mut left_button =
             gpiob
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
             clock_prescale: Some(TscClockPrescaler::HclkDiv2),
             max_count_error: None,
-            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C8),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C8),
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
+            spread_spectrum_deviation: Some(32u8), // quarter of the max
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
@@ -244,7 +245,7 @@ const APP: () = {
             baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
                 panic!("Failed to calibrate tsc {:?}", err);
             });
-            delay.delay_ms(20u8);
+            delay.delay_ms(15u8);
         }
         let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 90;
 
@@ -322,6 +323,10 @@ const APP: () = {
         }
     }
 
+    /* 
+        Hardware threads
+    */
+
     /// Idle thread - Captures the time the cpu is asleep to calculate cpu uasge
     #[idle(resources = [SLEEP_TIME])]
     fn idle() -> ! {
@@ -336,11 +341,7 @@ const APP: () = {
         }
     }
 
-    /* 
-        Hardware threads
-    */
-
-    /// The main thread of the watch, this is called `SYSTIC_HZ` times a second, to perform 
+    /// The main thread of the watch, this is called `SYSTICK_HZ` times a second, to perform 
     /// housekeeping operations
     #[interrupt(binds = TIM2, resources = [IMNG, SYSTEM, SYSTICK, IDLE_COUNT], spawn = [display_manager])]
     fn systick() {
@@ -501,17 +502,27 @@ const APP: () = {
         dmngr.lock(|dmng|{
             #[cfg(feature = "crc-fb")]
             {
-                let cs = crc::crc16::checksum_x25(display.fb());
-                trace!("DM - CS before: {}", cs);
-                display.clear(false);
-                sys.lock(|system|{
-                    dmng.process(system, &mut display);
-                });
-                let cs_after = crc::crc16::checksum_x25(display.fb());
-                trace!("DM - CS after: {}", cs_after);
-                if cs != cs_after {
-                    display.flush();
+                let is_idle = sys.lock(|system| system.is_idle());
+                if is_idle {
+                    let cs = crc::crc16::checksum_x25(display.fb());
+                    trace!("DM - CS before: {}", cs);
+                    display.clear(false);
+                    sys.lock(|system|{
+                        dmng.process(system, &mut display);
+                    });
+                    let cs_after = crc::crc16::checksum_x25(display.fb());
+                    trace!("DM - CS after: {}", cs_after);
+                    if cs != cs_after {
+                        display.flush();
+                    }
+                } else {
+                    display.clear(false);
+                    sys.lock(|system|{
+                        dmng.process(system, &mut display);
+                    });
+                    display.flush();  
                 }
+                
             }
             #[cfg(not(feature = "crc-fb"))]
             {
