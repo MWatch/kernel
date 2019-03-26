@@ -173,12 +173,13 @@ const APP: () = {
             clocks,
             &mut rcc.apb2,
         );
-        let fb: &'static mut [u8] = resources.FRAME_BUFFER;
-        let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
+        // let fb: &'static mut [u8] = resources.FRAME_BUFFER;
+        // let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
+        let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc).into();
         display.reset(&mut rst, &mut delay);
         display.init().expect("Failed to initialize the display");
         display.set_rotation(DisplayRotation::Rotate0).expect("Failed to set the display rotation");
-        display.clear(true);
+        // display.clear(true);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
         let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -280,8 +281,8 @@ const APP: () = {
         let nmgr = NotificationManager::new();
 
         /* Give the application manager its ram */
-        let ram: &'static mut [u8] = resources.APPLICATION_RAM;
-        let amgr = ApplicationManager::new(Ram::new(ram));
+        // let ram: &'static mut [u8] = resources.APPLICATION_RAM;
+        let amgr = ApplicationManager::new(Ram::new());
 
         let mut systick = Timer::tim2(device.TIM2, SYSTICK_HZ.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
@@ -526,11 +527,11 @@ const APP: () = {
             }
             #[cfg(not(feature = "crc-fb"))]
             {
-                display.clear(false);
+                // display.clear(false);
                 sys.lock(|system|{
                     dmng.process(system, &mut display);
                 });
-                display.flush();
+                // display.flush();
             }
         });
         
