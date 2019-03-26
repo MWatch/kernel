@@ -73,7 +73,7 @@ pub enum InputEvent {
 pub static mut CONTEXT_POINTER: Option<&'static mut Context> = None;
 
 pub struct Context<'a> {
-    pub display: &'a mut Ssd1351,
+    pub display: Option<&'a mut Ssd1351>,
     pub log: extern "C" fn(&str) -> i32,
 }
 
@@ -106,17 +106,21 @@ impl<'a> Context<'a> {
     }
 }
 
-//TODO is this safe? It's only safe if when we launch an application we never draw anything else
-// i.e we give control of the display to the application
-/// Warning this assume control over the display, it is up to use to make sure the display is not borrowed by anything else
-pub extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
-    let ctx = unsafe { &mut *context };
-    ctx.display.set_pixel(u32::from(x), u32::from(y), colour);
+
+/// Assumes control over the display, it is up to use to make sure the display is not borrowed by anything else
+pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
+    let ctx =&mut *context;
+    // let display = ctx.display.expect("Display invoked in an invalid application state");
+    if let Some(display) = &mut ctx.display {
+        display.set_pixel(u32::from(x), u32::from(y), colour);
+    } else {
+        panic!("Display invoked in an invalid state. Applications can only use the display within update.")
+    }
     0
 }
 
-pub extern "C" fn print(context: *mut Context, string: &str) -> i32 {
-    let ctx = unsafe { &mut *context };
+pub unsafe extern "C" fn print(context: *mut Context, string: &str) -> i32 {
+    let ctx = &mut *context;
     (ctx.log)(string);
     0
 }

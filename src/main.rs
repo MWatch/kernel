@@ -29,7 +29,7 @@ use crate::hal::{
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
-        ClockPrescaler as TscClockPrescaler, Config as TscConfig, Tsc,
+        Config as TscConfig, Tsc,
     }
 };
 
@@ -218,7 +218,7 @@ const APP: () = {
             gpiob
                 .pb4
                 .into_touch_sample(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut right_button =
+        let right_button =
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -226,7 +226,7 @@ const APP: () = {
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut left_button =
+        let left_button =
             gpiob
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);

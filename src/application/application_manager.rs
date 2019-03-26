@@ -138,7 +138,7 @@ impl ApplicationManager {
     pub fn service(&mut self, display: &mut Ssd1351) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
         let mut ctx = Context {
-            display,
+            display: Some(display),
             log: application_logger,
         };
         self.status.service_result = service_fn(&mut ctx);
@@ -152,9 +152,8 @@ impl ApplicationManager {
     pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            //NOTE: this is safe because of a contract between the sdk and kernel,
             // display is only passed in on update, not on input
-            display: unsafe { core::mem::uninitialized() },
+            display: None,
             log: application_logger,
         };
         let _ = input_fn(&mut ctx, input);
@@ -187,7 +186,7 @@ impl ApplicationManager {
 
     /// convert 4 byte slice into a const ptr
     fn fn_ptr_from_slice(bytes: &[u8]) -> *const () {
-        assert!(bytes.len() == 8);
+        assert!(bytes.len() == 4);
         let addr = ((u32::from(bytes[3])) << 24)
             | ((u32::from(bytes[2])) << 16)
             | ((u32::from(bytes[1])) << 8)
@@ -205,6 +204,10 @@ pub struct Ram {
 impl Ram {
     /// Create a new Ram instance with the size of the provided buffer
     pub fn new(ram: &'static mut [u8]) -> Self {
+        // wipe the buffer initially
+        for byte in ram.iter_mut() {
+            *byte = 0u8;
+        }
         Self {
             ram,
             ram_idx: 0,
