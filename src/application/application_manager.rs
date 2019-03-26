@@ -34,6 +34,8 @@ pub enum Error {
     InvalidServiceFn,
     /// The FFI function pointer for input is invalid
     InvalidInputFn,
+    /// The application doesnt fit in memory
+    NoMemory
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -77,9 +79,13 @@ impl ApplicationManager {
 
     /// Write a checksum byte into the manager internal cs buffer
     pub fn write_checksum_byte(&mut self, byte: u8) -> Result<(), Error> {
-        self.target_cs[self.target_cs_idx] = byte;
-        self.target_cs_idx += 1;
-        Ok(())
+        if self.target_cs_idx > self.target_cs.len() {
+            Err(Error::NoMemory)
+        } else {
+            self.target_cs[self.target_cs_idx] = byte;
+            self.target_cs_idx += 1;
+            Ok(())
+        }
     }
 
     /// Verify the contents of ram using a crc against the checksum
@@ -132,7 +138,7 @@ impl ApplicationManager {
     pub fn service(&mut self, display: &mut Ssd1351) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
         let mut ctx = Context {
-            display,
+            display: Some(display),
             log: application_logger,
         };
         self.status.service_result = service_fn(&mut ctx);
@@ -143,10 +149,11 @@ impl ApplicationManager {
     }
 
     /// Gives processing time to input handlers of the function
-    pub fn service_input(&mut self, display: &mut Ssd1351, input: InputEvent) -> Result<(), Error> {
+    pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            display,
+            // display is only passed in on update, not on input
+            display: None,
             log: application_logger,
         };
         let _ = input_fn(&mut ctx, input);
@@ -179,7 +186,7 @@ impl ApplicationManager {
 
     /// convert 4 byte slice into a const ptr
     fn fn_ptr_from_slice(bytes: &[u8]) -> *const () {
-        assert!(bytes.len() == 8);
+        assert!(bytes.len() == 4);
         let addr = ((u32::from(bytes[3])) << 24)
             | ((u32::from(bytes[2])) << 16)
             | ((u32::from(bytes[1])) << 8)
@@ -197,6 +204,10 @@ pub struct Ram {
 impl Ram {
     /// Create a new Ram instance with the size of the provided buffer
     pub fn new(ram: &'static mut [u8]) -> Self {
+        // wipe the buffer initially
+        for byte in ram.iter_mut() {
+            *byte = 0u8;
+        }
         Self {
             ram,
             ram_idx: 0,
@@ -205,9 +216,13 @@ impl Ram {
 
     /// Write a byte into Ram
     pub fn write(&mut self, byte: u8) -> Result<(), Error> {
-        self.ram[self.ram_idx] = byte;
-        self.ram_idx += 1;
-        Ok(())
+        if self.ram_idx > self.ram.len() {
+            Err(Error::NoMemory)
+        } else {
+            self.ram[self.ram_idx] = byte;
+            self.ram_idx += 1;
+            Ok(())
+        }
     }
 
     /// ieee crc32 of the ram buffer

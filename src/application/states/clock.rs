@@ -1,4 +1,6 @@
-
+//! Clock state
+//! 
+//! The main home page
 
 use crate::application::states::prelude::*;
 
@@ -45,7 +47,7 @@ impl State for ClockState {
         }
 
         self.buffer.clear(); // reset the buffer
-        if !system.ss().is_idle() {
+        if !system.is_idle() {
             write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
             display.draw(
                 Font6x12::render_str(self.buffer.as_str())
@@ -85,7 +87,7 @@ impl State for ClockState {
         None
     }
 
-    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

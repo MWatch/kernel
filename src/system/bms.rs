@@ -38,7 +38,11 @@ impl BatteryManagement {
 
     /// Returns the current state of charge (%) of the battery
     pub fn soc(&mut self) -> u16 {
-        bodged_soc(self.bms.soc().unwrap()) // should we cache this value and instead only update when we process?
+        //TODO should we cache this value and instead only update when we process?
+        bodged_soc(self.bms.soc().unwrap_or_else(|err| {
+            error!("Failed to read soc from bms: {:?}", err);
+            100 // return 100 percent
+        }))
     }
 
     /// internal processing of the bms

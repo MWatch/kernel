@@ -15,7 +15,8 @@ pub const RIGHT_MIDDLE: u8 = RIGHT | MIDDLE;
 pub const LEFT_RIGHT: u8 = LEFT | RIGHT;
 pub const ALL: u8 = LEFT | MIDDLE | RIGHT;
 pub const NONE: u8 = 0;
-const NUM_SAMPLES: u16 = 25;
+
+pub const TSC_SAMPLES: u16 = 10;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
@@ -40,19 +41,9 @@ pub struct InputManager
 }
 
 impl InputManager {
-
     /// Creates a new instance of the InputManager
-    pub fn new(tsc: TouchSenseController, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
-        // Acquire for rough estimate of capacitance
-        let mut left = left;
+    pub fn new(tsc: TouchSenseController, threshold: u16, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
         let mut tsc = tsc;
-
-        let mut baseline = 0;
-        for _ in 0..NUM_SAMPLES {
-            baseline += tsc.acquire(&mut left).unwrap();
-        }
-        let threshold = ((baseline / NUM_SAMPLES) / 100) * 90;
-
         tsc.listen(TscEvent::EndOfAcquisition);
         // tsc.listen(TscEvent::MaxCountError); // TODO
 
@@ -132,9 +123,9 @@ impl InputManager {
     /// the registers and update the interal state
     pub fn process_result(&mut self) -> Result<(), Error> {
         let value = match self.pin_idx {
-            0 => self.tsc.read(&mut self.left).unwrap(),
-            1 => self.tsc.read(&mut self.middle).unwrap(),
-            2 => self.tsc.read(&mut self.right).unwrap(),
+            0 => self.tsc.read(&mut self.left).expect("Expected TSC pin 0"),
+            1 => self.tsc.read(&mut self.middle).expect("Expected TSC pin 1"),
+            2 => self.tsc.read(&mut self.right).expect("Expected TSC pin 2"),
             _ => panic!("Invalid pin index")
         };
         trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold);
@@ -145,5 +136,10 @@ impl InputManager {
         } else {
             Err(Error::Incomplete)
         }
+    }
+
+    /// returns the threshold value required to identify a touch
+    pub fn threshold(&self) -> u16 {
+        self.tsc_threshold
     }
 }

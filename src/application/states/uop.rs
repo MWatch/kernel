@@ -1,4 +1,4 @@
-
+//! Uop Logo state
 
 use crate::application::states::prelude::*;
 
@@ -19,14 +19,13 @@ impl Default for UopState {
 impl State for UopState {
     fn render(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
         display.draw(
-               Image16BPP::new(include_bytes!("../../../data/uop.raw"), 48, 64)
-                   .translate(Coord::new(32, 32))
+               centre(Image16BPP::new(include_bytes!("../../../data/uop.raw"), 48, 64))
                    .into_iter(),
          );
         None
     }
 
-    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

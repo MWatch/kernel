@@ -1,4 +1,4 @@
-
+//! Debug info state
 
 use crate::application::states::prelude::*;
 
@@ -33,7 +33,7 @@ impl State for InfoState {
         );
         self.buffer.clear();
         let stack_space = System::get_free_stack();
-        write!(self.buffer, "RAM: {} bytes", stack_space).unwrap();
+        write!(self.buffer, "FREE: {} bytes", stack_space).unwrap();
         display.draw(
             Font6x12::render_str(self.buffer.as_str())
                 .translate(Coord::new(0, 24))
@@ -49,10 +49,18 @@ impl State for InfoState {
                 .into_iter(),
         );
         self.buffer.clear();
+        write!(self.buffer, "TSC THRES: {}", system.ss().tsc_threshold).unwrap();
+        display.draw(
+            Font6x12::render_str(self.buffer.as_str())
+                .translate(Coord::new(0, 48))
+                .with_stroke(Some(0xF818_u16.into()))
+                .into_iter(),
+        );
+        self.buffer.clear();
         None
     }
 
-    fn input(&mut self, _system: &mut System, _display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

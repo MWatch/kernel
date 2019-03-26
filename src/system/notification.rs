@@ -4,24 +4,20 @@
 
 use crate::ingress::buffer::Buffer;
 
+// TODO increasing this borks the watch
 pub const BUFF_SIZE: usize = 256;
 pub const BUFF_COUNT: usize = 8;
 
 #[derive(Copy, Clone)]
 pub struct Notification {
-    //TODO parsing
-    // app_name_idx: usize,
-    // title_idx: usize,
-    // text_idx: usize,
+    section_indexes: [usize; 3],
     inner: Buffer,
 }
 
 impl Notification {
     pub const fn default() -> Notification {
         Notification {
-            // app_name_idx: 0,
-            // title_idx: 0,
-            // text_idx: 0,
+            section_indexes: [0usize; 3],
             inner: Buffer {
                 btype: crate::ingress::buffer::Type::Unknown,
                 payload: [0u8; BUFF_SIZE],
@@ -34,12 +30,26 @@ impl Notification {
         &self.inner.payload[..self.inner.payload_idx]
     }
 
-    pub fn parse_buffer(&mut self, buffer: &Buffer) -> Result<(), NotificationError> {
-        //TODO actual parsing, using nom?
-        self.inner = buffer.clone();
-        Ok(())
+    pub fn from_buffer(buffer: &Buffer, idxs: &[usize; 3]) -> Result<Notification, NotificationError> {
+        Ok(Notification {
+            section_indexes: idxs.clone(),
+            inner: buffer.clone()
+        })
+    }
+
+    pub fn source(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[0..self.section_indexes[1]]) }
+    }
+
+    pub fn title(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[self.section_indexes[0]..self.section_indexes[1]]) }
+    }
+
+    pub fn body(&self) -> &str {
+        unsafe { core::str::from_utf8_unchecked(&self.inner.payload[self.section_indexes[1]..self.section_indexes[2]]) }
     }
 }
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum NotificationError {
     Parsing,
@@ -72,8 +82,8 @@ impl NotificationManager {
     }
 
     // Parses a buffer for notification info, copying into the pool
-    pub fn add(&mut self, buffer: &Buffer) -> Result<(), NotificationError> {
-        self.pool[self.idx].parse_buffer(buffer)?;
+    pub fn add(&mut self, buffer: &Buffer, idxs: &[usize; 3]) -> Result<(), NotificationError> {
+        self.pool[self.idx] = Notification::from_buffer(buffer, idxs)?;
 
         self.idx += 1;
         if self.idx + 1 > self.pool.len() {

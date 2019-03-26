@@ -27,18 +27,22 @@ impl Default for AppState {
 
 impl State for AppState {
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
-        system.am().service(display).unwrap();
+        system.am().service(display).unwrap_or_else(|err| {
+            error!("Failed to render app {:?}", err);
+        });
         None     
     }
 
-    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Multi => {
                 system.am().pause();
                 Some(Signal::Home) // signal to dm to go home
             }
             _ => {
-                system.am().service_input(display, input).unwrap();
+                system.am().service_input(input).unwrap_or_else(|err|{
+                    error!("Failed to service input for app {:?}", err);
+                });
                 None
             }
         }
@@ -57,8 +61,7 @@ impl ScopedState for AppState {
         }
 
         let text = Font6x12::render_str(self.buffer.as_str());
-        display.draw(text
-                .translate(Coord::new(64 - text.size().0 as i32 / 2, 24))
+        display.draw(horizontal_centre(text, 24)
                 .with_stroke(Some(0x02D4_u16.into()))
                 .into_iter(),
         );
@@ -79,6 +82,8 @@ impl ScopedState for AppState {
 
     /// Stop
     fn stop(&mut self, system: &mut System) {
-        system.am().kill().unwrap();
+        system.am().kill().unwrap_or_else(|err|{
+            error!("Failed to kill app {:?}", err);
+        });
     }
 }

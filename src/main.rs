@@ -29,7 +29,7 @@ use crate::hal::{
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
-        ClockPrescaler as TscClockPrescaler, Config as TscConfig, Tsc,
+        Config as TscConfig, Tsc,
     }
 };
 
@@ -59,7 +59,10 @@ use crate::application::{
 };
 
 use crate::system::{ 
-    input::InputManager,
+    input::{
+        InputManager,
+        TSC_SAMPLES
+    },
     bms::BatteryManagement,
     system::{
         System,
@@ -69,6 +72,7 @@ use crate::system::{
         DMA_HALF_BYTES,
         SPI_MHZ,
         I2C_KHZ,
+        SYS_CLK_HZ,
     },
     notification::NotificationManager,
 };
@@ -125,8 +129,14 @@ const APP: () = {
         };
 
         *resources.LOGGER = Some(logger);
-        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap();
-        unsafe { trick_init(&log).unwrap(); }
+        let log: &'static mut _ = resources.LOGGER.as_mut().unwrap_or_else(|| {
+            panic!("Failed to get the static logger");
+        });
+        unsafe { 
+            trick_init(&log).unwrap_or_else(|err| {
+                panic!("Failed to get initializr the logger {:?}", err);
+            });
+        }
 
         info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
         info!("Copyright Scott Mabin 2019");
@@ -166,8 +176,8 @@ const APP: () = {
         let fb: &'static mut [u8] = resources.FRAME_BUFFER;
         let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
         display.reset(&mut rst, &mut delay);
-        display.init().unwrap();
-        display.set_rotation(DisplayRotation::Rotate0).unwrap();
+        display.init().expect("Failed to initialize the display");
+        display.set_rotation(DisplayRotation::Rotate0).expect("Failed to set the display rotation");
         display.clear(true);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -185,15 +195,19 @@ const APP: () = {
 
         delay.delay_ms(100_u8); // allow module to boot
         let mut hm11 = Hm11::new(tx, rx); // tx, rx into hm11 for configuration
-        hm11.send_with_delay(Command::Test, &mut delay).unwrap();
-        hm11.send_with_delay(Command::Notify(false), &mut delay).unwrap();
+        hm11.send_with_delay(Command::Test, &mut delay)
+            .expect("HM11 - Not communicating, is the baud correct?");
+        hm11.send_with_delay(Command::Notify(false), &mut delay)
+            .expect("HM11 - Failed to turn off connection notification");
         hm11.send_with_delay(Command::SetName("MWatch"), &mut delay)
-            .unwrap();
+            .expect("Failed to set name to MWatch");
         hm11.send_with_delay(Command::SystemLedMode(true), &mut delay)
-            .unwrap();
-        hm11.send_with_delay(Command::Reset, &mut delay).unwrap();
+            .expect("HM11 - Failed to set GPIO mode");
+        hm11.send_with_delay(Command::Reset, &mut delay)
+            .expect("HM11 - Failed to reset module");
         delay.delay_ms(100_u8); // allow module to reset
-        hm11.send_with_delay(Command::Test, &mut delay).unwrap(); // has the module come back up?
+        hm11.send_with_delay(Command::Test, &mut delay)
+            .expect("HM11 - Module did not responde after reboot");
         let (_, rx) = hm11.release();
 
         channels.6.listen(Event::HalfTransfer);
@@ -208,7 +222,7 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let middle_button =
+        let mut middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -217,12 +231,23 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv16),
+            clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
             max_count_error: None,
-            charge_transfer_high: None,
-            charge_transfer_low: None,
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
+            spread_spectrum_deviation: Some(128u8),
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
+
+        // Acquire for rough estimate of capacitance
+        let mut baseline = 0;
+        for _ in 0..TSC_SAMPLES {
+            baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
+                panic!("Failed to calibrate tsc {:?}", err);
+            });
+            delay.delay_ms(15u8);
+        }
+        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 92;
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -276,9 +301,11 @@ const APP: () = {
         }
 
         let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
-        let input_mgr = InputManager::new(tsc, left_button, middle_button, right_button);
+        let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
-        let system = System::new(rtc, bms, nmgr, amgr);
+        let mut system = System::new(rtc, bms, nmgr, amgr);
+        system.ss().tsc_threshold = input_mgr.threshold();
+        // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         // Resources that need to be initialized are passed back here
         init::LateResources {
@@ -296,6 +323,10 @@ const APP: () = {
         }
     }
 
+    /* 
+        Hardware threads
+    */
+
     /// Idle thread - Captures the time the cpu is asleep to calculate cpu uasge
     #[idle(resources = [SLEEP_TIME])]
     fn idle() -> ! {
@@ -310,31 +341,33 @@ const APP: () = {
         }
     }
 
-    /* 
-        Hardware threads
-    */
-
-    /// The main thread of the watch, this is called `SYSTIC_HZ` times a second, to perform 
+    /// The main thread of the watch, this is called `SYSTICK_HZ` times a second, to perform 
     /// housekeeping operations
     #[interrupt(binds = TIM2, resources = [IMNG, SYSTEM, SYSTICK, IDLE_COUNT], spawn = [display_manager])]
     fn systick() {
         let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
-        system.bms().process();
-        system.ss().idle_count = resources.IDLE_COUNT.lock(|val| {
-            let value = *val;
-            *val += 1; // append to idle count
-            value
+        let mut idle = resources.IDLE_COUNT;
+        system.lock(|system|{
+            system.bms().process();
+            system.ss().idle_count = idle.lock(|val| {
+                let value = *val;
+                *val += 1; // append to idle count
+                value
+            });
+            mgr.lock(|m| {
+                m.process(system);
+            });
         });
-        mgr.lock(|m| {
-            m.process(&mut system);
+        // spawn.display_manager().expect("Failed to spawn display manager");
+        spawn.display_manager().unwrap_or_else(|_err| {
+            error!("Failed to spawn display manager");
         });
-        spawn.display_manager().unwrap();
-        resources.SYSTICK.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        resources.SYSTICK.wait().expect("systick timer was already cleared"); // this should never panic as if we are in the IT the uif bit is set
     }
 
     /// Hardware timer, initiates tsc aquisitions
-    #[interrupt(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 2)] // TIM6
+    #[interrupt(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 3)] // TIM6
     fn tsc_initiator() {
         match resources.INPUT_MGR.start_new() {
             Ok(_) => {},
@@ -344,26 +377,31 @@ const APP: () = {
                 }
             }
         }
-        resources.TIM6.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        // this should never panic as if we are in the IT the uif bit is set
+        resources.TIM6.wait().expect("TIM6 clear() failed"); 
     }
 
     /// Thread runs once a second and collates stats about the system
     #[interrupt(binds = TIM7, resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM])]
     fn status() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
-        let mut system = resources.SYSTEM;
-        let total = SYSTICK_HZ / CPU_USAGE_POLL_HZ;
+        let mut systemr = resources.SYSTEM;
+        let mut tsc_ev = resources.TSC_EVENTS;
+        let total = SYS_CLK_HZ / CPU_USAGE_POLL_HZ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
         *resources.SLEEP_TIME = 0;
-        system.ss().tsc_events = resources.TSC_EVENTS.lock(|val| {
-            let value = *val;
-            *val = 0; // reset the value
-            value
-        });
-        system.ss().cpu_usage = cpu;
 
-        let current_soc = system.bms().soc();
+        let current_soc = systemr.lock(|system|{
+            system.ss().tsc_events = tsc_ev.lock(|val| {
+                let value = *val;
+                *val = 0; // reset the value
+                value
+            });
+            system.ss().cpu_usage = cpu;
+            system.bms().soc()
+        });
+         
         let last_soc = *resources.LAST_BATT_PERCENT;
         if current_soc != last_soc {
             info!("SoC has {} to {}", if current_soc < last_soc {
@@ -373,7 +411,7 @@ const APP: () = {
             }, current_soc);
             *resources.LAST_BATT_PERCENT = current_soc;
         }
-        resources.TIM7.wait().unwrap(); // this should never panic as if we are in the IT the uif bit is set
+        resources.TIM7.wait().expect("TIM7 wait() failed");
     }
 
     /* 
@@ -382,7 +420,7 @@ const APP: () = {
 
     /// When a TSC aquisition completes, the result is processed by the input manager
     /// If the result is a valid output, the input handler task is spawned to act upon it
-    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 2, spawn = [input_handler])]
+    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 3, spawn = [input_handler])]
     fn TSC_RESULT() {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
@@ -416,12 +454,12 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 2)]
+    #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 3)]
     fn serial_partial_dma() {
         let mut mgr = resources.IMNG;
         // If the idle flag is set then we take what we have and push
         // it into the ingress manager
-        if resources.USART2_RX.is_idle(true) { 
+        if resources.USART2_RX.is_idle(true) {
             resources
                 .CB
                 .partial_peek(|buf, _half| {
@@ -430,22 +468,24 @@ const APP: () = {
                         mgr.write(buf);
                     }
                     Ok((len, ()))
-                })
-                .unwrap();
+                }).unwrap_or_else(|err|{
+                    error!("Failed to partial peek into circular buffer {:?}", err);
+                });
         }
     }
 
     /// Handles a full or hal full dma buffer of serial data,
     /// and writes it into the MessageManager rb
-    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 2)]
+    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 3)]
     fn serial_full_dma() {
         let mut mgr = resources.IMNG;
         resources
             .CB
             .peek(|buf, _half| {
                 mgr.write(buf);
-            })
-            .unwrap();
+            }).unwrap_or_else(|err|{
+                error!("Failed to full peek into circular buffer {:?}", err);
+            });
     }
     
     /* 
@@ -456,33 +496,51 @@ const APP: () = {
     #[task(resources = [DISPLAY, SYSTEM, BT_CONN, DMNG])]
     fn display_manager() {
         let mut display = resources.DISPLAY;
-        let mut dmng = resources.DMNG;
-        #[cfg(feature = "crc-fb")]
-        {
-            let cs = crc::crc16::checksum_x25(display.fb());
-            trace!("DM - CS before: {}", cs);
-            display.clear(false);
-            dmng.process(&mut resources.SYSTEM, &mut display);
-            let cs_after = crc::crc16::checksum_x25(display.fb());
-            trace!("DM - CS after: {}", cs_after);
-            if cs != cs_after {
+        let mut dmngr = resources.DMNG;
+        let mut sys = resources.SYSTEM;
+        // let mut system = resources.SYSTEM;
+        dmngr.lock(|dmng|{
+            #[cfg(feature = "crc-fb")]
+            {
+                let is_idle = sys.lock(|system| system.is_idle());
+                if is_idle {
+                    let cs = crc::crc16::checksum_x25(display.fb());
+                    trace!("DM - CS before: {}", cs);
+                    display.clear(false);
+                    sys.lock(|system|{
+                        dmng.process(system, &mut display);
+                    });
+                    let cs_after = crc::crc16::checksum_x25(display.fb());
+                    trace!("DM - CS after: {}", cs_after);
+                    if cs != cs_after {
+                        display.flush();
+                    }
+                } else {
+                    display.clear(false);
+                    sys.lock(|system|{
+                        dmng.process(system, &mut display);
+                    });
+                    display.flush();  
+                }
+                
+            }
+            #[cfg(not(feature = "crc-fb"))]
+            {
+                display.clear(false);
+                sys.lock(|system|{
+                    dmng.process(system, &mut display);
+                });
                 display.flush();
             }
-        }
-        #[cfg(not(feature = "crc-fb"))]
-        {
-            display.clear(false);
-            dmng.process(&mut resources.SYSTEM, &mut display);
-            display.flush();
-        }
+        });
         
     }
 
-    /// This task is dispatched via the hardware TSC isr
-    #[task(resources = [SYSTEM, DISPLAY, DMNG])]
+    /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
+    /// This task is very cheap, hence we can have 3 of them running at anytime
+    #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
     fn input_handler(input: InputEvent) {
-        let mut display = resources.DISPLAY;
-        resources.DMNG.service_input(&mut resources.SYSTEM, &mut display,  input);
+        resources.DMNG.service_input(&mut resources.SYSTEM, input);
     }
 
     /// Interrupt handlers used to dispatch software tasks

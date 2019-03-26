@@ -7,6 +7,7 @@ pub mod info;
 pub mod app;
 pub mod mwatch;
 pub mod uop;
+pub mod notifications;
 
 
 use prelude::*;
@@ -16,13 +17,11 @@ pub trait State: Default {
     /// To draw the state to the display
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal>;
     /// Allows the state to take control of inputs from the kernel
-    fn input(&mut self, system: &mut System, display: &mut Ssd1351, input: InputEvent) -> Option<Signal>; //TODO can we remove the need for the display?
+    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal>;
 }
 
 /// Marker trait for static states
-pub trait StaticState: State {
-
-}
+pub trait StaticState: State {}
 
 /// This state only exists whilst its running, and is destroyed on exit
 pub trait ScopedState: State {
