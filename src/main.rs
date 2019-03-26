@@ -231,11 +231,11 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv2),
+            clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
             max_count_error: None,
             charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
             charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
-            spread_spectrum_deviation: Some(32u8), // quarter of the max
+            spread_spectrum_deviation: Some(128u8),
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
@@ -247,7 +247,7 @@ const APP: () = {
             });
             delay.delay_ms(15u8);
         }
-        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 90;
+        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 92;
 
         /* T4056 input pins */
         let stdby = gpioa
