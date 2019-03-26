@@ -87,7 +87,7 @@ const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 const APP: () = {
     /// Runtime initialized static resources
     /// These variables will be initialized at the end of `init()`
-    static mut CB: CircBuffer<&'static mut [[u8; DMA_HALF_BYTES]; 2], dma1::C6> = ();
+    // static mut CB: CircBuffer<[[u8; DMA_HALF_BYTES]; 2], dma1::C6> = ();
     static mut IMNG: IngressManager = ();
     static mut INPUT_MGR: InputManager = ();
     static mut DMNG: DisplayManager = ();
@@ -301,7 +301,7 @@ const APP: () = {
             input.listen(TimerEvent::TimeOut);
         }
 
-        let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
+        // let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
         let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
@@ -310,7 +310,7 @@ const APP: () = {
 
         // Resources that need to be initialized are passed back here
         init::LateResources {
-            CB: rx.circ_read(channels.6, buffer),
+            // CB: rx.circ_read(channels.6, *buffer),
             USART2_RX: rx,
             IMNG: imgr,
             DISPLAY: display,
@@ -356,9 +356,9 @@ const APP: () = {
                 *val += 1; // append to idle count
                 value
             });
-            mgr.lock(|m| {
-                m.process(system);
-            });
+            // mgr.lock(|m| {
+                mgr.process(system);
+            // });
         });
         // spawn.display_manager().expect("Failed to spawn display manager");
         spawn.display_manager().unwrap_or_else(|_err| {
@@ -455,39 +455,39 @@ const APP: () = {
 
     /// Handles the intermediate state where the DMA has data in it but
     /// not enough to trigger a half or full dma complete
-    #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 3)]
-    fn serial_partial_dma() {
-        let mut mgr = resources.IMNG;
-        // If the idle flag is set then we take what we have and push
-        // it into the ingress manager
-        if resources.USART2_RX.is_idle(true) {
-            resources
-                .CB
-                .partial_peek(|buf, _half| {
-                    let len = buf.len();
-                    if len > 0 {
-                        mgr.write(buf);
-                    }
-                    Ok((len, ()))
-                }).unwrap_or_else(|err|{
-                    error!("Failed to partial peek into circular buffer {:?}", err);
-                });
-        }
-    }
+    // #[interrupt(binds = USART2, resources = [CB, IMNG, USART2_RX], priority = 3)]
+    // fn serial_partial_dma() {
+    //     let mut mgr = resources.IMNG;
+    //     // If the idle flag is set then we take what we have and push
+    //     // it into the ingress manager
+    //     if resources.USART2_RX.is_idle(true) {
+    //         resources
+    //             .CB
+    //             .partial_peek(|buf, _half| {
+    //                 let len = buf.len();
+    //                 if len > 0 {
+    //                     mgr.write(buf);
+    //                 }
+    //                 Ok((len, ()))
+    //             }).unwrap_or_else(|err|{
+    //                 error!("Failed to partial peek into circular buffer {:?}", err);
+    //             });
+    //     }
+    // }
 
-    /// Handles a full or hal full dma buffer of serial data,
-    /// and writes it into the MessageManager rb
-    #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 3)]
-    fn serial_full_dma() {
-        let mut mgr = resources.IMNG;
-        resources
-            .CB
-            .peek(|buf, _half| {
-                mgr.write(buf);
-            }).unwrap_or_else(|err|{
-                error!("Failed to full peek into circular buffer {:?}", err);
-            });
-    }
+    // /// Handles a full or hal full dma buffer of serial data,
+    // /// and writes it into the MessageManager rb
+    // #[interrupt(binds = DMA1_CH6, resources = [CB, IMNG], priority = 3)]
+    // fn serial_full_dma() {
+    //     let mut mgr = resources.IMNG;
+    //     resources
+    //         .CB
+    //         .peek(|buf, _half| {
+    //             mgr.write(buf);
+    //         }).unwrap_or_else(|err|{
+    //             error!("Failed to full peek into circular buffer {:?}", err);
+    //         });
+    // }
     
     /* 
         Software tasks
