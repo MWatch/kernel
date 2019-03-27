@@ -198,15 +198,15 @@ impl ApplicationManager {
 
 /// A structure for manipulating application memory
 pub struct Ram {
-    ram: [u8; 128],
+    ram: &'static mut [u8],
     ram_idx: usize,
 }
 
 impl Ram {
     /// Create a new Ram instance with the size of the provided buffer
-    pub fn new() -> Self {
+    pub fn new(ram: &'static mut [u8]) -> Self {
         Self {
-            ram: [0u8; 128],
+            ram: ram,
             ram_idx: 0,
         }
     }

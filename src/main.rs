@@ -77,6 +77,7 @@ use crate::system::{
     notification::NotificationManager,
 };
 
+pub struct Static<T>(*mut T);
 
 #[cfg(feature = "itm")]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -282,7 +283,8 @@ const APP: () = {
 
         /* Give the application manager its ram */
         // let ram: &'static mut [u8] = resources.APPLICATION_RAM;
-        let amgr = ApplicationManager::new(Ram::new());
+        let ram: &'static mut [u8] = unsafe { &mut *Static(resources.APPLICATION_RAM).0 };
+        let amgr = ApplicationManager::new(Ram::new(ram));
 
         let mut systick = Timer::tim2(device.TIM2, SYSTICK_HZ.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
