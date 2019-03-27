@@ -13,8 +13,7 @@ use crate::system::notification::Notification;
 use crate::application::render_util::{DISPLAY_WIDTH, DISPLAY_HEIGHT};
 
 
-/// How many menu items can fit on a page at a time
-const MAX_ITEMS: i8 = 8;
+
 const CHAR_WIDTH: i32 = 6;
 const CHAR_HEIGHT: i32 = 12;
 const LINE_WIDTH: i32 = DISPLAY_WIDTH / CHAR_WIDTH;
@@ -37,7 +36,7 @@ pub struct NotificationState {
 impl State for NotificationState {
     /// Render the notification state
     fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
-        self.menu.update_count(system.nm().idx() as i8 + 1);
+        self.menu.update_count(system.nm().idx() as i8);
         match self.state {
             InternalState::Menu => {
                 if system.nm().idx() > 0 {
@@ -77,7 +76,7 @@ impl State for NotificationState {
             self.stop(system);
             return Some(Signal::Home) // signal to dm to go home
         }
-        self.menu.update_count(system.nm().idx() as i8 + 1);
+        self.menu.update_count(system.nm().idx() as i8);
         match self.state {
             InternalState::Menu => {
                 if system.nm().idx() > 0 {
@@ -222,7 +221,7 @@ impl Menu {
     pub const fn new() -> Self {
         Menu {
             state_idx: 0,
-            item_count: MAX_ITEMS
+            item_count: 0
         }
     }
 
@@ -230,14 +229,14 @@ impl Menu {
     fn prev(&mut self) {
         self.state_idx -= 1;
         if self.state_idx < 0 {
-            self.state_idx = MAX_ITEMS - 1;
+            self.state_idx = self.item_count - 1;
         }
     }
 
     /// Move to the next item in a wrapping fashion
     fn next(&mut self) {
         self.state_idx += 1;
-        if self.state_idx > MAX_ITEMS - 1 {
+        if self.state_idx > self.item_count - 1 {
             self.state_idx = 0;
         }
     }

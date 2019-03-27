@@ -239,15 +239,25 @@ const APP: () = {
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
-        // Acquire for rough estimate of capacitance
-        let mut baseline = 0;
-        for _ in 0..TSC_SAMPLES {
-            baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
-                panic!("Failed to calibrate tsc {:?}", err);
-            });
-            delay.delay_ms(15u8);
-        }
-        let tsc_threshold = ((baseline / TSC_SAMPLES) / 100) * 92;
+        #[cfg(feature = "dyn-tsc-cal")]
+        let tsc_threshold =  {
+            // Acquire for rough estimate of capacitance
+            let mut baseline = 0;
+            for _ in 0..TSC_SAMPLES {
+                baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
+                    panic!("Failed to calibrate tsc {:?}", err);
+                });
+                delay.delay_ms(15u8);
+            }
+
+            ((baseline / TSC_SAMPLES) / 100) * 92
+        };
+
+        #[cfg(not(feature = "dyn-tsc-cal"))]
+        let tsc_threshold = {
+            552 // acquired through testing
+        };
+        
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -348,6 +358,11 @@ const APP: () = {
         let mut system = resources.SYSTEM;
         let mut mgr = resources.IMNG;
         let mut idle = resources.IDLE_COUNT;
+
+        spawn.display_manager().unwrap_or_else(|_err| {
+            error!("Failed to spawn display manager");
+        });
+        
         system.lock(|system|{
             system.bms().process();
             system.ss().idle_count = idle.lock(|val| {
@@ -358,10 +373,6 @@ const APP: () = {
             mgr.lock(|m| {
                 m.process(system);
             });
-        });
-        // spawn.display_manager().expect("Failed to spawn display manager");
-        spawn.display_manager().unwrap_or_else(|_err| {
-            error!("Failed to spawn display manager");
         });
         resources.SYSTICK.wait().expect("systick timer was already cleared"); // this should never panic as if we are in the IT the uif bit is set
     }

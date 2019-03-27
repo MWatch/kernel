@@ -50,6 +50,7 @@ default = ["crc-fb"]
 itm = []
 disable-input = []
 crc-fb = []
+dyn-tsc-cal = []
 
 [lib]
 name = "mwatch_kernel_lib"
