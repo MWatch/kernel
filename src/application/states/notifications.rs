@@ -106,10 +106,10 @@ impl State for NotificationState {
                         self.state = InternalState::Menu;
                     }
                     InputEvent::Left => {
-                        self.body.up();
+                        self.body.down();
                     },
                     InputEvent::Right => {
-                        self.body.down();
+                        self.body.up();
                     },
                     _ => {}
                 }

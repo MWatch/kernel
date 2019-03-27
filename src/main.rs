@@ -59,10 +59,7 @@ use crate::application::{
 };
 
 use crate::system::{ 
-    input::{
-        InputManager,
-        TSC_SAMPLES
-    },
+    input::InputManager,
     bms::BatteryManagement,
     system::{
         System,
@@ -222,7 +219,7 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut middle_button =
+        let middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -241,6 +238,7 @@ const APP: () = {
 
         #[cfg(feature = "dyn-tsc-cal")]
         let tsc_threshold =  {
+            const TSC_SAMPLES: u16 = 10;
             // Acquire for rough estimate of capacitance
             let mut baseline = 0;
             for _ in 0..TSC_SAMPLES {

@@ -5,8 +5,8 @@
 use crate::ingress::buffer::Buffer;
 
 // TODO increasing this borks the watch
-pub const BUFF_SIZE: usize = 256;
-pub const BUFF_COUNT: usize = 8;
+pub const BUFF_SIZE: usize = 512;
+pub const BUFF_COUNT: usize = 4;
 
 #[derive(Copy, Clone)]
 pub struct Notification {

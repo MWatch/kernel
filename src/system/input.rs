@@ -16,8 +16,6 @@ pub const LEFT_RIGHT: u8 = LEFT | RIGHT;
 pub const ALL: u8 = LEFT | MIDDLE | RIGHT;
 pub const NONE: u8 = 0;
 
-pub const TSC_SAMPLES: u16 = 10;
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     NoInput,
