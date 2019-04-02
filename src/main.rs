@@ -29,7 +29,7 @@ use crate::hal::{
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
-        Config as TscConfig, Tsc, ClockPrescaler as TscClockPrescaler,
+        Config as TscConfig, Tsc, ClockPrescaler as TscClockPrescaler, MaxCountError
     }
 };
 
@@ -229,10 +229,10 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: Some(TscClockPrescaler::HclkDiv2), /* Some(TscClockPrescaler::HclkDiv2) */
-            max_count_error: None,
-            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C2),
+            clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
+            max_count_error: Some(MaxCountError::U16383),
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C1),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
             spread_spectrum_deviation: None, /* Some(128u8) */
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
@@ -254,7 +254,7 @@ const APP: () = {
 
         #[cfg(not(feature = "dyn-tsc-cal"))]
         let tsc_threshold = {
-            490 // acquired through testing
+            1090 // acquired through testing
         };
         
 
@@ -313,6 +313,7 @@ const APP: () = {
         let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
+        system.ss().tsc_threshold = tsc_threshold;
         // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         // Resources that need to be initialized are passed back here
@@ -409,25 +410,25 @@ const APP: () = {
                 value
             });
             // Input quirk, tsc count grows so we reduce the number of counts required when on battery
-            imgr.lock(|im| {
-                let offset = match system.bms().state() {
-                    BmsState::Charged | BmsState::Charging => {
-                        0u16
-                    },
-                    BmsState::Draining => {
-                        const THRES: u16 = 90;
-                        const SEC_TO_REACH:u16 = 30;
-                        if im.threshold_offset() <= THRES {
-                            im.threshold_offset() + (THRES / SEC_TO_REACH)
-                        } else {
-                            THRES
-                        }
-                    }
-                };
+            // imgr.lock(|im| {
+            //     let offset = match system.bms().state() {
+            //         BmsState::Charged | BmsState::Charging => {
+            //             0u16
+            //         },
+            //         BmsState::Draining => {
+            //             const THRES: u16 = 90;
+            //             const SEC_TO_REACH:u16 = 30;
+            //             if im.threshold_offset() <= THRES {
+            //                 im.threshold_offset() + (THRES / SEC_TO_REACH)
+            //             } else {
+            //                 THRES
+            //             }
+            //         }
+            //     };
             
-                im.set_threshold_offset(offset);
-                system.ss().tsc_threshold = im.threshold() + im.threshold_offset();
-            });
+            //     im.set_threshold_offset(offset);
+            //     system.ss().tsc_threshold = im.threshold() + im.threshold_offset();
+            // });
             system.ss().cpu_usage = cpu;
             system.bms().soc()
         });
