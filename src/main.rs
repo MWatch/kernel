@@ -434,12 +434,12 @@ const APP: () = {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
         match input_mgr.process_result() {
-            Ok(_) => {
+            Ok(pin_info) => {
                 match input_mgr.output() {
                     Ok(input) => {
                         *resources.IDLE_COUNT = 0; // we are no longer idle
                         info!("Output => {:?}", input);
-                        match spawn.input_handler(input) {
+                        match spawn.input_handler(input, pin_info) {
                             Ok(_) => {},
                             Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
                         }
@@ -528,6 +528,33 @@ const APP: () = {
                     display.clear(false);
                     sys.lock(|system|{
                         dmng.process(system, &mut display);
+                        #[cfg(feature = "debug-tsc")]
+                        {                        
+                            use embedded_graphics::fonts::Font6x12;
+                            use embedded_graphics::prelude::*;
+                            use heapless::String;
+                            use heapless::consts::*; 
+                            use core::fmt::Write;
+                            
+                            let mut buffer: String<U128> = String::new();
+                            let stats = system.ss();
+                            write!(buffer, "T: {},", stats.tsc_threshold).unwrap();
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(0, 12))
+                                    .with_stroke(Some(0xF818_u16.into()))
+                                    .into_iter(),
+                            );
+                            buffer.clear();
+                            write!(buffer, "V: {:?}", stats.tsc_vals).unwrap();
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(0, 12))
+                                    .with_stroke(Some(0xF818_u16.into()))
+                                    .into_iter(),
+                            );
+                        }
+
                     });
                     display.flush();  
                 }
@@ -548,8 +575,10 @@ const APP: () = {
     /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
     /// This task is very cheap, hence we can have 3 of them running at anytime
     #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
-    fn input_handler(input: InputEvent) {
-        resources.DMNG.service_input(&mut resources.SYSTEM, input);
+    fn input_handler(input: InputEvent, pin_info: (u8, u16)) {
+        let mut system = resources.SYSTEM; 
+        resources.DMNG.service_input(&mut system, input);
+        system.ss().tsc_vals[pin_info.0 as usize] = pin_info.1;
     }
 
     /// Interrupt handlers used to dispatch software tasks

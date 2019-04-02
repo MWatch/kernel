@@ -51,6 +51,7 @@ itm = []
 disable-input = []
 crc-fb = []
 dyn-tsc-cal = []
+debug-tsc = []
 
 [lib]
 name = "mwatch_kernel_lib"

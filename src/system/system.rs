@@ -89,6 +89,7 @@ pub struct Stats {
     pub tsc_events: u32,
     pub idle_count: u32,
     pub tsc_threshold: u16,
+    pub tsc_vals: [u16; 3]
 }
     
 
@@ -99,6 +100,7 @@ impl Default for Stats {
             tsc_events: 0,
             idle_count: 0,
             tsc_threshold: 0,
+            tsc_vals: [0u16; 3],
         }
     }
 }
