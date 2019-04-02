@@ -29,7 +29,7 @@ use crate::hal::{
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
-        Config as TscConfig, Tsc,
+        Config as TscConfig, Tsc, ClockPrescaler as TscClockPrescaler,
     }
 };
 
@@ -219,7 +219,7 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let middle_button =
+        let mut middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
@@ -228,7 +228,7 @@ const APP: () = {
                 .pb7
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
-            clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
+            clock_prescale: Some(TscClockPrescaler::HclkDiv2), /* Some(TscClockPrescaler::HclkDiv2) */
             max_count_error: None,
             charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
             charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
@@ -248,7 +248,7 @@ const APP: () = {
                 delay.delay_ms(15u8);
             }
 
-            ((baseline / TSC_SAMPLES) / 100) * 92
+            ((baseline / TSC_SAMPLES) / 100) * 95
         };
 
         #[cfg(not(feature = "dyn-tsc-cal"))]
@@ -429,17 +429,19 @@ const APP: () = {
 
     /// When a TSC aquisition completes, the result is processed by the input manager
     /// If the result is a valid output, the input handler task is spawned to act upon it
-    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 3, spawn = [input_handler])]
+    #[interrupt(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT, SYSTEM], priority = 3, spawn = [input_handler])]
     fn TSC_RESULT() {
         *resources.TSC_EVENTS += 1;
         let mut input_mgr = resources.INPUT_MGR;
+        let pinfo = input_mgr.read_current();
+        resources.SYSTEM.ss().tsc_vals[pinfo.0 as usize] = pinfo.1;
         match input_mgr.process_result() {
-            Ok(pin_info) => {
+            Ok(_) => {
                 match input_mgr.output() {
                     Ok(input) => {
                         *resources.IDLE_COUNT = 0; // we are no longer idle
                         info!("Output => {:?}", input);
-                        match spawn.input_handler(input, pin_info) {
+                        match spawn.input_handler(input) {
                             Ok(_) => {},
                             Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
                         }
@@ -518,6 +520,32 @@ const APP: () = {
                     display.clear(false);
                     sys.lock(|system|{
                         dmng.process(system, &mut display);
+                        #[cfg(feature = "debug-tsc")]
+                        {                        
+                            use embedded_graphics::fonts::Font6x12;
+                            use embedded_graphics::prelude::*;
+                            use heapless::String;
+                            use heapless::consts::*; 
+                            use core::fmt::Write;
+                            
+                            let mut buffer: String<U128> = String::new();
+                            let stats = system.ss();
+                            write!(buffer, "T: {},", stats.tsc_threshold).unwrap();
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(0, 12))
+                                    .with_stroke(Some(0xF818_u16.into()))
+                                    .into_iter(),
+                            );
+                            buffer.clear();
+                            write!(buffer, "V: {:?}", stats.tsc_vals).unwrap();
+                            display.draw(
+                                Font6x12::render_str(buffer.as_str())
+                                    .translate(Coord::new(0, 24))
+                                    .with_stroke(Some(0xF818_u16.into()))
+                                    .into_iter(),
+                            );
+                        }
                     });
                     let cs_after = crc::crc16::checksum_x25(display.fb());
                     trace!("DM - CS after: {}", cs_after);
@@ -549,7 +577,7 @@ const APP: () = {
                             write!(buffer, "V: {:?}", stats.tsc_vals).unwrap();
                             display.draw(
                                 Font6x12::render_str(buffer.as_str())
-                                    .translate(Coord::new(0, 12))
+                                    .translate(Coord::new(0, 24))
                                     .with_stroke(Some(0xF818_u16.into()))
                                     .into_iter(),
                             );
@@ -575,10 +603,11 @@ const APP: () = {
     /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
     /// This task is very cheap, hence we can have 3 of them running at anytime
     #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
-    fn input_handler(input: InputEvent, pin_info: (u8, u16)) {
-        let mut system = resources.SYSTEM; 
-        resources.DMNG.service_input(&mut system, input);
-        system.ss().tsc_vals[pin_info.0 as usize] = pin_info.1;
+    fn input_handler(input: InputEvent) {
+        let mut dmgr = resources.DMNG;
+        resources.SYSTEM.lock(|system|{
+            dmgr.service_input(system, input);
+        });
     }
 
     /// Interrupt handlers used to dispatch software tasks

@@ -119,7 +119,7 @@ impl InputManager {
 
     /// Call when the aquisition is complete, this function read
     /// the registers and update the interal state
-    pub fn process_result(&mut self) -> Result<(u8, u16), Error> {
+    pub fn process_result(&mut self) -> Result<(), Error> {
         let value = match self.pin_idx {
             0 => self.tsc.read(&mut self.left).expect("Expected TSC pin 0"),
             1 => self.tsc.read(&mut self.middle).expect("Expected TSC pin 1"),
@@ -130,10 +130,20 @@ impl InputManager {
         self.update_input(value < self.tsc_threshold);
         self.tsc.clear(TscEvent::EndOfAcquisition);
         if self.pin_idx == 2 { // we've read all the pins now process the output
-            Ok((self.pin_idx, value))
+            Ok(())
         } else {
             Err(Error::Incomplete)
         }
+    }
+
+    pub fn read_current(&mut self) -> (u8, u16) {
+        let value = match self.pin_idx {
+            0 => self.tsc.read(&mut self.left).expect("Expected TSC pin 0"),
+            1 => self.tsc.read(&mut self.middle).expect("Expected TSC pin 1"),
+            2 => self.tsc.read(&mut self.right).expect("Expected TSC pin 2"),
+            _ => panic!("Invalid pin index")
+        };
+        (self.pin_idx, value)
     }
 
     /// returns the threshold value required to identify a touch
