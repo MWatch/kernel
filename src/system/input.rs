@@ -32,6 +32,7 @@ pub struct InputManager
     last_vector: u8,
     pin_idx: u8,
     tsc_threshold: u16,
+    offset: u16,
     tsc: TouchSenseController,
     left: LeftButton,
     middle: MiddleButton,
@@ -48,6 +49,7 @@ impl InputManager {
         Self {
             tsc,
             tsc_threshold: threshold,
+            offset: 0,
             raw_vector: 0,
             last_vector: 0,
             pin_idx: 0,
@@ -126,8 +128,8 @@ impl InputManager {
             2 => self.tsc.read(&mut self.right).expect("Expected TSC pin 2"),
             _ => panic!("Invalid pin index")
         };
-        trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold);
-        self.update_input(value < self.tsc_threshold);
+        trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold + self.offset);
+        self.update_input(value < (self.tsc_threshold + self.offset));
         self.tsc.clear(TscEvent::EndOfAcquisition);
         if self.pin_idx == 2 { // we've read all the pins now process the output
             Ok(())
@@ -149,5 +151,13 @@ impl InputManager {
     /// returns the threshold value required to identify a touch
     pub fn threshold(&self) -> u16 {
         self.tsc_threshold
+    }
+
+    pub fn set_threshold_offset(&mut self, val: u16) {
+        self.offset = val;
+    }
+
+    pub fn threshold_offset(&mut self) -> u16 {
+        self.offset
     }
 }

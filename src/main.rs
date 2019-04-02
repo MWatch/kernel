@@ -60,7 +60,7 @@ use crate::application::{
 
 use crate::system::{ 
     input::InputManager,
-    bms::BatteryManagement,
+    bms::{BatteryManagement, State as BmsState},
     system::{
         System,
         CPU_USAGE_POLL_HZ,
@@ -100,6 +100,7 @@ const APP: () = {
     static mut DMA_BUFFER: [[u8; crate::DMA_HALF_BYTES]; 2] = [[0; crate::DMA_HALF_BYTES]; 2];
     static mut SLEEP_TIME: u32 = 0;
     static mut TSC_EVENTS: u32 = 0;
+    static mut THRES_COUNT: u32 = 0;
     static mut IDLE_COUNT: u32 = 0;
     static mut LAST_BATT_PERCENT: u16 = 0;
     static mut LOGGER: Option<LoggerType> = None;
@@ -231,8 +232,8 @@ const APP: () = {
             clock_prescale: Some(TscClockPrescaler::HclkDiv2), /* Some(TscClockPrescaler::HclkDiv2) */
             max_count_error: None,
             charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C16),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
-            spread_spectrum_deviation: Some(128u8),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C2),
+            spread_spectrum_deviation: None, /* Some(128u8) */
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
@@ -248,12 +249,12 @@ const APP: () = {
                 delay.delay_ms(15u8);
             }
 
-            ((baseline / TSC_SAMPLES) / 100) * 95
+            ((baseline / TSC_SAMPLES) / 100) * 98
         };
 
         #[cfg(not(feature = "dyn-tsc-cal"))]
         let tsc_threshold = {
-            552 // acquired through testing
+            490 // acquired through testing
         };
         
 
@@ -312,7 +313,6 @@ const APP: () = {
         let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
-        system.ss().tsc_threshold = input_mgr.threshold();
         // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         // Resources that need to be initialized are passed back here
@@ -391,11 +391,12 @@ const APP: () = {
     }
 
     /// Thread runs once a second and collates stats about the system
-    #[interrupt(binds = TIM7, resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM])]
+    #[interrupt(binds = TIM7, resources = [TIM7, SLEEP_TIME, TSC_EVENTS, LAST_BATT_PERCENT, SYSTEM, INPUT_MGR, THRES_COUNT])]
     fn status() {
         // CPU_USE = ((TOTAL - SLEEP_TIME) / TOTAL) * 100.
         let mut systemr = resources.SYSTEM;
         let mut tsc_ev = resources.TSC_EVENTS;
+        let mut imgr = resources.INPUT_MGR;
         let total = SYS_CLK_HZ / CPU_USAGE_POLL_HZ;
         let cpu = ((total - *resources.SLEEP_TIME) as f32 / total as f32) * 100.0;
         trace!("CPU_USAGE: {}%", cpu);
@@ -406,6 +407,26 @@ const APP: () = {
                 let value = *val;
                 *val = 0; // reset the value
                 value
+            });
+            // Input quirk, tsc count grows so we reduce the number of counts required when on battery
+            imgr.lock(|im| {
+                let offset = match system.bms().state() {
+                    BmsState::Charged | BmsState::Charging => {
+                        0u16
+                    },
+                    BmsState::Draining => {
+                        const THRES: u16 = 90;
+                        const SEC_TO_REACH:u16 = 30;
+                        if im.threshold_offset() <= THRES {
+                            im.threshold_offset() + (THRES / SEC_TO_REACH)
+                        } else {
+                            THRES
+                        }
+                    }
+                };
+            
+                im.set_threshold_offset(offset);
+                system.ss().tsc_threshold = im.threshold() + im.threshold_offset();
             });
             system.ss().cpu_usage = cpu;
             system.bms().soc()
