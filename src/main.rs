@@ -230,30 +230,30 @@ const APP: () = {
         let tsc_config = TscConfig {
             clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
             max_count_error: Some(hal::tsc::MaxCountError::U16383),
-            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C1),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C16),
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C8),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C8),
             spread_spectrum_deviation: None, /* Some(128u8) */
         };
         let tsc = Tsc::tsc(device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
         #[cfg(feature = "dyn-tsc-cal")]
         let tsc_threshold =  {
-            const TSC_SAMPLES: u16 = 10;
+            const TSC_SAMPLES: u16 = 12;
             // Acquire for rough estimate of capacitance
             let mut baseline = 0;
             for _ in 0..TSC_SAMPLES {
                 baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
                     panic!("Failed to calibrate tsc {:?}", err);
                 });
-                delay.delay_ms(15u8);
+                delay.delay_ms(20u8);
             }
 
-            ((baseline / TSC_SAMPLES) / 100) * 100
+            ((baseline / TSC_SAMPLES) / 100) * 98
         };
 
         #[cfg(not(feature = "dyn-tsc-cal"))]
         let tsc_threshold = {
-            1020 // acquired through testing
+            1060 // acquired through testing
         };
         
 
