@@ -59,7 +59,7 @@ use crate::application::{
 };
 
 use crate::system::{ 
-    input::InputManager,
+    input::{InputManager, TscManager},
     bms::BatteryManagement,
     system::{
         System,
@@ -309,7 +309,8 @@ const APP: () = {
         }
 
         let buffer: &'static mut [[u8; crate::DMA_HALF_BYTES]; 2] = resources.DMA_BUFFER;
-        let input_mgr = InputManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
+        let tsc_mgr = TscManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
+        let input_mgr = InputManager::new(tsc_mgr);
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
         system.ss().tsc_threshold = input_mgr.threshold();
