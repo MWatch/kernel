@@ -16,6 +16,8 @@ pub const LEFT_RIGHT: u8 = LEFT | RIGHT;
 pub const ALL: u8 = LEFT | MIDDLE | RIGHT;
 pub const NONE: u8 = 0;
 
+pub const MAX_PIN_IDX: u8 = 2;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     NoInput,
@@ -30,30 +32,35 @@ pub struct InputManager
 {
     raw_vector: u8,
     last_vector: u8,
+    tsc: TscManager,
     pin_idx: u8,
-    tsc_threshold: u16,
-    tsc: TouchSenseController,
-    left: LeftButton,
-    middle: MiddleButton,
-    right: RightButton,
 }
 
 impl InputManager {
     /// Creates a new instance of the InputManager
-    pub fn new(tsc: TouchSenseController, threshold: u16, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
-        let mut tsc = tsc;
-        tsc.listen(TscEvent::EndOfAcquisition);
-        // tsc.listen(TscEvent::MaxCountError); // TODO
-
+    pub fn new(tsc: TscManager) -> Self {
+        
         Self {
-            tsc,
-            tsc_threshold: threshold,
             raw_vector: 0,
             last_vector: 0,
             pin_idx: 0,
-            left,
-            middle,
-            right,
+            tsc: tsc
+        }
+    }
+
+    pub fn start_new(&mut self) -> Result<(), Error>{
+        self.tsc.start(self.pin_idx)?;
+        Ok(())
+    }
+
+    pub fn process_result(&mut self) -> Result<(), Error> {
+        let result = self.tsc.result(self.pin_idx);
+        self.update_input(result);
+
+        if self.pin_idx == MAX_PIN_IDX { // we've read all the pins now process the output
+            Ok(())
+        } else {
+            Err(Error::Incomplete)
         }
     }
 
@@ -103,12 +110,42 @@ impl InputManager {
         }
     }
 
+    /// returns the threshold value required to identify a touch
+    pub fn threshold(&self) -> u16 {
+        self.tsc.threshold()
+    }
+}
+
+pub struct TscManager {
+    tsc: TouchSenseController,
+    left: LeftButton,
+    middle: MiddleButton,
+    right: RightButton,
+    tsc_threshold: u16,
+}
+
+impl TscManager{
+
+    pub fn new(tsc: TouchSenseController, threshold: u16, left: LeftButton, middle: MiddleButton, right: RightButton) -> Self {
+        let mut tsc = tsc;
+        tsc.listen(TscEvent::EndOfAcquisition);
+        // tsc.listen(TscEvent::MaxCountError); // TODO
+
+        Self {
+            tsc,
+            tsc_threshold: threshold,
+            left,
+            middle,
+            right,
+        }
+    }
+
     /// Begin a new hardware (tsc) acquisition
-    pub fn start_new(&mut self) -> Result<(), Error> {
+    pub fn start(&mut self, pin: u8) -> Result<(), Error> {
         if self.tsc.in_progress() {
             return Err(Error::AcquisitionInProgress);
         }
-        match self.pin_idx {
+        match pin {
             0 => self.tsc.start(&mut self.left),
             1 => self.tsc.start(&mut self.middle),
             2 => self.tsc.start(&mut self.right),
@@ -119,25 +156,53 @@ impl InputManager {
 
     /// Call when the aquisition is complete, this function read
     /// the registers and update the interal state
-    pub fn process_result(&mut self) -> Result<(), Error> {
-        let value = match self.pin_idx {
+    pub fn result(&mut self, pin: u8) -> bool {
+        let value = match pin {
             0 => self.tsc.read(&mut self.left).expect("Expected TSC pin 0"),
             1 => self.tsc.read(&mut self.middle).expect("Expected TSC pin 1"),
             2 => self.tsc.read(&mut self.right).expect("Expected TSC pin 2"),
             _ => panic!("Invalid pin index")
         };
-        trace!("tsc[{}] {} < {}?", self.pin_idx, value, self.tsc_threshold);
-        self.update_input(value < self.tsc_threshold);
+        trace!("tsc[{}] {} < {}?", pin, value, self.tsc_threshold);
+        //self.update_input(value < self.tsc_threshold);
         self.tsc.clear(TscEvent::EndOfAcquisition);
-        if self.pin_idx == 2 { // we've read all the pins now process the output
-            Ok(())
-        } else {
-            Err(Error::Incomplete)
-        }
+
+        value < self.tsc_threshold
     }
 
     /// returns the threshold value required to identify a touch
     pub fn threshold(&self) -> u16 {
         self.tsc_threshold
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn triple_detected() {
+        let mut im = unsafe {
+            // safe because we dont use the hw in tests
+            InputManager::new(core::mem::uninitialized())
+        };
+
+        for _ in 0..3 {
+            im.update_input(true)
+        }
+        assert_eq!(im.output().expect("No input detected"), InputEvent::Multi);
+    }
+
+    #[test]
+    fn dual_detected() {
+        let mut im = unsafe {
+            // safe because we dont use the hw in tests
+            InputManager::new(core::mem::uninitialized())
+        };
+
+        im.pin_idx = 0;
+        im.update_input(true);
+        im.pin_idx = 2;
+        im.update_input(true);
+        assert_eq!(im.output().expect("No input detected"), InputEvent::Dual);
     }
 }

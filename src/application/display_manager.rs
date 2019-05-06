@@ -186,3 +186,26 @@ impl DisplayManager
         }
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn dm_state_wraps() {
+        let mut dm = DisplayManager::default();
+        for _ in 0..MAX_STATES {
+            dm.next();
+        }
+        // after we iterate through all states, we should be back at the begining
+        assert_eq!(dm.state_idx, 0)
+    }
+
+    #[test]
+    fn dm_state_prev_wraps() {
+        let mut dm = DisplayManager::default();
+        dm.prev();
+        // going back on 0 should put us at the last state, of couse the index starts at zero so we take one
+        assert_eq!(dm.state_idx, MAX_STATES - 1)
+    }
+}
