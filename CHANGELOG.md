@@ -5,6 +5,12 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v1.0.0]
+
+- Adds the notification state, which adds the ability to view incming applications
+- Clean up and documentation of the kernel
+- Bumped to v0.4.0 of stm32l4xx-hal
+
 ## [v0.9.0]
 
 - Added a proper window/display manager, this manager can handle input and render any structs that implement the `State` traits found in `wm.rs`
@@ -67,5 +73,6 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 - Initial release
 
-[Unreleased]: https://github.com/mwatch/kernel/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mwatch/kernel/compare/v1.0.0...HEAD
+[v1.0.0]: https://github.com/mwatch/kernel/compare/v0.9.0...v1.0.0
 [v0.1.0]: https://github.com/mwatch/kernel/tree/v0.1.0
