@@ -25,7 +25,7 @@ use crate::hal::{
     i2c::I2c,
     prelude::*,
     rtc::Rtc,
-    serial::{Event as SerialEvent, Serial},
+    serial::{Event as SerialEvent, Serial, /* Config */},
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
@@ -148,8 +148,9 @@ const APP: () = {
         let date = Date::new(1.day(), 7.date(), 10.month(), 2018.year());
         rtc.set_date(&date);
 
+        
         /* Ssd1351 Display */
-        let mut delay = Delay::new(core.SYST, clocks);
+        let mut delay = Delay::new(unsafe { cortex_m::Peripherals::steal().SYST }, clocks);
         let mut rst = gpiob
             .pb0
             .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
@@ -183,6 +184,7 @@ const APP: () = {
         let mut serial = Serial::usart2(
             device.USART2,
             (tx, rx),
+            /* Config::default().baudrate(115_200.bps()), */
             115_200.bps(),
             clocks,
             &mut rcc.apb1r1,

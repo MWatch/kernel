@@ -3,7 +3,7 @@
 //! 
 
 use crate::types::{BatteryManagementIC, ChargeStatusPin, StandbyStatusPin};
-use stm32l4xx_hal::prelude::*;
+use embedded_hal::digital::v2::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum State {
@@ -47,9 +47,9 @@ impl BatteryManagement {
 
     /// internal processing of the bms
     pub fn process(&mut self) {
-        if self.csp.is_low() {
+        if self.csp.is_low().unwrap() {
             self.state = State::Charging;
-        } else if self.ssp.is_high() {
+        } else if self.ssp.is_high().unwrap() {
             self.state = State::Draining;
         } else {
             self.state = State::Charged;
