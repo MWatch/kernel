@@ -25,7 +25,7 @@ use crate::hal::{
     i2c::I2c,
     prelude::*,
     rtc::Rtc,
-    serial::{Event as SerialEvent, Serial, /* Config */},
+    serial::{Event as SerialEvent, Serial, Config},
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
     tsc::{
@@ -150,7 +150,7 @@ const APP: () = {
 
         
         /* Ssd1351 Display */
-        let mut delay = Delay::new(unsafe { cortex_m::Peripherals::steal().SYST }, clocks);
+        let mut delay = Delay::new(core.SYST, clocks);
         let mut rst = gpiob
             .pb0
             .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
@@ -173,7 +173,7 @@ const APP: () = {
         );
         let fb: &'static mut [u8] = resources.FRAME_BUFFER;
         let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
-        display.reset(&mut rst, &mut delay);
+        display.reset(&mut rst, &mut delay).expect("Failed to reset display");
         display.init().expect("Failed to initialize the display");
         display.set_rotation(DisplayRotation::Rotate0).expect("Failed to set the display rotation");
         display.clear(true);
@@ -185,7 +185,7 @@ const APP: () = {
             device.USART2,
             (tx, rx),
             /* Config::default().baudrate(115_200.bps()), */
-            115_200.bps(),
+            Config::default().baudrate(115_200.bps()),
             clocks,
             &mut rcc.apb1r1,
         );
