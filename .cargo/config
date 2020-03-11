@@ -12,6 +12,7 @@ runner = "arm-none-eabi-gdb -q -x openocd_itm.gdb"
 rustflags = [
   # LLD (shipped with the Rust toolchain) is used as the default linker
   "-C", "link-arg=-Tmwatch.x",
+  # "-C", "force-frame-pointers=yes",
 
   # if you run into problems with LLD switch to the GNU linker by commenting out
   # this line

@@ -121,8 +121,9 @@ const APP: () = {
         cx.core.DWT.enable_cycle_counter();
         let mut flash = cx.device.FLASH.constrain();
         let mut rcc = cx.device.RCC.constrain();
+        let mut pwr = cx.device.PWR.constrain(&mut rcc.apb1r1);
         
-        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
+        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr, &mut pwr); // 63% cpu usage~
 
         // initialize the logging framework
         let itm = cx.core.ITM;
@@ -148,7 +149,6 @@ const APP: () = {
         let mut gpiob = cx.device.GPIOB.split(&mut rcc.ahb2);
         let mut channels = cx.device.DMA1.split(&mut rcc.ahb1);
 
-        let mut pwr = cx.device.PWR.constrain(&mut rcc.apb1r1);
         let rtc = Rtc::rtc(cx.device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1, clocks);
 
         let date = Date::new(1.day(), 7.date(), 10.month(), 2018.year());

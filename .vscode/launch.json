@@ -5,6 +5,35 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "cwd": "${workspaceRoot}",
+            "executable": "./target/thumbv7em-none-eabi/debug/mwatch_kernel",
+            "name": "Cortex-debug Debug",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "interface": "swd",
+            "device": "STM32L432KC",
+            "swoConfig": {
+                "enabled": true,
+                "swoFrequency": 250000, /* 250kpbs as the default stlinks are not very powerful */
+                // "swoFrequency": 0,
+                // "cpuFrequency": 120000000,
+                "cpuFrequency": 16000000,
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "Name",
+                        "port": 0
+                    }
+                ],
+                "source": "probe"
+            },
+            
+            "configFiles": [
+                "openocd.cfg"
+            ],
+        },
+        {
             "type": "lldb",
             "request": "custom",
             "name": "LLDB - Release",
