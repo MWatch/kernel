@@ -146,28 +146,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "cortex-m-rtfm"
-version = "0.5.3"
+name = "cortex-m-rtic"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fc65a600a5c8baf0a5fd3b2c0223b8d8fc7aa7d6d0c9a3350ce40a4da49ccea"
+checksum = "fa43f63284b363ac64f9ce5221a0f593b54f73258aba8e1a88c1feed8efdb664"
 dependencies = [
  "cortex-m 0.6.7",
  "cortex-m-rt",
- "cortex-m-rtfm-macros",
- "heapless 0.5.6",
- "rtfm-core",
+ "cortex-m-rtic-macros",
+ "heapless 0.6.1",
+ "rtic-core",
  "version_check 0.9.3",
 ]
 
 [[package]]
-name = "cortex-m-rtfm-macros"
-version = "0.5.1"
+name = "cortex-m-rtic-macros"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa4a3fc88fff9970152a7f79bf6919d538395bc1f11ba90a1e6970a3521d8b88"
+checksum = "9a1a6a4c9550373038c0e21a78d44d529bd697c25bbf6b8004bddc6e63b119c7"
 dependencies = [
  "proc-macro2",
  "quote",
- "rtfm-syntax",
+ "rtic-syntax",
  "syn",
 ]
 
@@ -274,12 +274,12 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.5.6"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74911a68a1658cfcfb61bc0ccfbd536e3b6e906f8c2f7883ee50157e3e2184f1"
+checksum = "634bd4d29cbf24424d0a4bfcbf80c6960129dc24424752a7d1d1390607023422"
 dependencies = [
  "as-slice",
- "generic-array 0.13.3",
+ "generic-array 0.14.4",
  "hash32",
  "stable_deref_trait",
 ]
@@ -336,7 +336,7 @@ dependencies = [
  "cortex-m 0.5.11",
  "cortex-m-log",
  "cortex-m-rt",
- "cortex-m-rtfm",
+ "cortex-m-rtic",
  "crc",
  "embedded-graphics",
  "embedded-hal",
@@ -430,16 +430,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2a38df5b15c8d5c7e8654189744d8e396bddc18ad48041a500ce52d6948941f"
 
 [[package]]
-name = "rtfm-core"
-version = "0.3.0"
+name = "rtic-core"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ec893edb2aa5b70320b94896ffea22a7ebb1cf3f942bb67cd5b60a865a63493"
+checksum = "8bd58a6949de8ff797a346a28d9f13f7b8f54fa61bb5e3cb0985a4efb497a5ef"
 
 [[package]]
-name = "rtfm-syntax"
+name = "rtic-syntax"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4455e23c34df3d66454e7e218a4d76a7f83321d04a806be614463341cec4116e"
+checksum = "8152fcaa845720d61e6cc570548b89144c2c307f18a480bbd97e55e9f6eeff04"
 dependencies = [
  "indexmap",
  "proc-macro2",

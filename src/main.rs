@@ -2,7 +2,6 @@
 #![no_main]
 
 
-extern crate rtfm;
 #[cfg(feature = "itm")]
 extern crate panic_itm;
 #[cfg(not(feature = "itm"))]
@@ -47,7 +46,7 @@ use cortex_m_log::{
 };
 
 use cortex_m_rt::{exception, ExceptionFrame};
-use rtfm::app;
+use rtic::app;
 use cortex_m::{peripheral::DWT, asm};
 use hm11::{command::Command, Hm11};
 use max17048::Max17048;
@@ -233,7 +232,7 @@ const APP: () = {
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         #[cfg(feature = "dyn-tsc-cal")]
         let mut middle_button = middle_button;
-        
+
         let left_button =
             gpiob
                 .pb7
@@ -325,7 +324,7 @@ const APP: () = {
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
         system.ss().tsc_threshold = input_mgr.threshold();
-        // rtfm::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
+        // rtic::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         // Resources that need to be initialized are passed back here
         init::LateResources {
