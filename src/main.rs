@@ -227,10 +227,13 @@ const APP: () = {
             gpiob
                 .pb5
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
-        let mut middle_button =
+        let middle_button =
             gpiob
                 .pb6
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
+        #[cfg(feature = "dyn-tsc-cal")]
+        let mut middle_button = middle_button;
+        
         let left_button =
             gpiob
                 .pb7
