@@ -6,9 +6,10 @@ use crate::ingress::buffer::{Buffer, Type};
 use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
-use crate::system::system::System;
 use crate::system::syscall::Syscall;
 use core::str::FromStr;
+
+use log::info;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
@@ -78,30 +79,33 @@ impl IngressManager {
     }
 
     /// Processs the internal ringbuffer's bytes and execute if the payload is complete
-    pub fn process(&mut self, system: &mut System) {
-        match self.match_rb(system) {
+    pub fn process(&mut self) {
+        match self.match_rb() {
             Some(buffer_type) => {
                 match buffer_type {
                     Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
                     Type::Application => {
-                        match system.am().verify() {
-                            Ok(_) => {}
-                            Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
-                        }
+                        todo!("system replace")
+                        // match system.am().verify() {
+                        //     Ok(_) => {}
+                        //     Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
+                        // }
                     }
                     Type::Notification => {
                         self.nsi[2] = self.nsi_idx;
                         info!("Adding notification from: {:?}, with section indexes {:?}", self.buffer, self.nsi);
-                        system.nm().add(&self.buffer, &self.nsi).unwrap_or_else(|err|{
-                            error!("Failed to add notification {:?}", err);
-                        });
+                        todo!("system replace")
+                        // system.nm().add(&self.buffer, &self.nsi).unwrap_or_else(|err|{
+                        //     error!("Failed to add notification {:?}", err);
+                        // });
                     },
                     Type::Syscall => {
                         info!("Parsing syscall from: {:?}", self.buffer);
-                        match Syscall::from_str(self.buffer.as_str()) {
-                            Ok(syscall) => syscall.execute(system),
-                            Err(e) => error!("Failed to parse syscall {:?}", e)
-                        }
+                        // match Syscall::from_str(self.buffer.as_str()) {
+                        //     Ok(syscall) => syscall.execute(system),
+                        //     Err(e) => error!("Failed to parse syscall {:?}", e)
+                        // }
+                        todo!("system replace")
                     }
                 }
             },
@@ -110,7 +114,7 @@ impl IngressManager {
     }
 
     /// The internal state machine that handles the incoming bytes
-    fn run_state_machine(&mut self, byte: u8, system: &mut System) {
+    fn run_state_machine(&mut self, byte: u8) {
         match self.state {
             State::Init => {
                 self.buffer.btype = self.determine_type(byte);
@@ -131,10 +135,11 @@ impl IngressManager {
                         State::ApplicationChecksum => {
                             match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
                                 Ok(byte) => {
-                                    system.am().write_checksum_byte(byte).unwrap_or_else(|err|{
-                                        error!("Failed to write checksum byte {:?}", err);
-                                        self.state = State::Wait;
-                                    });
+                                    // system.am().write_checksum_byte(byte).unwrap_or_else(|err|{
+                                    //     error!("Failed to write checksum byte {:?}", err);
+                                    //     self.state = State::Wait;
+                                    // });
+                                    todo!("system replace")
                                 }
                                 Err(err) => {
                                     error!("Failed to parse hex bytes to byte {:?}", err);
@@ -145,10 +150,11 @@ impl IngressManager {
                         State::ApplicationStore => {
                             match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
                                 Ok(byte) => {
-                                    system.am().write_ram_byte(byte).unwrap_or_else(|err|{
-                                        error!("Failed to write ram byte {:?}", err);
-                                        self.state = State::Wait;
-                                    });
+                                    // system.am().write_ram_byte(byte).unwrap_or_else(|err|{
+                                    //     error!("Failed to write ram byte {:?}", err);
+                                    //     self.state = State::Wait;
+                                    // });
+                                    todo!("system replace")
                                 }
                                 Err(err) => {
                                     error!("Failed to parse hex bytes to byte {:?}", err);
@@ -172,7 +178,7 @@ impl IngressManager {
     }
 
     /// Run the internal state machine to parse payloads over a byte stream in the ring buffer
-    fn match_rb(&mut self, system: &mut System) -> Option<Type> {
+    fn match_rb(&mut self) -> Option<Type> {
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
@@ -204,9 +210,10 @@ impl IngressManager {
                                     self.state = State::ApplicationStore
                                 } else {
                                     // reset before we load the new application
-                                    system.am().kill().unwrap_or_else(|err| {
-                                        warn!("Failed to kill application, writing over live data! {:?}", err);
-                                    });
+                                    // system.am().kill().unwrap_or_else(|err| {
+                                    //     warn!("Failed to kill application, writing over live data! {:?}", err);
+                                    // });
+                                    todo!("system replace");
                                     // parse the checksum
                                     self.state = State::ApplicationChecksum;
                                 }
@@ -227,7 +234,7 @@ impl IngressManager {
                     }
                     _ => {
                         /* Run through byte state machine */
-                        self.run_state_machine(byte, system);
+                        self.run_state_machine(byte);
                     }
                 }
             }

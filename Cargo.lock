@@ -343,8 +343,6 @@ dependencies = [
  "hm11",
  "log",
  "max17048",
- "panic-itm",
- "panic-semihosting",
  "simple-hex",
  "ssd1351",
  "stm32l4xx-hal",

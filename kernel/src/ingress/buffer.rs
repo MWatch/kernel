@@ -3,6 +3,7 @@
 //! A thin abstraction over a static array, with some meta data
 
 use crate::system::notification::BUFF_SIZE;
+use core::write;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Type {

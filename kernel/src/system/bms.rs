@@ -3,6 +3,7 @@
 //! 
 
 use embedded_hal::{digital::v2::*, blocking::i2c::*};
+use core::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum State {
@@ -19,14 +20,14 @@ pub struct BatteryManagement<I, C, S> {
 }
 
 impl<E, I, C, S> BatteryManagement<I, C, S> 
-where C: InputPin + OutputPin,
-      S: InputPin + OutputPin,
+where C: InputPin<Error = E> + OutputPin<Error = E> + Debug,
+      S: InputPin<Error = E> + OutputPin<Error = E> + Debug,
       I: WriteRead<Error = E> + Write<Error = E>,
       E: core::fmt::Debug
 {
 
     /// Creates a new instance of BatteryManagement singleton
-    pub fn new(bms: max17048::Max17048<I>, csp: S, ssp: C) -> Self {
+    pub fn new(bms: max17048::Max17048<I>, csp: C, ssp: S) -> Self {
         Self {
             bms,
             csp,
