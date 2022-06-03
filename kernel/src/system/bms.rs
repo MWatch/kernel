@@ -2,7 +2,7 @@
 //! 
 //! 
 
-use embedded_hal::digital::v2::*;
+use embedded_hal::{digital::v2::*, blocking::i2c::*};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum State {
@@ -11,17 +11,22 @@ pub enum State {
     Charged
 }
 
-pub struct BatteryManagement {
-    bms: BatteryManagementIC,
-    csp: ChargeStatusPin,
-    ssp: StandbyStatusPin,
+pub struct BatteryManagement<I, C, S> {
+    bms: max17048::Max17048<I>,
+    csp: C,
+    ssp: S,
     state: State,
 }
 
-impl BatteryManagement {
+impl<E, I, C, S> BatteryManagement<I, C, S> 
+where C: InputPin + OutputPin,
+      S: InputPin + OutputPin,
+      I: WriteRead<Error = E> + Write<Error = E>,
+      E: core::fmt::Debug
+{
 
     /// Creates a new instance of BatteryManagement singleton
-    pub fn new(bms: BatteryManagementIC, csp: ChargeStatusPin, ssp: StandbyStatusPin) -> Self {
+    pub fn new(bms: max17048::Max17048<I>, csp: S, ssp: C) -> Self {
         Self {
             bms,
             csp,
