@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-
 #[cfg(feature = "itm")]
 extern crate panic_itm;
 #[cfg(not(feature = "itm"))]
@@ -9,13 +8,14 @@ extern crate panic_semihosting;
 #[macro_use]
 extern crate log;
 
-use mwatch_kernel::{
-    types::{
-        hal, Ssd1351, InputEvent,
-        BluetoothConnectedPin, LoggerType,
-    },
-    system, application, ingress
-};
+mod types;
+mod tsc;
+
+use mwatch_kernel::{application, ingress, system};
+
+use crate::types::{hal, BluetoothConnectedPin, InputEvent, LoggerType, Ssd1351};
+
+
 
 use crate::hal::{
     datetime::Date,
@@ -24,55 +24,40 @@ use crate::hal::{
     i2c::I2c,
     prelude::*,
     rtc::Rtc,
-    serial::{Event as SerialEvent, Serial, Config},
+    serial::{Config, Event as SerialEvent, Serial},
     spi::Spi,
     timer::{Event as TimerEvent, Timer},
-    tsc::{
-        Config as TscConfig, Tsc,
-    }
+    tsc::{Config as TscConfig, Tsc},
 };
 
-use ssd1351::{
-    builder::Builder,
-    mode::GraphicsMode,
-    prelude::*,
-    properties::DisplayRotation,
-};
+use ssd1351::{builder::Builder, mode::GraphicsMode, prelude::*, properties::DisplayRotation};
 
 use cortex_m_log::{
-    log::{Logger, trick_init},
     destination::Itm as ItmDestination,
-    printer::itm::InterruptSync as InterruptSyncItm
+    log::{trick_init, Logger},
+    printer::itm::InterruptSync as InterruptSyncItm,
 };
 
+use cortex_m::{asm, peripheral::DWT};
 use cortex_m_rt::{exception, ExceptionFrame};
-use rtic::app;
-use cortex_m::{peripheral::DWT, asm};
 use hm11::{command::Command, Hm11};
 use max17048::Max17048;
+use rtic::app;
 
-use crate::ingress::ingress_manager::IngressManager;
 use crate::application::{
     application_manager::{ApplicationManager, Ram},
-    display_manager::DisplayManager
+    display_manager::DisplayManager,
 };
+use crate::ingress::ingress_manager::IngressManager;
 
-use crate::system::{ 
-    input::{InputManager, TscManager},
+use crate::system::{
     bms::BatteryManagement,
-    system::{
-        System,
-        CPU_USAGE_POLL_HZ,
-        TSC_HZ,
-        SYSTICK_HZ,
-        DMA_HALF_BYTES,
-        SPI_MHZ,
-        I2C_KHZ,
-        SYS_CLK_HZ,
-    },
+    input::{InputManager, TscManager},
     notification::NotificationManager,
+    system::{
+        System, CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
+    },
 };
-
 
 #[cfg(feature = "itm")]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -112,7 +97,7 @@ const APP: () = {
         #[link_section = ".app_section.data"]
         APPLICATION_RAM: [u8; 16 * 1024],
     }
-    
+
     /// Intialization of the hardware and the kernel - mostly boiler plate init's from libraries
     #[init(resources = [DMA_BUFFER, APPLICATION_RAM, FRAME_BUFFER, LOGGER])]
     fn init(mut cx: init::Context) -> init::LateResources {
@@ -120,7 +105,7 @@ const APP: () = {
         cx.core.DWT.enable_cycle_counter();
         let mut flash = cx.device.FLASH.constrain();
         let mut rcc = cx.device.RCC.constrain();
-        
+
         let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
         // initialize the logging framework
@@ -134,7 +119,7 @@ const APP: () = {
         let log: &'static mut _ = cx.resources.LOGGER.as_mut().unwrap_or_else(|| {
             panic!("Failed to get the static logger");
         });
-        unsafe { 
+        unsafe {
             trick_init(&log).unwrap_or_else(|err| {
                 panic!("Failed to get initializr the logger {:?}", err);
             });
@@ -148,12 +133,17 @@ const APP: () = {
         let mut channels = cx.device.DMA1.split(&mut rcc.ahb1);
 
         let mut pwr = cx.device.PWR.constrain(&mut rcc.apb1r1);
-        let rtc = Rtc::rtc(cx.device.RTC, &mut rcc.apb1r1, &mut rcc.bdcr, &mut pwr.cr1, clocks);
+        let rtc = Rtc::rtc(
+            cx.device.RTC,
+            &mut rcc.apb1r1,
+            &mut rcc.bdcr,
+            &mut pwr.cr1,
+            clocks,
+        );
 
         let date = Date::new(1.day(), 7.date(), 10.month(), 2018.year());
         rtc.set_date(&date);
 
-        
         /* Ssd1351 Display */
         let mut delay = Delay::new(cx.core.SYST, clocks);
         let mut rst = gpiob
@@ -178,9 +168,13 @@ const APP: () = {
         );
         let fb: &'static mut [u8] = cx.resources.FRAME_BUFFER;
         let mut display: GraphicsMode<_> = Builder::new().connect_spi(spi, dc, fb).into();
-        display.reset(&mut rst, &mut delay).expect("Failed to reset display");
+        display
+            .reset(&mut rst, &mut delay)
+            .expect("Failed to reset display");
         display.init().expect("Failed to initialize the display");
-        display.set_rotation(DisplayRotation::Rotate0).expect("Failed to set the display rotation");
+        display
+            .set_rotation(DisplayRotation::Rotate0)
+            .expect("Failed to set the display rotation");
         display.clear(true);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -247,12 +241,12 @@ const APP: () = {
         let tsc = Tsc::tsc(cx.device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
 
         #[cfg(feature = "dyn-tsc-cal")]
-        let tsc_threshold =  {
+        let tsc_threshold = {
             const TSC_SAMPLES: u16 = 12;
             // Acquire for rough estimate of capacitance
             let mut baseline = 0;
             for _ in 0..TSC_SAMPLES {
-                baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err|{
+                baseline += tsc.acquire(&mut middle_button).unwrap_or_else(|err| {
                     panic!("Failed to calibrate tsc {:?}", err);
                 });
                 delay.delay_ms(20u8);
@@ -265,7 +259,6 @@ const APP: () = {
         let tsc_threshold = {
             1060 // acquired through testing
         };
-        
 
         /* T4056 input pins */
         let stdby = gpioa
@@ -291,7 +284,13 @@ const APP: () = {
         sda.internal_pull_up(&mut gpioa.pupdr, true);
         let sda = sda.into_af4(&mut gpioa.moder, &mut gpioa.afrh);
 
-        let i2c = I2c::i2c1(cx.device.I2C1, (scl, sda), I2C_KHZ.khz(), clocks, &mut rcc.apb1r1);
+        let i2c = I2c::i2c1(
+            cx.device.I2C1,
+            (scl, sda),
+            I2C_KHZ.khz(),
+            clocks,
+            &mut rcc.apb1r1,
+        );
         let max17048 = Max17048::new(i2c);
         let bms = BatteryManagement::new(max17048, chrg, stdby);
         let imgr = IngressManager::new();
@@ -342,7 +341,7 @@ const APP: () = {
         }
     }
 
-    /* 
+    /*
         Hardware threads
     */
 
@@ -360,7 +359,7 @@ const APP: () = {
         }
     }
 
-    /// The main thread of the watch, this is called `SYSTICK_HZ` times a second, to perform 
+    /// The main thread of the watch, this is called `SYSTICK_HZ` times a second, to perform
     /// housekeeping operations
     #[task(binds = TIM2, resources = [IMNG, SYSTEM, SYSTICK, IDLE_COUNT], spawn = [display_manager])]
     fn systemtick(cx: systemtick::Context) {
@@ -371,8 +370,8 @@ const APP: () = {
         cx.spawn.display_manager().unwrap_or_else(|_err| {
             error!("Failed to spawn display manager");
         });
-        
-        system.lock(|system|{
+
+        system.lock(|system| {
             system.bms().process();
             system.ss().idle_count = idle.lock(|val| {
                 let value = *val;
@@ -383,14 +382,17 @@ const APP: () = {
                 m.process(system);
             });
         });
-        cx.resources.SYSTICK.wait().expect("systick timer was already cleared"); // this should never panic as if we are in the IT the uif bit is set
+        cx.resources
+            .SYSTICK
+            .wait()
+            .expect("systick timer was already cleared"); // this should never panic as if we are in the IT the uif bit is set
     }
 
     /// Hardware timer, initiates tsc aquisitions
     #[task(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 3)] // TIM6
     fn tsc_initiator(cx: tsc_initiator::Context) {
         match cx.resources.INPUT_MGR.start_new() {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 if e != system::input::Error::AcquisitionInProgress {
                     panic!("{:?}", e);
@@ -398,7 +400,7 @@ const APP: () = {
             }
         }
         // this should never panic as if we are in the IT the uif bit is set
-        cx.resources.TIM6.wait().expect("TIM6 clear() failed"); 
+        cx.resources.TIM6.wait().expect("TIM6 clear() failed");
     }
 
     /// Thread runs once a second and collates stats about the system
@@ -412,7 +414,7 @@ const APP: () = {
         trace!("CPU_USAGE: {}%", cpu);
         *cx.resources.SLEEP_TIME = 0;
 
-        let current_soc = systemr.lock(|system|{
+        let current_soc = systemr.lock(|system| {
             system.ss().tsc_events = tsc_ev.lock(|val| {
                 let value = *val;
                 *val = 0; // reset the value
@@ -421,20 +423,24 @@ const APP: () = {
             system.ss().cpu_usage = cpu;
             system.bms().soc()
         });
-         
+
         let last_soc = *cx.resources.LAST_BATT_PERCENT;
         if current_soc != last_soc {
-            info!("SoC has {} to {}", if current_soc < last_soc {
-                "fallen"
-            } else {
-                "risen"
-            }, current_soc);
+            info!(
+                "SoC has {} to {}",
+                if current_soc < last_soc {
+                    "fallen"
+                } else {
+                    "risen"
+                },
+                current_soc
+            );
             *cx.resources.LAST_BATT_PERCENT = current_soc;
         }
         cx.resources.TIM7_HANDLE.wait().expect("TIM7 wait() failed");
     }
 
-    /* 
+    /*
         Hardware Interrupt service routines
     */
 
@@ -451,25 +457,23 @@ const APP: () = {
                         *cx.resources.IDLE_COUNT = 0; // we are no longer idle
                         info!("Output => {:?}", input);
                         match cx.spawn.input_handler(input) {
-                            Ok(_) => {},
-                            Err(e) => panic!("Failed to spawn input task. Input {:?}", e)
+                            Ok(_) => {}
+                            Err(e) => panic!("Failed to spawn input task. Input {:?}", e),
                         }
-                    },
+                    }
                     Err(e) => {
                         if e != system::input::Error::NoInput {
                             error!("Input Error, {:?}", e);
                         }
                     }
                 }
-            },
+            }
             Err(e) => {
                 if e != system::input::Error::Incomplete {
                     panic!("process_result error: {:?}", e)
                 }
             }
         }
-
-        
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -488,7 +492,8 @@ const APP: () = {
                         mgr.write(buf);
                     }
                     Ok((len, ()))
-                }).unwrap_or_else(|err|{
+                })
+                .unwrap_or_else(|err| {
                     error!("Failed to partial peek into circular buffer {:?}", err);
                 });
         }
@@ -503,12 +508,13 @@ const APP: () = {
             .CB
             .peek(|buf, _half| {
                 mgr.write(buf);
-            }).unwrap_or_else(|err|{
+            })
+            .unwrap_or_else(|err| {
                 error!("Failed to full peek into circular buffer {:?}", err);
             });
     }
-    
-    /* 
+
+    /*
         Software tasks
     */
 
@@ -519,7 +525,7 @@ const APP: () = {
         let mut dmngr = cx.resources.DMNG;
         let mut sys = cx.resources.SYSTEM;
         // let mut system = cx.resources.SYSTEM;
-        dmngr.lock(|dmng|{
+        dmngr.lock(|dmng| {
             #[cfg(feature = "crc-fb")]
             {
                 let is_idle = sys.lock(|system| system.is_idle());
@@ -527,7 +533,7 @@ const APP: () = {
                     let cs = crc::crc16::checksum_x25(display.fb());
                     trace!("DM - CS before: {}", cs);
                     display.clear(false);
-                    sys.lock(|system|{
+                    sys.lock(|system| {
                         dmng.process(system, &mut display);
                     });
                     let cs_after = crc::crc16::checksum_x25(display.fb());
@@ -537,30 +543,30 @@ const APP: () = {
                     }
                 } else {
                     display.clear(false);
-                    sys.lock(|system|{
+                    sys.lock(|system| {
                         dmng.process(system, &mut display);
                     });
-                    display.flush();  
+                    display.flush();
                 }
-                
             }
             #[cfg(not(feature = "crc-fb"))]
             {
                 display.clear(false);
-                sys.lock(|system|{
+                sys.lock(|system| {
                     dmng.process(system, &mut display);
                 });
                 display.flush();
             }
         });
-        
     }
 
     /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
     /// This task is very cheap, hence we can have 3 of them running at anytime
     #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
     fn input_handler(mut cx: input_handler::Context, input: InputEvent) {
-        cx.resources.DMNG.service_input(&mut cx.resources.SYSTEM, input);
+        cx.resources
+            .DMNG
+            .service_input(&mut cx.resources.SYSTEM, input);
     }
 
     /// Interrupt handlers used to dispatch software tasks

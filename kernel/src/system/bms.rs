@@ -2,7 +2,6 @@
 //! 
 //! 
 
-use crate::types::{BatteryManagementIC, ChargeStatusPin, StandbyStatusPin};
 use embedded_hal::digital::v2::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
