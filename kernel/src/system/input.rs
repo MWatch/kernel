@@ -39,7 +39,6 @@ pub enum Error {
 pub struct InputManager {
     raw_vector: u8,
     last_vector: u8,
-    count: usize
 }
 
 impl InputManager {
@@ -49,7 +48,6 @@ impl InputManager {
         Self {
             raw_vector: 0,
             last_vector: 0,
-            count: 0,
         }
     }
 

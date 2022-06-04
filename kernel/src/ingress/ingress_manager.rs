@@ -3,6 +3,7 @@
 //! All communicated date is run through here, parsed, then executed. 
 
 use crate::ingress::buffer::{Buffer, Type};
+use crate::system::notification::BUFF_SIZE;
 use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
@@ -24,6 +25,7 @@ enum State {
     ApplicationChecksum,
     /// Store the application in ram
     ApplicationStore,
+    ApplicationClearBuffer,
 
     /// Notification Source - what generated the push notification
     NotificationSource,
@@ -38,7 +40,6 @@ const ETX: u8 = 3;
 const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
-    buffer: Buffer,
     rb: Queue<u8, U512>,
     state: State,
 
@@ -49,12 +50,22 @@ pub struct IngressManager {
     nsi_idx: usize,
 }
 
+pub enum Event<'a> {
+    ApplicationKill,
+    ApplicationWrite { bytes: &'a [u8] },
+    ApplicationWriteChecksum { checksum: [u8; 2] },
+    ApplicationVerify { bytes: &'a [u8] },
+
+    Notification { slice: &'a Buffer, indexes: [usize; 3] },
+
+    Syscall(Syscall),
+}
+
 impl IngressManager {
 
     /// Constructs a new IngressManager
     pub fn new() -> Self {
         IngressManager {
-            buffer: Buffer::default(),
             rb: Queue::new(),
             state: State::Init,
             hex_chars: [0u8; 2],
@@ -79,143 +90,62 @@ impl IngressManager {
     }
 
     /// Processs the internal ringbuffer's bytes and execute if the payload is complete
-    pub fn process(&mut self) {
-        match self.match_rb() {
-            Some(buffer_type) => {
-                match buffer_type {
-                    Type::Unknown => self.state = State::Wait, // if the type cannot be determined abort, and wait until next STX
-                    Type::Application => {
-                        todo!("system replace")
-                        // match system.am().verify() {
-                        //     Ok(_) => {}
-                        //     Err(e) => panic!("{:?} || AMNG: {:?}", e, system.am().status()),
-                        // }
-                    }
-                    Type::Notification => {
-                        self.nsi[2] = self.nsi_idx;
-                        info!("Adding notification from: {:?}, with section indexes {:?}", self.buffer, self.nsi);
-                        todo!("system replace")
-                        // system.nm().add(&self.buffer, &self.nsi).unwrap_or_else(|err|{
-                        //     error!("Failed to add notification {:?}", err);
-                        // });
-                    },
-                    Type::Syscall => {
-                        info!("Parsing syscall from: {:?}", self.buffer);
-                        // match Syscall::from_str(self.buffer.as_str()) {
-                        //     Ok(syscall) => syscall.execute(system),
-                        //     Err(e) => error!("Failed to parse syscall {:?}", e)
-                        // }
-                        todo!("system replace")
-                    }
-                }
-            },
-            None => {}
-        }
-    }
-
-    /// The internal state machine that handles the incoming bytes
-    fn run_state_machine(&mut self, byte: u8) {
-        match self.state {
-            State::Init => {
-                self.buffer.btype = self.determine_type(byte);
-                info!("New buffer of type {:?}", self.buffer.btype);
-                if let Type::Unknown = self.buffer.btype {
-                    error!("Buffer type is unknown. Going back to wait state.");
-                    self.state = State::Wait 
-                }
-            }
-            State::Payload => {
-                self.buffer.write(byte);
-            }
-            State::ApplicationChecksum | State::ApplicationStore => {
-                self.hex_chars[self.hex_idx] = byte;
-                self.hex_idx += 1;
-                if self.hex_idx > 1 {
-                    match self.state {
-                        State::ApplicationChecksum => {
-                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
-                                Ok(byte) => {
-                                    // system.am().write_checksum_byte(byte).unwrap_or_else(|err|{
-                                    //     error!("Failed to write checksum byte {:?}", err);
-                                    //     self.state = State::Wait;
-                                    // });
-                                    todo!("system replace")
-                                }
-                                Err(err) => {
-                                    error!("Failed to parse hex bytes to byte {:?}", err);
-                                    self.state = State::Wait; // abort
-                                }
-                            }
-                        }
-                        State::ApplicationStore => {
-                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
-                                Ok(byte) => {
-                                    // system.am().write_ram_byte(byte).unwrap_or_else(|err|{
-                                    //     error!("Failed to write ram byte {:?}", err);
-                                    //     self.state = State::Wait;
-                                    // });
-                                    todo!("system replace")
-                                }
-                                Err(err) => {
-                                    error!("Failed to parse hex bytes to byte {:?}", err);
-                                    self.state = State::Wait; // abort
-                                }
-                            }
-                        }
-                        _ => unreachable!()
-                    }
-                    self.hex_idx = 0;
-                }
-            }
-            State::NotificationBody | State::NotificationTitle | State::NotificationSource => {
-                self.nsi_idx += 1;
-                self.buffer.write(byte);
-            }
-            State::Wait => {
-                // do nothing, useless bytes
-            }
-        }
-    }
-
-    /// Run the internal state machine to parse payloads over a byte stream in the ring buffer
-    fn match_rb(&mut self) -> Option<Type> {
+    pub fn process<'a>(&mut self, buffer: &'a mut Buffer) -> Option<Event<'a>> {
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
                 match byte {
                     STX => {
                         if self.state != State::Wait {
-                            warn!("Partial buffer detected: {:?}", self.buffer);
+                            warn!("Partial buffer detected: {:?}", buffer);
                         }
                         /* Start of packet */
                         self.hex_idx = 0;
                         self.nsi_idx = 0;
-                        self.buffer.clear();
+                        buffer.clear();
                         self.state = State::Init; // activate processing
                     }
                     ETX => {
                         /* End of packet */
                         /* Finalize messge then reset state machine ready for next msg*/
                         self.state = State::Wait;
-                        return Some(self.buffer.btype);
+                        match buffer.btype {
+                            Type::Unknown => {
+                                self.state = State::Wait; // if the type cannot be determined abort, and wait until next STX
+                            }
+                            Type::Application => {
+                                return Some(Event::ApplicationVerify { bytes : buffer.as_slice() });
+                                
+                            },
+                            Type::Notification => {
+                                info!("Adding notification from: {:?}, with section indexes {:?}", buffer, self.nsi);
+                                self.nsi[2] = self.nsi_idx;
+                                let nscopy = self.nsi;
+                                return Some(Event::Notification { slice: buffer, indexes: nscopy })
+                            },
+                            Type::Syscall => {
+                                info!("Parsing syscall from: {:?}", buffer);
+                                match Syscall::from_str(buffer.as_str()) {
+                                    Ok(syscall) => return Some(Event::Syscall(syscall)),
+                                    Err(e) => error!("Failed to parse syscall {:?}", e),
+                                }
+                            }
+                        }
                     }
                     PAYLOAD => {
-                        match self.buffer.btype {
+                        match buffer.btype {
                             Type::Unknown => {
-                                warn!("Dropping buffer of unknown type {:?}", self.buffer.btype);
+                                warn!("Dropping buffer of unknown type {:?}", buffer.btype);
                                 self.state = State::Wait
                             }
                             Type::Application => {
                                 if self.state == State::ApplicationChecksum {
                                     // We've parsed the checksum, now we write the data into ram
-                                    self.state = State::ApplicationStore
+                                    self.state = State::ApplicationStore;
+                                    return Some(Event::ApplicationWriteChecksum { checksum: [buffer.payload[0], buffer.payload[1]] });
                                 } else {
-                                    // reset before we load the new application
-                                    // system.am().kill().unwrap_or_else(|err| {
-                                    //     warn!("Failed to kill application, writing over live data! {:?}", err);
-                                    // });
-                                    todo!("system replace");
-                                    // parse the checksum
                                     self.state = State::ApplicationChecksum;
+                                    // reset before we load the new application
+                                    return Some(Event::ApplicationKill);
                                 }
                             }
                             Type::Notification => {
@@ -234,47 +164,93 @@ impl IngressManager {
                     }
                     _ => {
                         /* Run through byte state machine */
-                        self.run_state_machine(byte);
+                        match self.state {
+                            State::Init => {
+                                buffer.determine_type(byte);
+                                info!("New buffer of type {:?}", buffer.btype);
+                                if let Type::Unknown = buffer.btype {
+                                    error!("Buffer type is unknown. Going back to wait state.");
+                                    self.state = State::Wait 
+                                }
+                            }
+                            State::Payload => {
+                                buffer.write(byte);
+                            }
+                            State::ApplicationChecksum | State::ApplicationStore => {
+                                self.hex_chars[self.hex_idx] = byte;
+                                self.hex_idx += 1;
+                                if self.hex_idx > 1 {
+                                    match self.state {
+                                        State::ApplicationChecksum => {
+                                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
+                                                Ok(byte) => {
+                                                    buffer.write(byte);
+                                                }
+                                                Err(err) => {
+                                                    error!("Failed to parse hex bytes to byte {:?}", err);
+                                                    self.state = State::Wait; // abort
+                                                }
+                                            }
+                                        }
+                                        State::ApplicationStore => {
+                                            match hex_byte_to_byte(self.hex_chars[0], self.hex_chars[1]) {
+                                                Ok(byte) => {
+                                                    if buffer.payload_idx < BUFF_SIZE - 1 {
+                                                        buffer.write(byte);
+                                                    } else {
+                                                        self.state = State::ApplicationClearBuffer;
+                                                        buffer.write(byte); // write last byte and send it out for writing to ram
+                                                        return Some(Event::ApplicationWrite { bytes: buffer.as_slice() })
+                                                    }
+                                                }
+                                                Err(err) => {
+                                                    error!("Failed to parse hex bytes to byte {:?}", err);
+                                                    self.state = State::Wait; // abort
+                                                }
+                                            }
+                                        }
+                                        _ => unreachable!()
+                                    }
+                                    self.hex_idx = 0;
+                                }
+                            }
+                            State::ApplicationClearBuffer => {
+                                buffer.clear();
+                                self.state = State::ApplicationStore;
+                            }
+                            State::NotificationBody | State::NotificationTitle | State::NotificationSource => {
+                                self.nsi_idx += 1;
+                                buffer.write(byte);
+                            }
+                            State::Wait => {
+                                // do nothing, useless bytes
+                            }
+                        }
                     }
                 }
             }
         }
         None
     }
-
-    /// Based on the type byte, determine the type of the incoming payload
-    fn determine_type(&mut self, type_byte: u8) -> Type {
-        self.buffer.btype = match type_byte {
-            b'N' => Type::Notification, /* NOTIFICATION i.e FB Msg */
-            b'S' => Type::Syscall,
-            b'A' => Type::Application,  /* Load Application */
-            _ => Type::Unknown,
-        };
-        self.buffer.btype
-    }
-
 }
 
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     use heapless::consts::*;
-//     use heapless::spsc::Queue;
-//     #[test]
-//     fn ingress_syscall() {
-//         let system = {
-//             System::new(rtc, bms, nmgr, amgr)
-//         };
-//         let mut imgr = IngressManager::new();
-//         let mut data = vec![STX, b'S', PAYLOAD];
-//         for byte in "T00:00:00".bytes() {
-//             data.push(byte);
-//         }
-//         data.push(ETX);
-//         imgr.write(&data);
-//         imgr.process();
+#[cfg(test)]
+mod test {
+    use super::*;
 
-//         assert_eq!(imgr.state, State::Wait);
-//     }
-// }
+    #[test]
+    fn ingress_syscall() {
+        let mut buffer = Buffer::default();
+        let mut imgr = IngressManager::new();
+        let mut data = vec![STX, b'S', PAYLOAD];
+        for byte in "T00:00:00".bytes() {
+            data.push(byte);
+        }
+        data.push(ETX);
+        imgr.write(&data);
+        imgr.process(&mut buffer);
+
+        assert_eq!(imgr.state, State::Wait);
+    }
+}

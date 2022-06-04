@@ -15,7 +15,7 @@ exclude = [
 	"tools/*",
 	"itm.fifo",
 ]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 cortex-m = "0.5.8"

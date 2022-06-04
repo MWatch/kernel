@@ -7,6 +7,10 @@
 #[macro_use]
 extern crate log;
 
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 // pub mod application;
 pub mod ingress;
 pub mod system;

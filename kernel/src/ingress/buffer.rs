@@ -61,6 +61,21 @@ impl Buffer {
     pub fn as_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(&self.payload[0..self.payload_idx]) }
     }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.payload[0..self.payload_idx]
+    }
+
+    /// Based on the type byte, determine the type of the incoming payload
+    pub fn determine_type(&mut self, type_byte: u8) -> Type {
+        self.btype = match type_byte {
+            b'N' => Type::Notification, /* NOTIFICATION i.e FB Msg */
+            b'S' => Type::Syscall,
+            b'A' => Type::Application,  /* Load Application */
+            _ => Type::Unknown,
+        };
+        self.btype
+    }
 }
 
 impl core::fmt::Debug for Buffer {
