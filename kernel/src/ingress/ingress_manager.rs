@@ -50,6 +50,7 @@ pub struct IngressManager {
     nsi_idx: usize,
 }
 
+#[derive(Copy, Clone, Debug)]
 pub enum Event<'a> {
     ApplicationKill,
     ApplicationWrite { bytes: &'a [u8] },

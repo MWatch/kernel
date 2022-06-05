@@ -21,8 +21,8 @@ edition = "2021"
 cortex-m = "0.5.8"
 cortex-m-rt = "0.6.8"
 cortex-m-rtic = { version = "0.5.6" }
-panic-itm = "0.4.0"
-panic-semihosting = "0.5.1"
+panic-itm = { version = "0.4.0", optional = true }
+panic-semihosting = { version = "0.5.1", optional = true }
 embedded-graphics = "0.4.7"
 max17048 = "0.1.0"
 hm11 = "0.2.1"
@@ -48,8 +48,9 @@ version = "0.5.0"
 features = ["rt", "stm32l4x2"]
 
 [features]
-default = ["crc-fb"]
-itm = []
+default = ["crc-fb", "itm"]
+itm = ["dep:panic-itm"]
+semihosting = ["dep:panic-semihosting"]
 disable-input = []
 crc-fb = []
 dyn-tsc-cal = []

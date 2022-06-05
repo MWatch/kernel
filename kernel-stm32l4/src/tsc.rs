@@ -1,3 +1,10 @@
+use crate::types::{LeftButton, MiddleButton, RightButton, TouchSenseController};
+use stm32l4xx_hal::tsc::{Event as TscEvent};
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Error {
+    AcquisitionInProgress,
+}
 
 
 pub struct TscManager {

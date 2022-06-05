@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["kernel"] # 
+members = ["kernel", "kernel-stm32l4"] # 
 # default-members = ["kernel", "kernel-stm32l4"]
 
 [profile.dev]

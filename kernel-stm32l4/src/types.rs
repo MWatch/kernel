@@ -23,19 +23,18 @@ pub type Ssd1351 = ssd1351::mode::GraphicsMode<
         hal::gpio::gpiob::PB1<hal::gpio::Output<hal::gpio::PushPull>>,
     >,
 >;
-pub type BatteryManagementIC = max17048::Max17048<
-    hal::i2c::I2c<
-        hal::stm32::I2C1,
-        (
-            hal::gpio::gpioa::PA9<
-                hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>,
-            >,
-            hal::gpio::gpioa::PA10<
-                hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>,
-            >,
-        ),
-    >,
+pub type BatteryManagementInterface = hal::i2c::I2c<
+    hal::stm32::I2C1,
+    (
+        hal::gpio::gpioa::PA9<
+            hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>,
+        >,
+        hal::gpio::gpioa::PA10<
+            hal::gpio::Alternate<hal::gpio::AF4, hal::gpio::Output<hal::gpio::OpenDrain>>,
+        >,
+    ),
 >;
+
 pub type RightButton = hal::gpio::gpiob::PB5<
     hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>,
 >;

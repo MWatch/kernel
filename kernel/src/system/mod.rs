@@ -1,8 +1,8 @@
 use stm32l4xx_hal::datetime::{Time, Date};
 
-use crate::application::{Table, application_manager::ApplicationManager};
+use crate::application::{application_manager::ApplicationManager};
 
-use self::notification::NotificationManager;
+use self::{notification::NotificationManager, bms::BatteryManagement};
 
 pub mod input;
 pub mod bms;
@@ -18,14 +18,9 @@ pub trait Clock {
     fn set_date(&mut self, t: &Date);    
 }
 
-pub trait BatteryManagement {
-    fn state(&self) -> self::bms::State;
-    fn soc(&self) -> u16;
-}
-
 pub trait System: ApplicationInterface + BatteryManagement + Clock {
 
-    fn is_idle(&self) -> bool {
+    fn is_idle(&mut self) -> bool {
         false
     }
 
@@ -33,7 +28,7 @@ pub trait System: ApplicationInterface + BatteryManagement + Clock {
 }
 
 pub trait ApplicationInterface {
-    unsafe fn install_os_table(&mut self, t: &'static mut Table);
+    unsafe fn install_os_table(&mut self);
 
     fn am(&mut self) -> &mut ApplicationManager;
 }

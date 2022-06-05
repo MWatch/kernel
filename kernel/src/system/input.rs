@@ -31,7 +31,6 @@ pub enum Error {
     NoInput,
     InvalidInputVector(u8),
     InvalidInputPin,
-    AcquisitionInProgress,
     Incomplete,
 }
 

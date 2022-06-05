@@ -12,9 +12,9 @@
 use crc::crc32::checksum_ieee;
 use embedded_graphics::{Drawing, pixelcolor::PixelColorU16};
 
-use crate::system::{input::InputEvent, System};
+use crate::system::input::InputEvent;
 
-use super::{ServiceFn, InputFn, SetupFn, Context, Table};
+use super::{ServiceFn, InputFn, SetupFn, Context};
 
 /// Application manager
 pub struct ApplicationManager {
@@ -64,8 +64,7 @@ impl Default for Status {
 impl ApplicationManager {
     
     /// Create a new application manager from a chunk of ram
-    pub fn new(ram: Ram, table: &'static mut Table, system: &mut impl System) -> Self {
-        unsafe { system.install_os_table(table) };
+    pub fn new(ram: Ram) -> Self {
         Self {
             ram: ram,
             target_cs: [0u8; 4],

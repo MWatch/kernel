@@ -41,6 +41,10 @@ impl Table {
             }
         }
     }
+
+    pub unsafe fn install(t: &'static mut Self) {
+        TABLE_POINTER = Some(t)
+    }
 }
 
 impl Context {
