@@ -365,7 +365,9 @@ dependencies = [
  "max17048",
  "mwatch-kernel",
  "panic-itm",
+ "panic-rtt-target",
  "panic-semihosting",
+ "rtt-target",
  "simple-hex",
  "ssd1351",
  "stm32l4xx-hal",
@@ -413,6 +415,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d577d97d1b31268087b6dddf2470e6794ef5eee87d9dca7fcd0481695391a4c"
 dependencies = [
  "cortex-m 0.7.5",
+]
+
+[[package]]
+name = "panic-rtt-target"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d6ab67bc881453e4c90f958c657c1303670ea87bc1a16e87fd71a40f656dce9"
+dependencies = [
+ "cortex-m 0.7.5",
+ "rtt-target",
 ]
 
 [[package]]
@@ -464,6 +476,16 @@ dependencies = [
  "indexmap",
  "proc-macro2",
  "syn",
+]
+
+[[package]]
+name = "rtt-target"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "065d6058bb1204f51a562a67209e1817cf714759d5cf845aa45c75fa7b0b9d9b"
+dependencies = [
+ "cortex-m 0.7.5",
+ "ufmt-write",
 ]
 
 [[package]]
@@ -588,6 +610,12 @@ name = "typenum"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
+
+[[package]]
+name = "ufmt-write"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e87a2ed6b42ec5e28cc3b94c09982969e9227600b2e3dcbc1db927a84c06bd69"
 
 [[package]]
 name = "unicode-ident"

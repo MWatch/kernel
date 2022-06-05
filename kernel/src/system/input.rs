@@ -31,23 +31,23 @@ pub enum Error {
     NoInput,
     InvalidInputVector(u8),
     InvalidInputPin,
+    Incomplete,
 }
 
 /// Input manager, assumes control over the tsc peripheral and handles the raw inputs
 pub struct InputManager {
     raw_vector: u8,
     last_vector: u8,
-    count: usize
+    count: usize,
 }
 
 impl InputManager {
-    
     /// Creates a new instance of the InputManager
     pub fn new() -> Self {
         Self {
             raw_vector: 0,
             last_vector: 0,
-            count: 0
+            count: 0,
         }
     }
 
@@ -63,23 +63,27 @@ impl InputManager {
 
     /// Based on the current state of the inputmanager's internal vector, produce an output
     pub fn output(&mut self) -> Result<InputEvent, Error> {
-        if (self.raw_vector != self.last_vector) && (self.count >= MAX_PIN_IDX as usize) {
-            let result = match self.raw_vector {
-                ALL => Ok(InputEvent::Multi),
-                LEFT_RIGHT => Ok(InputEvent::Dual),
-                LEFT_MIDDLE => Ok(InputEvent::LeftMiddle),
-                RIGHT_MIDDLE => Ok(InputEvent::RightMiddle),
-                LEFT => Ok(InputEvent::Left),
-                MIDDLE => Ok(InputEvent::Middle),
-                RIGHT => Ok(InputEvent::Right),
-                NONE => Err(Error::NoInput), // no input
-                _ => Err(Error::InvalidInputVector(self.raw_vector)),
-            };
-            self.last_vector = self.raw_vector;
+        if self.count > MAX_PIN_IDX as usize {
             self.count = 0;
-            result
+            if self.raw_vector != self.last_vector {
+                let result = match self.raw_vector {
+                    ALL => Ok(InputEvent::Multi),
+                    LEFT_RIGHT => Ok(InputEvent::Dual),
+                    LEFT_MIDDLE => Ok(InputEvent::LeftMiddle),
+                    RIGHT_MIDDLE => Ok(InputEvent::RightMiddle),
+                    LEFT => Ok(InputEvent::Left),
+                    MIDDLE => Ok(InputEvent::Middle),
+                    RIGHT => Ok(InputEvent::Right),
+                    NONE => Err(Error::NoInput), // no input
+                    _ => Err(Error::InvalidInputVector(self.raw_vector)),
+                };
+                self.last_vector = self.raw_vector;
+                result
+            } else {
+                Err(Error::NoInput)
+            }
         } else {
-            Err(Error::NoInput)
+            Err(Error::Incomplete)
         }
     }
 

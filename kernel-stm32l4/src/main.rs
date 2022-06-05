@@ -3,6 +3,8 @@
 
 #[cfg(feature = "itm")]
 extern crate panic_itm;
+#[cfg(feature = "rtt")]
+extern crate panic_rtt_target;
 #[cfg(feature = "semihosting")]
 extern crate panic_semihosting;
 #[macro_use]
@@ -12,6 +14,8 @@ mod bms;
 mod system;
 mod tsc;
 mod types;
+
+use rtt_target::{rprintln, rtt_init_print};
 
 use crate::{
     bms::BatteryManagement,
@@ -60,6 +64,7 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::system::{
     System, CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
+use mwatch_kernel::ingress::ingress_manager::Event as IngressEvent;
 use mwatch_kernel::system::{input::InputManager, notification::NotificationManager};
 
 #[cfg(feature = "itm")]
@@ -118,6 +123,9 @@ const APP: () = {
             inner: InterruptSyncItm::new(ItmDestination::new(itm)),
             level: LOG_LEVEL,
         };
+
+        rtt_init_print!();
+        rprintln!("RTT!!! - Hello, world!");
 
         *cx.resources.LOGGER = Some(logger);
         let log: &'static mut _ = cx.resources.LOGGER.as_mut().unwrap_or_else(|| {
@@ -386,8 +394,34 @@ const APP: () = {
             });
             mgr.lock(|m| {
                 let mut buffer = ingress::buffer::Buffer::default();
-                let event = m.process(&mut buffer);
-                todo!("Unhandled event: {:?}", event);
+                if let Some(event) = m.process(&mut buffer) {
+                    // TODO remove these unwraps and log errors instead
+                    match event {
+                        IngressEvent::ApplicationKill => {
+                            system.am().kill().unwrap();
+                        }
+                        IngressEvent::ApplicationWrite { bytes } => {
+                            for &b in bytes {
+                                system.am().write_ram_byte(b).unwrap();
+                            }
+                        }
+                        IngressEvent::ApplicationWriteChecksum { checksum } => {
+                            for b in checksum {
+                                system.am().write_checksum_byte(b).unwrap();
+                            }
+                        },
+                        IngressEvent::ApplicationVerify { bytes } => {
+                            for &b in bytes {
+                                system.am().write_ram_byte(b).unwrap();
+                            }
+                            system.am().verify().unwrap();
+                        },
+                        IngressEvent::Notification { slice, indexes } => {
+                            system.nm().add(slice, &indexes).unwrap();
+                        },
+                        IngressEvent::Syscall(s) => s.execute(system),
+                    }
+                }
             });
         });
         cx.resources

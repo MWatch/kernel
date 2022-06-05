@@ -7,6 +7,8 @@ use core::str::FromStr;
 
 use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, datetime::{Time, Date}};
 
+use super::System;
+
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
@@ -44,18 +46,18 @@ impl FromStr for Syscall {
 
 impl Syscall {
 
-    // pub fn execute(self, system: &mut System) {
-    //     match self {
-    //         Syscall::Date(date) => {
-    //             info!("Setting the date to {:?}", date);
-    //             system.rtc().set_date(&date);
-    //         },
-    //         Syscall::Time(time) => {
-    //             info!("Setting the time to {:?}", time);
-    //             system.rtc().set_time(&time);
-    //         },
-    //     }
-    // }
+    pub fn execute(self, system: &mut impl System) {
+        match self {
+            Syscall::Date(date) => {
+                info!("Setting the date to {:?}", date);
+                system.set_date(&date);
+            },
+            Syscall::Time(time) => {
+                info!("Setting the time to {:?}", time);
+                system.set_time(&time);
+            },
+        }
+    }
 
     pub fn date_from_str(s: &str) -> Result<Date, Error> {
         let mut vals = [0u32; 4];
