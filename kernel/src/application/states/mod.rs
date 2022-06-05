@@ -4,7 +4,7 @@ pub mod prelude;
 
 pub mod clock;
 // pub mod info;
-// pub mod app;
+pub mod app;
 pub mod mwatch;
 pub mod uop;
 pub mod notifications;
@@ -34,7 +34,7 @@ pub trait ScopedState: State {
     /// Start 
     fn start(&mut self, system: &mut impl System);
     /// Is the application running yet?
-    fn is_running(&self, system: &impl System) -> bool;
+    fn is_running(&self, system: &mut impl System) -> bool;
     /// Stop
     fn stop(&mut self, system: &mut impl System);
 }

@@ -10,7 +10,7 @@
 //! provided you have the available RAM
 
 use crc::crc32::checksum_ieee;
-use embedded_graphics::drawable::Drawable;
+use embedded_graphics::{Drawing, pixelcolor::PixelColorU16};
 
 use crate::system::{input::InputEvent, System};
 
@@ -140,7 +140,7 @@ impl ApplicationManager {
 
 
     /// Gives processing time to the application
-    pub fn service(&mut self, display: &mut impl Drawable) -> Result<(), Error> {
+    pub fn service(&mut self, display: &mut impl Drawing<PixelColorU16>) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
         let mut ctx = Context {
             display: Some(display as *mut _ as *mut ()), // cast to void pointer, the Table implementation knows the concrete size

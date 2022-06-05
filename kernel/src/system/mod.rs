@@ -1,6 +1,6 @@
 use stm32l4xx_hal::datetime::{Time, Date};
 
-use crate::application::Table;
+use crate::application::{Table, application_manager::ApplicationManager};
 
 use self::notification::NotificationManager;
 
@@ -29,9 +29,11 @@ pub trait System: ApplicationInterface + BatteryManagement + Clock {
         false
     }
 
-    fn nm(&mut self) -> NotificationManager;
+    fn nm(&mut self) -> &mut NotificationManager;
 }
 
 pub trait ApplicationInterface {
     unsafe fn install_os_table(&mut self, t: &'static mut Table);
+
+    fn am(&mut self) -> &mut ApplicationManager;
 }

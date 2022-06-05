@@ -4,7 +4,10 @@
 //!  
 
 use crate::application::states::prelude::*;
+use crate::system::System;
+use crate::system::input::InputEvent;
 
+use embedded_graphics::pixelcolor::PixelColorU16;
 use heapless::String;
 use heapless::consts::*;
 use core::fmt::Write;
@@ -26,14 +29,14 @@ impl Default for AppState {
 }
 
 impl State for AppState {
-    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn render(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
         system.am().service(display).unwrap_or_else(|err| {
             error!("Failed to render app {:?}", err);
         });
         None     
     }
 
-    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut impl System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Multi => {
                 system.am().pause();
@@ -51,7 +54,7 @@ impl State for AppState {
 
 impl ScopedState for AppState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn preview(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
         self.buffer.clear();
         let status = system.am().status();
         if status.is_loaded {
@@ -68,12 +71,12 @@ impl ScopedState for AppState {
         None
     }
 
-    fn is_running(&self, system: &mut System) -> bool {
+    fn is_running(&self, system: &mut impl System) -> bool {
         system.am().status().is_running
     }
 
     /// Start 
-    fn start(&mut self, system: &mut System) {
+    fn start(&mut self, system: &mut impl System) {
         match system.am().execute() {
             Ok(_) => {},
             Err(err) => error!("Failed to launch application {:?}", err)
@@ -81,7 +84,7 @@ impl ScopedState for AppState {
     }
 
     /// Stop
-    fn stop(&mut self, system: &mut System) {
+    fn stop(&mut self, system: &mut impl System) {
         system.am().kill().unwrap_or_else(|err|{
             error!("Failed to kill app {:?}", err);
         });

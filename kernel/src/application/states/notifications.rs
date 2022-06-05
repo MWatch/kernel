@@ -143,7 +143,7 @@ impl ScopedState for NotificationState {
     }
 
     /// Is the notification app opened?
-    fn is_running(&self, _system: &impl System) -> bool {
+    fn is_running(&self, _system: &mut impl System) -> bool {
         self.is_running
     }
 
