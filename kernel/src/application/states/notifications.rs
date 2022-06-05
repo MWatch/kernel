@@ -4,8 +4,11 @@
 //!  
 
 use crate::application::states::prelude::*;
+use crate::system::System;
+use crate::system::input::InputEvent;
 
 use embedded_graphics::fonts::Font6x12;
+use embedded_graphics::pixelcolor::PixelColorU16;
 use embedded_graphics::prelude::*;
 
 use crate::system::notification::Notification;
@@ -34,7 +37,7 @@ pub struct NotificationState {
 
 impl State for NotificationState {
     /// Render the notification state
-    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn render(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
         self.menu.update_count(system.nm().idx() as i8);
         match self.state {
             InternalState::Menu => {
@@ -70,7 +73,7 @@ impl State for NotificationState {
     }
 
     /// Handle the input for the notification
-    fn input(&mut self, system: &mut System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut impl System, input: InputEvent) -> Option<Signal> {
         if input == InputEvent::Multi {
             self.stop(system);
             return Some(Signal::Home) // signal to dm to go home
@@ -131,7 +134,7 @@ impl Default for NotificationState {
 
 impl ScopedState for NotificationState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn preview(&mut self, _system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
         display.draw(horizontal_centre(Font6x12::render_str("Notifications"), 24)
                 .with_stroke(Some(0x02D4_u16.into()))
                 .into_iter(),
@@ -140,17 +143,17 @@ impl ScopedState for NotificationState {
     }
 
     /// Is the notification app opened?
-    fn is_running(&self, _system: &mut System) -> bool {
+    fn is_running(&self, _system: &impl System) -> bool {
         self.is_running
     }
 
     /// Start 
-    fn start(&mut self, _system: &mut System) {
+    fn start(&mut self, _system: &mut impl System) {
         self.is_running = true;
     }
 
     /// Stop
-    fn stop(&mut self, _system: &mut System) {
+    fn stop(&mut self, _system: &mut impl System) {
         self.is_running = false;
     }
 }
@@ -178,7 +181,7 @@ impl Body {
     }
 
     /// Render the notification
-    pub fn render(&mut self, display: &mut Ssd1351, notification: &Notification) {
+    pub fn render(&mut self, display: &mut impl Drawing<PixelColorU16>, notification: &Notification) {
         let body = notification.body().as_bytes();
         for (idx, line) in body[0..body.len()].chunks(LINE_WIDTH as usize).enumerate() { // screen pixels / character width
             // safe because the protocol guarentees no unicode bytes will be sent

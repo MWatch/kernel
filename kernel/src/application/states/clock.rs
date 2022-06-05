@@ -3,7 +3,6 @@
 //! The main home page
 
 use crate::application::states::prelude::*;
-use crate::system;
 use crate::system::System;
 
 use crate::system::bms::State as BmsState;

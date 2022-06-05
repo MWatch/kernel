@@ -9,9 +9,9 @@ use crate::{application::{
         clock::ClockState,
         // info::InfoState,
         // app::AppState,
-        // uop::UopState,
+        uop::UopState,
         mwatch::MWState,
-        // notifications::NotificationState,
+        notifications::NotificationState,
     },
     states::prelude::*
 }, system::{input::InputEvent, System}};
@@ -35,9 +35,9 @@ pub struct DisplayManager
     clock_state: ClockState,
     // info_state: InfoState,
     // app_state: AppState,
-    // uop_state: UopState,
+    uop_state: UopState,
     mwatch_state: MWState,
-    // notification_state: NotificationState,
+    notification_state: NotificationState,
 }
 
 impl Default for DisplayManager {
@@ -49,9 +49,9 @@ impl Default for DisplayManager {
             clock_state: ClockState::default(),
             // info_state: InfoState::default(),
             // app_state: AppState::default(),
-            // uop_state: UopState::default(),
+            uop_state: UopState::default(),
             mwatch_state: MWState::default(),
-            // notification_state: NotificationState::default(),
+            notification_state: NotificationState::default(),
         }
     }
 }
@@ -68,15 +68,15 @@ impl DisplayManager
             // 1 => {
             //     DisplayManager::scoped_state_render(&mut self.app_state, system, display)
             // },
-            // 2 => {
-            //     DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
-            // },
+            2 => {
+                DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
+            },
             3 => {
                 DisplayManager::static_state_render(&mut self.mwatch_state, system, display)
             },
-            // 4 => {
-            //     DisplayManager::static_state_render(&mut self.uop_state, system, display)
-            // },
+            4 => {
+                DisplayManager::static_state_render(&mut self.uop_state, system, display)
+            },
             // 5 => {
             //     DisplayManager::static_state_render(&mut self.info_state, system, display)
             // },
@@ -97,15 +97,15 @@ impl DisplayManager
             // 1 => {
             //     DisplayManager::scoped_state_input(&mut self.app_state, system, input)
             // }
-            // 2 => {
-            //     DisplayManager::scoped_state_input(&mut self.notification_state, system, input)
-            // },
+            2 => {
+                DisplayManager::scoped_state_input(&mut self.notification_state, system, input)
+            },
             // 3  => {
             //     DisplayManager::static_state_input(&mut self.mwatch_state, system, input)
             // },
-            // 4  => {
-            //     DisplayManager::static_state_input(&mut self.uop_state, system, input)
-            // },
+            4  => {
+                DisplayManager::static_state_input(&mut self.uop_state, system, input)
+            },
             // 5 => {
             //     DisplayManager::static_state_input(&mut self.info_state, system, input)
             // },
