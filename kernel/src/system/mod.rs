@@ -1,5 +1,7 @@
 use stm32l4xx_hal::datetime::{Time, Date};
 
+use crate::application::Table;
+
 use self::notification::NotificationManager;
 
 pub mod input;
@@ -21,11 +23,15 @@ pub trait BatteryManagement {
     fn soc(&self) -> u16;
 }
 
-pub trait System: Clock + BatteryManagement {
+pub trait System: ApplicationInterface + BatteryManagement + Clock {
 
     fn is_idle(&self) -> bool {
         false
     }
 
     fn nm(&mut self) -> NotificationManager;
+}
+
+pub trait ApplicationInterface {
+    unsafe fn install_os_table(&mut self, t: &'static mut Table);
 }

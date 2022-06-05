@@ -12,9 +12,9 @@
 use crc::crc32::checksum_ieee;
 use embedded_graphics::drawable::Drawable;
 
-use crate::system::input::InputEvent;
+use crate::system::{input::InputEvent, System};
 
-use super::{ServiceFn, InputFn, SetupFn, Context};
+use super::{ServiceFn, InputFn, SetupFn, Context, Table};
 
 /// Application manager
 pub struct ApplicationManager {
@@ -64,7 +64,8 @@ impl Default for Status {
 impl ApplicationManager {
     
     /// Create a new application manager from a chunk of ram
-    pub fn new(ram: Ram) -> Self {
+    pub fn new(ram: Ram, table: &'static mut Table, system: &mut impl System) -> Self {
+        unsafe { system.install_os_table(table) };
         Self {
             ram: ram,
             target_cs: [0u8; 4],
@@ -139,12 +140,10 @@ impl ApplicationManager {
 
 
     /// Gives processing time to the application
-    pub fn service(&mut self, display: impl Drawable) -> Result<(), Error> {
+    pub fn service(&mut self, display: &mut impl Drawable) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
-        todo!("busted shit ahead");
         let mut ctx = Context {
-            display: Some(unsafe { &mut display as *mut _ as *mut () }), // TODODO FIXME this aint gunna work lol
-            log: application_logger,
+            display: Some(display as *mut _ as *mut ()), // cast to void pointer, the Table implementation knows the concrete size
         };
         self.status.service_result = service_fn(&mut ctx);
         Ok(())
@@ -159,7 +158,6 @@ impl ApplicationManager {
         let mut ctx = Context {
             // display is only passed in on update, not on input
             display: None,
-            log: application_logger,
         };
         let _ = input_fn(&mut ctx, input);
         Ok(())
@@ -252,12 +250,6 @@ impl Ram {
     pub fn as_ref(&self) -> &[u8] {
         &self.ram
     }
-}
-
-/// FFI for application debugging
-extern "C" fn application_logger(string: &str) -> i32 {
-    info!("{}", string);
-    0
 }
 
 #[cfg(test)]
