@@ -332,10 +332,6 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 name = "mwatch-kernel"
 version = "1.0.0"
 dependencies = [
- "cortex-m 0.5.11",
- "cortex-m-log",
- "cortex-m-rt",
- "cortex-m-rtic",
  "crc",
  "embedded-graphics",
  "embedded-hal",
