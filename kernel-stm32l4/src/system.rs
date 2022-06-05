@@ -72,8 +72,8 @@ mod abi {
         0
     }
 
-    pub unsafe extern "C" fn print(context: *mut Context, string: &[u8]) -> i32 {
-        info!("[APP] - {}", core::str::from_utf8_unchecked(&string));
+    pub unsafe extern "C" fn print(_context: *mut Context, ptr: *const u8, len: usize) -> i32 {
+        info!("[APP] - {}", core::str::from_utf8_unchecked(core::slice::from_raw_parts(ptr, len)));
         0
     }
 }

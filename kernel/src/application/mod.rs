@@ -28,7 +28,7 @@ pub struct Table {
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: unsafe extern "C" fn(*mut Context, u8, u8, u16) -> i32,
     /// Print a string using th info! macro
-    pub print: unsafe extern "C" fn(*mut Context, &[u8]) -> i32,
+    pub print: unsafe extern "C" fn(*mut Context, ptr: *const u8, len: usize) -> i32,
 }
 
 impl Table {

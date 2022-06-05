@@ -31,13 +31,13 @@ pub enum Error {
     NoInput,
     InvalidInputVector(u8),
     InvalidInputPin,
-    Incomplete,
 }
 
 /// Input manager, assumes control over the tsc peripheral and handles the raw inputs
 pub struct InputManager {
     raw_vector: u8,
     last_vector: u8,
+    count: usize
 }
 
 impl InputManager {
@@ -47,21 +47,23 @@ impl InputManager {
         Self {
             raw_vector: 0,
             last_vector: 0,
+            count: 0
         }
     }
 
     /// Update thes the internal state of the manager with the raw hardware input
-    pub fn update_input(&mut self, pin: u8, active: bool) {
+    pub fn update_input(&mut self, active: bool) {
         if active {
-            self.raw_vector |= 1 << pin;
+            self.raw_vector |= 1 << self.count;
         } else {
-            self.raw_vector &= !(1 << pin);
+            self.raw_vector &= !(1 << self.count);
         }
+        self.count += 1;
     }
 
     /// Based on the current state of the inputmanager's internal vector, produce an output
     pub fn output(&mut self) -> Result<InputEvent, Error> {
-        if self.raw_vector != self.last_vector {
+        if (self.raw_vector != self.last_vector) && (self.count >= MAX_PIN_IDX as usize) {
             let result = match self.raw_vector {
                 ALL => Ok(InputEvent::Multi),
                 LEFT_RIGHT => Ok(InputEvent::Dual),
@@ -74,9 +76,14 @@ impl InputManager {
                 _ => Err(Error::InvalidInputVector(self.raw_vector)),
             };
             self.last_vector = self.raw_vector;
+            self.count = 0;
             result
         } else {
             Err(Error::NoInput)
         }
+    }
+
+    pub fn current_pin(&self) -> usize {
+        self.count
     }
 }

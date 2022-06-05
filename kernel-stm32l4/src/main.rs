@@ -8,14 +8,21 @@ extern crate panic_semihosting;
 #[macro_use]
 extern crate log;
 
+mod bms;
 mod system;
 mod tsc;
 mod types;
-mod bms;
 
-use crate::{types::{hal, BluetoothConnectedPin, LoggerType, Ssd1351}, tsc::TscManager, bms::BatteryManagement};
-use mwatch_kernel::{application, ingress, system::{input::InputEvent, ApplicationInterface}};
+use crate::{
+    bms::BatteryManagement,
+    tsc::TscManager,
+    types::{hal, BluetoothConnectedPin, LoggerType, Ssd1351},
+};
 use mwatch_kernel::system::System as _;
+use mwatch_kernel::{
+    application, ingress,
+    system::{input::InputEvent, ApplicationInterface},
+};
 
 use crate::hal::{
     datetime::Date,
@@ -53,9 +60,7 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::system::{
     System, CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
-use mwatch_kernel::system::{
-    input::InputManager, notification::NotificationManager,
-};
+use mwatch_kernel::system::{input::InputManager, notification::NotificationManager};
 
 #[cfg(feature = "itm")]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -68,6 +73,7 @@ const APP: () = {
         CB: CircBuffer<&'static mut [[u8; DMA_HALF_BYTES]; 2], dma1::C6>,
         IMNG: IngressManager,
         INPUT_MGR: InputManager,
+        TSC_MGR: TscManager,
         DMNG: DisplayManager,
         USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>,
         DISPLAY: Ssd1351,
@@ -321,7 +327,6 @@ const APP: () = {
         let dmng = DisplayManager::default();
         let mut system = System::new(rtc, bms, nmgr, amgr);
         system.ss().tsc_threshold = tsc_mgr.threshold();
-        // rtic::pend(crate::hal::interrupt::TIM2); // make sure systick runs first
 
         unsafe { system.install_os_table() };
 
@@ -337,6 +342,7 @@ const APP: () = {
             TIM7_HANDLE: cpu,
             TIM6: input,
             INPUT_MGR: input_mgr,
+            TSC_MGR: tsc_mgr,
             DMNG: dmng,
         }
     }
@@ -391,17 +397,17 @@ const APP: () = {
     }
 
     /// Hardware timer, initiates tsc aquisitions
-    #[task(binds = TIM6_DACUNDER, resources = [INPUT_MGR, TIM6], priority = 3)] // TIM6
+    #[task(binds = TIM6_DACUNDER, resources = [TSC_MGR, TIM6, INPUT_MGR], priority = 3)] // TIM6
     fn tsc_initiator(cx: tsc_initiator::Context) {
-        todo!();
-        // match cx.resources.INPUT_MGR.start_new() {
-        //     Ok(_) => {}
-        //     Err(e) => {
-        //         if e != AcquisitionInProgress {
-        //             panic!("{:?}", e);
-        //         }
-        //     }
-        // }
+        let pin = cx.resources.INPUT_MGR.current_pin();
+        match cx.resources.TSC_MGR.start(pin as u8) {
+            Ok(_) => {}
+            Err(e) => {
+                if e != crate::tsc::Error::AcquisitionInProgress {
+                    panic!("{:?}", e);
+                }
+            }
+        }
         // this should never panic as if we are in the IT the uif bit is set
         cx.resources.TIM6.wait().expect("TIM6 clear() failed");
     }
@@ -449,35 +455,27 @@ const APP: () = {
 
     /// When a TSC aquisition completes, the result is processed by the input manager
     /// If the result is a valid output, the input handler task is spawned to act upon it
-    #[task(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT], priority = 3, spawn = [input_handler])]
+    #[task(binds = TSC, resources = [TSC_EVENTS, INPUT_MGR, IDLE_COUNT, TSC_MGR], priority = 3, spawn = [input_handler])]
     fn tsc_result(cx: tsc_result::Context) {
         *cx.resources.TSC_EVENTS += 1;
-        todo!("tsc process");
-        // let input_mgr = cx.resources.INPUT_MGR;
-        // match input_mgr.process_result() {
-        //     Ok(_) => {
-        //         match input_mgr.output() {
-        //             Ok(input) => {
-        //                 *cx.resources.IDLE_COUNT = 0; // we are no longer idle
-        //                 info!("Output => {:?}", input);
-        //                 match cx.spawn.input_handler(input) {
-        //                     Ok(_) => {}
-        //                     Err(e) => panic!("Failed to spawn input task. Input {:?}", e),
-        //                 }
-        //             }
-        //             Err(e) => {
-        //                 if e != mwatch_kernel::system::input::Error::NoInput {
-        //                     error!("Input Error, {:?}", e);
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     Err(e) => {
-        //         if e != mwatch_kernel::system::input::Error::Incomplete {
-        //             panic!("process_result error: {:?}", e)
-        //         }
-        //     }
-        // }
+        let input_mgr = cx.resources.INPUT_MGR;
+        input_mgr.update_input(cx.resources.TSC_MGR.result(input_mgr.current_pin() as u8));
+
+        match input_mgr.output() {
+            Ok(input) => {
+                *cx.resources.IDLE_COUNT = 0; // we are no longer idle
+                info!("Output => {:?}", input);
+                match cx.spawn.input_handler(input) {
+                    Ok(_) => {}
+                    Err(e) => panic!("Failed to spawn input task. Input {:?}", e),
+                }
+            }
+            Err(e) => {
+                if e != mwatch_kernel::system::input::Error::NoInput {
+                    error!("Input Error, {:?}", e);
+                }
+            }
+        }
     }
 
     /// Handles the intermediate state where the DMA has data in it but
@@ -525,7 +523,7 @@ const APP: () = {
     /// Task that services the display manager
     #[task(resources = [DISPLAY, SYSTEM, BT_CONN, DMNG])]
     fn display_manager(cx: display_manager::Context) {
-        let mut display = cx.resources.DISPLAY;
+        let display = cx.resources.DISPLAY;
         let mut dmngr = cx.resources.DMNG;
         let mut sys = cx.resources.SYSTEM;
         // let mut system = cx.resources.SYSTEM;
@@ -567,10 +565,8 @@ const APP: () = {
     /// This task is dispatched via the hardware TSC isr - allow up to 3 to be spawned at any time
     /// This task is very cheap, hence we can have 3 of them running at anytime
     #[task(resources = [SYSTEM, DMNG], priority = 2, capacity = 3)]
-    fn input_handler(mut cx: input_handler::Context, input: InputEvent) {
-        cx.resources
-            .DMNG
-            .service_input(cx.resources.SYSTEM, input);
+    fn input_handler(cx: input_handler::Context, input: InputEvent) {
+        cx.resources.DMNG.service_input(cx.resources.SYSTEM, input);
     }
 
     /// Interrupt handlers used to dispatch software tasks
