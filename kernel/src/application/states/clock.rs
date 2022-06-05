@@ -1,17 +1,21 @@
 //! Clock state
-//! 
+//!
 //! The main home page
 
 use crate::application::states::prelude::*;
+use crate::system;
+use crate::system::System;
 
-use heapless::String;
-use heapless::consts::*;
 use crate::system::bms::State as BmsState;
+use crate::system::input::InputEvent;
 use core::fmt::Write;
+use embedded_graphics::pixelcolor::PixelColorU16;
+use heapless::consts::*;
+use heapless::String;
 
-use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
+use embedded_graphics::Drawing;
 
 use seven_segment::SevenSegments;
 
@@ -28,27 +32,29 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
-        let time = system.rtc().get_time();
-        let date = system.rtc().get_date();
-        let soc = system.bms().soc();
-        let bms_state = system.bms().state();
+    fn render(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
+        let time = system.get_time();
+        let date = system.get_date();
+        let soc = system.soc();
+        let bms_state = system.state();
         let mut clock_digits = SevenSegments::new(display, 18, 48, 0x2C78);
-        write!(
-            self.buffer,
-            "{:02}{:02}",
-            time.hours, time.minutes
-        ).unwrap();
+        write!(self.buffer, "{:02}{:02}", time.hours, time.minutes).unwrap();
         for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
             clock_digits.digit(digit - b'0');
-            if idx == (self.buffer.len() / 2) - 1 { // put a colon between hours and mins
+            if idx == (self.buffer.len() / 2) - 1 {
+                // put a colon between hours and mins
                 clock_digits.colon();
             }
         }
 
         self.buffer.clear(); // reset the buffer
         if !system.is_idle() {
-            write!(self.buffer, "{:02}/{:02}/{:04}", date.date, date.month, date.year).unwrap();
+            write!(
+                self.buffer,
+                "{:02}/{:02}/{:04}",
+                date.date, date.month, date.year
+            )
+            .unwrap();
             display.draw(
                 Font6x12::render_str(self.buffer.as_str())
                     .translate(Coord::new(30, 128 - 12))
@@ -67,13 +73,13 @@ impl State for ClockState {
             match bms_state {
                 BmsState::Charging => {
                     write!(self.buffer, "CHARGING").unwrap();
-                },
+                }
                 BmsState::Draining => {
                     write!(self.buffer, "DRAINING").unwrap();
-                },
+                }
                 BmsState::Charged => {
                     write!(self.buffer, "DONE").unwrap();
-                },
+                }
             }
             display.draw(
                 Font6x12::render_str(self.buffer.as_str())
@@ -83,30 +89,29 @@ impl State for ClockState {
             );
             self.buffer.clear(); // reset the buffer
         }
-        
+
         None
     }
 
-    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut impl System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),
-            _ => None
+            _ => None,
         }
     }
 }
 
 impl StaticState for ClockState {}
 
-
 mod seven_segment {
     use embedded_graphics::coord::Coord;
+    use embedded_graphics::pixelcolor::PixelColorU16;
     use embedded_graphics::prelude::*;
     use embedded_graphics::primitives::Rect;
-    use crate::types::Ssd1351;
 
-    pub struct SevenSegments<'a> {
-        display: &'a mut Ssd1351,
+    pub struct SevenSegments<'a, D> {
+        display: &'a mut D,
         width: i32,
         height: i32,
         thickness: i32,
@@ -116,20 +121,23 @@ mod seven_segment {
         colour: u16
     }
 
-    impl<'a> SevenSegments<'a> {
-        pub fn new(display: &'a mut Ssd1351, x: i32, y: i32, colour: u16) -> Self {
+    impl<'a, D> SevenSegments<'a, D>
+    where
+        D: Drawing<PixelColorU16>,
+    {
+        pub fn new(display: &'a mut D, x: i32, y: i32, colour: u16) -> Self {
             Self {
                 display,
                 width: 16,
                 height: 35,
                 thickness: 4,
-                space:5,
+                space: 5,
                 x,
                 y,
                 colour,
             }
         }
-        
+
         pub fn colon_space(&mut self) {
             self.x += self.thickness + self.space;
         }

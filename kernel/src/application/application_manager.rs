@@ -10,7 +10,11 @@
 //! provided you have the available RAM
 
 use crc::crc32::checksum_ieee;
-use crate::types::{Context, ServiceFn, SetupFn, Ssd1351, InputFn, InputEvent};
+use embedded_graphics::drawable::Drawable;
+
+use crate::system::input::InputEvent;
+
+use super::{ServiceFn, InputFn, SetupFn, Context};
 
 /// Application manager
 pub struct ApplicationManager {
@@ -135,10 +139,11 @@ impl ApplicationManager {
 
 
     /// Gives processing time to the application
-    pub fn service(&mut self, display: &mut Ssd1351) -> Result<(), Error> {
+    pub fn service(&mut self, display: impl Drawable) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
+        todo!("busted shit ahead");
         let mut ctx = Context {
-            display: Some(display),
+            display: Some(unsafe { &mut display as *mut _ as *mut () }), // TODODO FIXME this aint gunna work lol
             log: application_logger,
         };
         self.status.service_result = service_fn(&mut ctx);

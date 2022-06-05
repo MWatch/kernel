@@ -2,7 +2,6 @@
 
 use crate::application::states::prelude::*;
 
-use embedded_graphics::Drawing;
 use embedded_graphics::image::Image16BPP;
 
 pub struct UopState {}

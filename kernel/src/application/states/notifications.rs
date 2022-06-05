@@ -5,7 +5,6 @@
 
 use crate::application::states::prelude::*;
 
-use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 

@@ -11,6 +11,6 @@ extern crate log;
 #[macro_use]
 extern crate std;
 
-// pub mod application;
+pub mod application;
 pub mod ingress;
 pub mod system;

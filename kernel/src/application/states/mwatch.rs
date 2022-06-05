@@ -1,10 +1,13 @@
 
 
 use crate::application::states::prelude::*;
+use crate::system::System;
+use crate::system::input::InputEvent;
 
 use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::image::Image16BPP;
+use embedded_graphics::pixelcolor::PixelColorU16;
 use embedded_graphics::prelude::*;
 
 pub struct MWState {}
@@ -18,7 +21,7 @@ impl Default for MWState {
 }
 
 impl State for MWState {
-    fn render(&mut self, _system: &mut System, display: &mut Ssd1351) -> Option<Signal> {
+    fn render(&mut self, _system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
         display.draw(
                 Image16BPP::new(include_bytes!("../../../data/mwatch.raw"), 64, 64)
                     .translate(Coord::new(32, 10))
@@ -41,7 +44,7 @@ impl State for MWState {
         None
     }
 
-    fn input(&mut self, _system: &mut System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut impl System, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),
