@@ -7,8 +7,8 @@ use embedded_graphics::{pixelcolor::PixelColorU16, Drawing};
 use crate::{application::{
     states::{
         clock::ClockState,
-        // info::InfoState,
-        // app::AppState,
+        info::InfoState,
+        app::AppState,
         uop::UopState,
         mwatch::MWState,
         notifications::NotificationState,
@@ -33,8 +33,8 @@ pub struct DisplayManager
 {
     state_idx: i8,
     clock_state: ClockState,
-    // info_state: InfoState,
-    // app_state: AppState,
+    info_state: InfoState,
+    app_state: AppState,
     uop_state: UopState,
     mwatch_state: MWState,
     notification_state: NotificationState,
@@ -47,8 +47,8 @@ impl Default for DisplayManager {
         Self {
             state_idx: 0,
             clock_state: ClockState::default(),
-            // info_state: InfoState::default(),
-            // app_state: AppState::default(),
+            info_state: InfoState::default(),
+            app_state: AppState::default(),
             uop_state: UopState::default(),
             mwatch_state: MWState::default(),
             notification_state: NotificationState::default(),
@@ -65,9 +65,9 @@ impl DisplayManager
             0 => {
                 DisplayManager::static_state_render(&mut self.clock_state, system, display)
             },
-            // 1 => {
-            //     DisplayManager::scoped_state_render(&mut self.app_state, system, display)
-            // },
+            1 => {
+                DisplayManager::scoped_state_render(&mut self.app_state, system, display)
+            },
             2 => {
                 DisplayManager::scoped_state_render(&mut self.notification_state, system, display)
             },
@@ -77,9 +77,9 @@ impl DisplayManager
             4 => {
                 DisplayManager::static_state_render(&mut self.uop_state, system, display)
             },
-            // 5 => {
-            //     DisplayManager::static_state_render(&mut self.info_state, system, display)
-            // },
+            5 => {
+                DisplayManager::static_state_render(&mut self.info_state, system, display)
+            },
             _ => panic!("Unhandled state")
         };
 
@@ -94,21 +94,21 @@ impl DisplayManager
             0 => {
                 DisplayManager::static_state_input(&mut self.clock_state, system, input)
             },
-            // 1 => {
-            //     DisplayManager::scoped_state_input(&mut self.app_state, system, input)
-            // }
+            1 => {
+                DisplayManager::scoped_state_input(&mut self.app_state, system, input)
+            }
             2 => {
                 DisplayManager::scoped_state_input(&mut self.notification_state, system, input)
             },
-            // 3  => {
-            //     DisplayManager::static_state_input(&mut self.mwatch_state, system, input)
-            // },
+            3  => {
+                DisplayManager::static_state_input(&mut self.mwatch_state, system, input)
+            },
             4  => {
                 DisplayManager::static_state_input(&mut self.uop_state, system, input)
             },
-            // 5 => {
-            //     DisplayManager::static_state_input(&mut self.info_state, system, input)
-            // },
+            5 => {
+                DisplayManager::static_state_input(&mut self.info_state, system, input)
+            },
             _ => panic!("Unhandled state")
         };
 
