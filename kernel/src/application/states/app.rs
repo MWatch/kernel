@@ -4,15 +4,13 @@
 //!  
 
 use crate::application::states::prelude::*;
+use crate::system::Display;
 use crate::system::System;
 use crate::system::input::InputEvent;
-
-use embedded_graphics::pixelcolor::PixelColorU16;
 use heapless::String;
 use heapless::consts::*;
 use core::fmt::Write;
 
-use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
@@ -29,7 +27,7 @@ impl Default for AppState {
 }
 
 impl State for AppState {
-    fn render(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
+    fn render(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
         system.am().service(display).unwrap_or_else(|err| {
             error!("Failed to render app {:?}", err);
         });
@@ -54,7 +52,7 @@ impl State for AppState {
 
 impl ScopedState for AppState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
+    fn preview(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
         self.buffer.clear();
         let status = system.am().status();
         if status.is_loaded {

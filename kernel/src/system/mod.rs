@@ -1,6 +1,7 @@
+use embedded_graphics::{Drawing, pixelcolor::PixelColorU16};
 use stm32l4xx_hal::datetime::{Time, Date};
 
-use crate::application::{application_manager::ApplicationManager};
+use crate::application::{application_manager::ApplicationManager, FrameBuffer};
 
 use self::{notification::NotificationManager, bms::BatteryManagement};
 
@@ -31,4 +32,8 @@ pub trait ApplicationInterface {
     unsafe fn install_os_table(&mut self);
 
     fn am(&mut self) -> &mut ApplicationManager;
+}
+
+pub trait Display: Drawing<PixelColorU16> {
+    fn framebuffer(&mut self) -> FrameBuffer;
 }

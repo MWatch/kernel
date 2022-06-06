@@ -19,8 +19,6 @@ edition = "2021"
 
 [dependencies]
 embedded-graphics = "0.4.7"
-max17048 = "0.1.0"
-hm11 = "0.2.1"
 simple-hex = "0.1.0"
 log = "0.4.6"
 crc = { version = "1.8.1", default-features = false }

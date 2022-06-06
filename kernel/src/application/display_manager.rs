@@ -2,8 +2,6 @@
 //!
 //! Handles app switching, between built in apps and custom apps
 
-use embedded_graphics::{pixelcolor::PixelColorU16, Drawing};
-
 use crate::{application::{
     states::{
         clock::ClockState,
@@ -14,7 +12,7 @@ use crate::{application::{
         notifications::NotificationState,
     },
     states::prelude::*
-}, system::{input::InputEvent, System}};
+}, system::{input::InputEvent, System, Display}};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Signal {
@@ -60,7 +58,7 @@ impl DisplayManager
 {
 
     /// Services the current application
-    pub fn process(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) {
+    pub fn process(&mut self, system: &mut impl System, display: &mut impl Display) {
         let signal = match self.state_idx {
             0 => {
                 DisplayManager::static_state_render(&mut self.clock_state, system, display)
@@ -143,7 +141,7 @@ impl DisplayManager
     }
 
     /// Render a static state
-    fn static_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> 
+    fn static_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Display) -> Option<Signal> 
         where S : StaticState
     {
         state.render(system, display)
@@ -151,7 +149,7 @@ impl DisplayManager
 
     /// Render a scoped state, this state may or may not be running hence we have different functionality
     /// depending on the `is_running()` state
-    fn scoped_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> 
+    fn scoped_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Display) -> Option<Signal> 
         where S : ScopedState
     {
         if state.is_running(system) {

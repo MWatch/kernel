@@ -3,18 +3,17 @@
 //! The main home page
 
 use crate::application::states::prelude::*;
+use crate::system::Display;
 use crate::system::System;
 
 use crate::system::bms::State as BmsState;
 use crate::system::input::InputEvent;
 use core::fmt::Write;
-use embedded_graphics::pixelcolor::PixelColorU16;
 use heapless::consts::*;
 use heapless::String;
 
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
-use embedded_graphics::Drawing;
 
 use seven_segment::SevenSegments;
 
@@ -31,7 +30,7 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
+    fn render(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
         let time = system.get_time();
         let date = system.get_date();
         let soc = system.soc();

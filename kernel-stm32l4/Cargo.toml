@@ -21,11 +21,8 @@ edition = "2021"
 cortex-m = "0.5.8"
 cortex-m-rt = "0.6.8"
 cortex-m-rtic = { version = "0.5.6" }
-panic-itm = { version = "0.4.0", optional = true }
-panic-semihosting = { version = "0.5.1", optional = true }
-rtt-target = { version = "0.3.1", features = ["cortex-m"], optional = true }
-panic-rtt-target = { version = "0.1.2", features = ["cortex-m"], optional = true }
 embedded-graphics = "0.4.7"
+eg6 = { package = "embedded-graphics", version = "0.6.2" }
 max17048 = "0.1.0"
 hm11 = "0.2.1"
 simple-hex = "0.1.0"
@@ -36,12 +33,15 @@ heapless = "0.4.2"
 embedded-hal = "0.2.3"
 mwatch-kernel = { path = "../kernel" }
 
+panic-itm = { version = "0.4.0", optional = true }
+panic-semihosting = { version = "0.5.1", optional = true }
+rtt-target = { version = "0.3.1", features = ["cortex-m"], optional = true }
+panic-rtt-target = { version = "0.1.2", features = ["cortex-m"], optional = true }
+
 [dependencies.ssd1351]
-version = "0.3.0"
-git = "https://github.com/mabezdev/ssd1351"
-rev = "6240d8cc614a0d10cfb067faf1b87968369c4b56"
+version = "0.3"
 # path = "../../drivers/ssd1351"
-features = ["embedded-graphics", "buffered"]
+features = ["graphics", "buffered"]
 
 [dependencies.stm32l4xx-hal]
 version = "0.5.0"

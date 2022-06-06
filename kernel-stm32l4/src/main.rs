@@ -20,7 +20,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use crate::{
     bms::BatteryManagement,
     tsc::TscManager,
-    types::{hal, BluetoothConnectedPin, LoggerType, Ssd1351},
+    types::{hal, BluetoothConnectedPin, LoggerType}, system::DisplayWrapper,
 };
 use mwatch_kernel::system::System as _;
 use mwatch_kernel::{
@@ -81,7 +81,7 @@ const APP: () = {
         TSC_MGR: TscManager,
         DMNG: DisplayManager,
         USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>,
-        DISPLAY: Ssd1351,
+        DISPLAY: DisplayWrapper,
         BT_CONN: BluetoothConnectedPin,
         SYSTEM: System,
         SYSTICK: hal::timer::Timer<hal::stm32::TIM2>,
@@ -343,7 +343,7 @@ const APP: () = {
             CB: rx.circ_read(channels.6, buffer),
             USART2_RX: rx,
             IMNG: imgr,
-            DISPLAY: display,
+            DISPLAY: DisplayWrapper(display),
             SYSTEM: system,
             BT_CONN: bt_conn,
             SYSTICK: systick,

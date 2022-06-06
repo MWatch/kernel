@@ -10,9 +10,8 @@
 //! provided you have the available RAM
 
 use crc::crc32::checksum_ieee;
-use embedded_graphics::{Drawing, pixelcolor::PixelColorU16};
 
-use crate::system::input::InputEvent;
+use crate::system::{input::InputEvent, Display};
 
 use super::{ServiceFn, InputFn, SetupFn, Context};
 
@@ -139,10 +138,11 @@ impl ApplicationManager {
 
 
     /// Gives processing time to the application
-    pub fn service(&mut self, display: &mut impl Drawing<PixelColorU16>) -> Result<(), Error> {
+    pub fn service(&mut self, display: &mut impl Display) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
+        let fb = display.framebuffer();
         let mut ctx = Context {
-            display: Some(display as *mut _ as *mut ()), // cast to void pointer, the Table implementation knows the concrete size
+            framebuffer: Some(fb)
         };
         self.status.service_result = service_fn(&mut ctx);
         Ok(())
@@ -155,8 +155,7 @@ impl ApplicationManager {
     pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            // display is only passed in on update, not on input
-            display: None,
+            framebuffer: None,
         };
         let _ = input_fn(&mut ctx, input);
         Ok(())

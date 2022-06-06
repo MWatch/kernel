@@ -2,9 +2,10 @@
 //! 
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
-use mwatch_kernel::{system::{notification::NotificationManager}, application::Table};
+use embedded_graphics::{pixelcolor::PixelColorU16, Drawing};
+use mwatch_kernel::{system::{notification::NotificationManager, Display}, application::Table};
 use stm32l4xx_hal::rtc::Rtc;
-use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin}, bms::BatteryManagement};
+use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin, Ssd1351}, bms::BatteryManagement};
 
 
 pub const DMA_HALF_BYTES: usize = 64;
@@ -42,7 +43,6 @@ impl mwatch_kernel::system::System for System {
 impl mwatch_kernel::system::ApplicationInterface for System {
     unsafe fn install_os_table(&mut self) {
         static mut TBL : Table = Table {
-            draw_pixel: abi::draw_pixel,
             print: abi::print,
         };
         Table::install(&mut TBL)
@@ -55,22 +55,6 @@ impl mwatch_kernel::system::ApplicationInterface for System {
 
 mod abi {
     use mwatch_kernel::application::Context;
-    use crate::types::Ssd1351;
-
-    /// Assumes control over the display, it is up to use to make sure the display is not borrowed by anything else
-    pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
-        let ctx = &mut *context;
-        if let Some(display) = ctx.display {
-            // TODO verify this is correct!
-            // first cast the void pointer back to the concrete type
-            // dereference to get back to the mutable reference
-            let display = &mut *(display as *mut Ssd1351); 
-            display.set_pixel(u32::from(x), u32::from(y), colour);
-        } else {
-            panic!("Display invoked in an invalid state. Applications can only use the display within update.")
-        }
-        0
-    }
 
     pub unsafe extern "C" fn print(_context: *mut Context, ptr: *const u8, len: usize) -> i32 {
         info!("[APP] - {}", core::str::from_utf8_unchecked(core::slice::from_raw_parts(ptr, len)));
@@ -176,3 +160,42 @@ impl Default for Stats {
     }
 }
 
+pub struct DisplayWrapper(pub Ssd1351);
+
+use eg6::{DrawTarget, pixelcolor::{Rgb565, raw::RawU16}, drawable::Pixel, prelude::Point};
+
+
+impl Drawing<PixelColorU16> for DisplayWrapper {
+
+    fn draw<T>(&mut self, item_pixels: T)
+    where
+        T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
+    {
+        for p in item_pixels {
+            let point = p.0;
+            let c: Rgb565 = RawU16::from(p.1.into_inner()).into();
+            let pixel = Pixel(Point {x : point.0 as i32, y: point.1 as i32 }, c);
+            self.0.draw_pixel(pixel).unwrap();
+        }
+    }
+}
+
+impl Display for DisplayWrapper {
+    fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
+        todo!()
+    }
+}
+
+impl core::ops::Deref for DisplayWrapper {
+    type Target = Ssd1351;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for DisplayWrapper {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

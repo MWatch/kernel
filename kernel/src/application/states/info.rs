@@ -1,15 +1,13 @@
 //! Debug info state
 
 use crate::application::states::prelude::*;
+use crate::system::Display;
 use crate::system::System;
 use crate::system::input::InputEvent;
-
-use embedded_graphics::pixelcolor::PixelColorU16;
 use heapless::String;
 use heapless::consts::*;
 use core::fmt::Write;
 
-use embedded_graphics::Drawing;
 use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
@@ -26,7 +24,7 @@ impl Default for InfoState {
 }
 
 impl State for InfoState {
-    fn render(&mut self, _system: &mut impl System, display: &mut impl Drawing<PixelColorU16>) -> Option<Signal> {
+    fn render(&mut self, _system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
         // write!(self.buffer, "CPU_USAGE: {:.02}%", system.ss().cpu_usage).unwrap();
         // display.draw(
         //     Font6x12::render_str(self.buffer.as_str())
