@@ -32,6 +32,7 @@ crc = { version = "1.8.1", default-features = false }
 heapless = "0.4.2"
 embedded-hal = "0.2.3"
 mwatch-kernel = { path = "../kernel" }
+cfg-if = "1.0.0"
 
 panic-itm = { version = "0.4.0", optional = true }
 panic-semihosting = { version = "0.5.1", optional = true }
@@ -40,7 +41,7 @@ panic-rtt-target = { version = "0.1.2", features = ["cortex-m"], optional = true
 
 [dependencies.ssd1351]
 version = "0.3"
-# path = "../../drivers/ssd1351"
+path = "../../../drivers/ssd1351"
 features = ["graphics", "buffered"]
 
 [dependencies.stm32l4xx-hal]
@@ -50,7 +51,7 @@ version = "0.5.0"
 features = ["rt", "stm32l4x2"]
 
 [features]
-default = ["crc-fb", "rtt"]
+default = ["rtt"]
 rtt = ["dep:rtt-target", "dep:panic-rtt-target"]
 itm = ["dep:panic-itm"]
 semihosting = ["dep:panic-semihosting"]

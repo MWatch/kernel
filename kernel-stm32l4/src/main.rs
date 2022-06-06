@@ -15,14 +15,12 @@ mod system;
 mod tsc;
 mod types;
 
-use rtt_target::{rprintln, rtt_init_print};
-
 use crate::{
     bms::BatteryManagement,
+    system::DisplayWrapper,
     tsc::TscManager,
-    types::{hal, BluetoothConnectedPin, LoggerType}, system::DisplayWrapper,
+    types::{hal, BluetoothConnectedPin, LoggerType},
 };
-use mwatch_kernel::system::System as _;
 use mwatch_kernel::{
     application, ingress,
     system::{input::InputEvent, ApplicationInterface},
@@ -43,9 +41,10 @@ use crate::hal::{
 
 use ssd1351::{builder::Builder, mode::GraphicsMode, prelude::*, properties::DisplayRotation};
 
+#[cfg(feature = "itm")]
 use cortex_m_log::{
     destination::Itm as ItmDestination,
-    log::{trick_init, Logger},
+    log::Logger,
     printer::itm::InterruptSync as InterruptSyncItm,
 };
 
@@ -64,12 +63,11 @@ use crate::ingress::ingress_manager::IngressManager;
 use crate::system::{
     System, CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
-use mwatch_kernel::ingress::ingress_manager::Event as IngressEvent;
 use mwatch_kernel::system::{input::InputManager, notification::NotificationManager};
 
-#[cfg(feature = "itm")]
+#[cfg(any(feature = "itm", feature = "rtt"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
-#[cfg(not(feature = "itm"))]
+#[cfg(not(any(feature = "itm", feature = "rtt")))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Off;
 
 #[app(device = crate::hal::stm32, peripherals = true)]
@@ -118,24 +116,26 @@ const APP: () = {
         let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
 
         // initialize the logging framework
-        let itm = cx.core.ITM;
+        #[cfg(feature = "itm")]
         let logger = Logger {
-            inner: InterruptSyncItm::new(ItmDestination::new(itm)),
+            inner: InterruptSyncItm::new(ItmDestination::new(cx.core.ITM)),
             level: LOG_LEVEL,
         };
 
-        rtt_init_print!();
-        rprintln!("RTT!!! - Hello, world!");
+        #[cfg(feature = "rtt")]
+        let logger = rtt::RttLog::new(LOG_LEVEL);
 
         *cx.resources.LOGGER = Some(logger);
+
         let log: &'static mut _ = cx.resources.LOGGER.as_mut().unwrap_or_else(|| {
             panic!("Failed to get the static logger");
         });
+
         unsafe {
-            trick_init(&log).unwrap_or_else(|err| {
-                panic!("Failed to get initializr the logger {:?}", err);
-            });
-        }
+            log::set_logger_racy(log)
+                .map(|()| log::set_max_level(LOG_LEVEL))
+                .unwrap()
+        };
 
         info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
         info!("Copyright Scott Mabin 2019");
@@ -392,37 +392,7 @@ const APP: () = {
                 *val += 1; // append to idle count
                 value
             });
-            mgr.lock(|m| {
-                let mut buffer = ingress::buffer::Buffer::default();
-                if let Some(event) = m.process(&mut buffer) {
-                    // TODO remove these unwraps and log errors instead
-                    match event {
-                        IngressEvent::ApplicationKill => {
-                            system.am().kill().unwrap();
-                        }
-                        IngressEvent::ApplicationWrite { bytes } => {
-                            for &b in bytes {
-                                system.am().write_ram_byte(b).unwrap();
-                            }
-                        }
-                        IngressEvent::ApplicationWriteChecksum { checksum } => {
-                            for b in checksum {
-                                system.am().write_checksum_byte(b).unwrap();
-                            }
-                        },
-                        IngressEvent::ApplicationVerify { bytes } => {
-                            for &b in bytes {
-                                system.am().write_ram_byte(b).unwrap();
-                            }
-                            system.am().verify().unwrap();
-                        },
-                        IngressEvent::Notification { slice, indexes } => {
-                            system.nm().add(slice, &indexes).unwrap();
-                        },
-                        IngressEvent::Syscall(s) => s.execute(system),
-                    }
-                }
-            });
+            mgr.lock(|m| m.process(system));
         });
         cx.resources
             .SYSTICK
@@ -505,7 +475,11 @@ const APP: () = {
                 }
             }
             Err(e) => {
-                if e != mwatch_kernel::system::input::Error::NoInput {
+                if !matches!(
+                    e,
+                    mwatch_kernel::system::input::Error::NoInput
+                        | mwatch_kernel::system::input::Error::Incomplete
+                ) {
                     error!("Input Error, {:?}", e);
                 }
             }
@@ -589,7 +563,7 @@ const APP: () = {
             {
                 display.clear(false);
                 sys.lock(|system| {
-                    dmng.process(system, &mut display);
+                    dmng.process(system, display);
                 });
                 display.flush();
             }
@@ -613,4 +587,41 @@ const APP: () = {
 #[exception]
 fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("{:#?}", ef);
+}
+
+#[cfg(feature = "rtt")]
+mod rtt {
+    use rtt_target::{rprintln, rtt_init_print};
+
+    pub struct RttLog {
+        level: log::LevelFilter,
+    }
+
+    impl RttLog {
+        pub fn new(level: log::LevelFilter) -> Self {
+            rtt_init_print!();
+            rprintln!("RttLog initialized!");
+            Self { level }
+        }
+    }
+
+    impl log::Log for RttLog {
+        fn enabled(&self, metadata: &log::Metadata) -> bool {
+            metadata.level() <= self.level
+        }
+
+        fn log(&self, record: &log::Record) {
+            if self.enabled(record.metadata()) {
+                rprintln!(
+                    "{:<5} {}:{} - {}\n",
+                    record.level(),
+                    record.file().unwrap_or("UNKNOWN"),
+                    record.line().unwrap_or(0),
+                    record.args()
+                );
+            }
+        }
+
+        fn flush(&self) {}
+    }
 }

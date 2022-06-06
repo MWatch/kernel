@@ -1,6 +1,5 @@
 //! API for SDK and type exports
 
-
 pub use stm32l4xx_hal as hal;
 
 /// Type Alias to use in resource definitions
@@ -45,8 +44,19 @@ pub type LeftButton = hal::gpio::gpiob::PB7<
     hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::PushPull>>,
 >;
 
-pub type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "itm")] {
+        pub type LoggerType = cortex_m_log::log::Logger<cortex_m_log::printer::itm::ItmSync<cortex_m_log::modes::InterruptFree>>;
+    } else if #[cfg(feature = "rtt")] {
+        pub type LoggerType = crate::rtt::RttLog;
+    }
+}
+
 pub type ChargeStatusPin = hal::gpio::gpioa::PA12<hal::gpio::Input<hal::gpio::PullUp>>;
 pub type StandbyStatusPin = hal::gpio::gpioa::PA11<hal::gpio::Input<hal::gpio::PullUp>>;
-pub type TouchSenseController = hal::tsc::Tsc<hal::gpio::gpiob::PB4<hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>>>;
+pub type TouchSenseController = hal::tsc::Tsc<
+    hal::gpio::gpiob::PB4<
+        hal::gpio::Alternate<hal::gpio::AF9, hal::gpio::Output<hal::gpio::OpenDrain>>,
+    >,
+>;
 pub type BluetoothConnectedPin = hal::gpio::gpioa::PA8<hal::gpio::Input<hal::gpio::Floating>>;

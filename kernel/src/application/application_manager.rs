@@ -94,7 +94,7 @@ impl ApplicationManager {
     /// Verify the contents of ram using a crc against the checksum
     pub fn verify(&mut self) -> Result<(), Error> {
        let ram_cs = self.ram.cs();
-       let digest = ApplicationManager::digest_from_bytes(&self.target_cs); 
+       let digest = ApplicationManager::digest_from_bytes(&self.target_cs);
         info!("Current Ram Digest: {}, stored ram Digest: {}", ram_cs, digest);
         if digest == ram_cs {
             self.status.is_loaded = true;
@@ -194,6 +194,10 @@ impl ApplicationManager {
             | (u32::from(bytes[0]));
         addr as *const ()
     }
+
+    pub fn program(&self) -> &[u8] {
+        self.ram.as_slice()
+    }
 }
 
 /// A structure for manipulating application memory
@@ -247,6 +251,10 @@ impl Ram {
     /// Get an immutable reference to the internal ram buffer
     pub fn as_ref(&self) -> &[u8] {
         &self.ram
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.ram[..self.ram_idx]
     }
 }
 

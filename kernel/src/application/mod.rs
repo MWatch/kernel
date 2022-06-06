@@ -1,13 +1,11 @@
-
 use embedded_graphics::pixelcolor::PixelColorU16;
 
 use crate::system::input::InputEvent;
 
 pub mod application_manager;
 pub mod display_manager;
-pub mod states;
 pub mod render_util;
-
+pub mod states;
 
 pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
 
@@ -24,6 +22,7 @@ pub struct Context {
 }
 
 #[repr(C)]
+#[derive(Debug)] // TODO rotation of the FB?
 pub struct FrameBuffer {
     ptr: *mut u8,
     len: usize,
@@ -31,18 +30,32 @@ pub struct FrameBuffer {
     height: u8,
 }
 
-impl embedded_graphics::Drawing<PixelColorU16> for FrameBuffer {
+impl FrameBuffer {
+    pub fn new(ptr: *mut u8, len: usize, width: u8, height: u8) -> Self {
+        Self {
+            ptr,
+            len,
+            width,
+            height,
+        }
+    }
+}
 
+impl embedded_graphics::Drawing<PixelColorU16> for FrameBuffer {
     fn draw<T>(&mut self, item_pixels: T)
     where
         T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
     {
-        for embedded_graphics::drawable::Pixel(embedded_graphics::unsignedcoord::UnsignedCoord(x, y), color) in item_pixels {
+        for embedded_graphics::drawable::Pixel(
+            embedded_graphics::unsignedcoord::UnsignedCoord(x, y),
+            color,
+        ) in item_pixels
+        {
             if x <= self.width.into() && y <= self.height.into() {
                 let color = color.into_inner();
                 let slice = unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) };
-                slice[(x + (y * self.width as u32)) as usize] = (color >> 8) as u8;
-                slice[(x + (y * self.width as u32)) as usize + 1] = color as u8;
+                slice[((x + (y * self.width as u32)) as usize * 2)] = (color >> 8) as u8;
+                slice[(((x + (y * self.width as u32)) as usize) * 2) + 1] = color as u8;
             }
         }
     }
@@ -85,4 +98,3 @@ impl Context {
         }
     }
 }
-

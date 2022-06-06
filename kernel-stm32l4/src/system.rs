@@ -171,10 +171,12 @@ impl Drawing<PixelColorU16> for DisplayWrapper {
     where
         T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
     {
+        let size = self.0.size();
+        // this is kinda crap, converting between two different versions of embedded_graphics... should probably update to latest everywhere
         for p in item_pixels {
             let point = p.0;
             let c: Rgb565 = RawU16::from(p.1.into_inner()).into();
-            let pixel = Pixel(Point {x : point.0 as i32, y: point.1 as i32 }, c);
+            let pixel = Pixel(Point {x : core::cmp::min(point.0 as i32, (size.width - 1) as i32), y: core::cmp::min(point.1 as i32, (size.height -1) as i32) }, c);
             self.0.draw_pixel(pixel).unwrap();
         }
     }
@@ -182,7 +184,10 @@ impl Drawing<PixelColorU16> for DisplayWrapper {
 
 impl Display for DisplayWrapper {
     fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
-        todo!()
+        let size = self.0.size();
+        let buffer = self.0.fb_mut();
+
+        mwatch_kernel::application::FrameBuffer::new(buffer.as_mut_ptr(), buffer.len(), size.width as u8, size.height as u8)
     }
 }
 

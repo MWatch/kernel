@@ -355,6 +355,7 @@ dependencies = [
 name = "mwatch-kernel-stm32l4"
 version = "1.0.0"
 dependencies = [
+ "cfg-if",
  "cortex-m 0.5.11",
  "cortex-m-log",
  "cortex-m-rt",
@@ -373,7 +374,7 @@ dependencies = [
  "panic-semihosting",
  "rtt-target",
  "simple-hex",
- "ssd1351 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssd1351 0.3.0",
  "stm32l4xx-hal",
 ]
 
@@ -540,8 +541,6 @@ checksum = "b581d48c218869658cf5e61f33835dd69ef4722e1cad6f43157afa9f72c2d46e"
 [[package]]
 name = "ssd1351"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b114b93164df8aa0871be1f816743fc7320e71cd6e15be89175d7c42fdbb7791"
 dependencies = [
  "embedded-graphics 0.6.2",
  "embedded-hal",
