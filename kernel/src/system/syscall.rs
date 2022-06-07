@@ -5,7 +5,8 @@
 
 use core::str::FromStr;
 
-use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, datetime::{Time, Date}};
+
+use time::{Date, Time};
 
 use super::System;
 
@@ -60,7 +61,7 @@ impl Syscall {
     }
 
     pub fn date_from_str(s: &str) -> Result<Date, Error> {
-        let mut vals = [0u32; 4];
+        let mut vals = [0i32; 4];
         for (idx, number) in s.split('/').enumerate() {
             match number.parse() {
                 Ok(val) => vals[idx] = val,
@@ -70,11 +71,12 @@ impl Syscall {
                 }
             }
         }
-        Ok(Date::new(vals[0].day(), vals[1].date(), vals[2].month(), vals[3].year()))
+        // vals[0] // TODO day in week
+        Ok(Date::from_calendar_date(vals[3], (vals[2] as u8).try_into().map_err(|_| Error::ParseError)?, vals[1] as u8).map_err(|_| Error::ParseError)?)
     }
 
     pub fn time_from_str(s: &str) -> Result<Time, Error> {
-        let mut vals = [0u32; 3];
+        let mut vals = [0u8; 3];
         for (idx, number) in s.split(':').enumerate() {
             match number.parse() {
                 Ok(val) => vals[idx] = val,
@@ -84,7 +86,7 @@ impl Syscall {
                 }
             }
         }
-        Ok(Time::new(vals[0].hours(), vals[1].minutes(), vals[2].seconds(), false))
+        Ok(Time::from_hms(vals[0], vals[1], vals[2]).map_err(|_| Error::ParseError)?)
     }
 }
 

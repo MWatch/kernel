@@ -46,6 +46,10 @@ features = ["graphics", "buffered"]
 version = "0.5.0"
 features = ["rt", "stm32l4x2"]
 
+[dependencies.time]
+version = "0.3"
+default-features = false
+
 [features]
 default = ["rtt"]
 rtt = ["dep:rtt-target", "dep:panic-rtt-target"]

@@ -1,5 +1,5 @@
 use embedded_graphics::{draw_target::DrawTarget, pixelcolor::Rgb565};
-use stm32l4xx_hal::datetime::{Date, Time};
+use time::{Time, Date};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
 

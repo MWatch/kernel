@@ -5,7 +5,8 @@
 use embedded_graphics::{pixelcolor::{Rgb565}, prelude::OriginDimensions};
 use heapless::{String, consts::*};
 use mwatch_kernel::{system::{notification::NotificationManager, Display}, application::Table};
-use stm32l4xx_hal::rtc::Rtc;
+use stm32l4xx_hal::{rtc::Rtc, prelude::_stm32l4_hal_datetime_U32Ext};
+use time::{Time, Date};
 use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin, Ssd1351}, bms::BatteryManagement};
 use core::fmt::Write;
 
@@ -66,20 +67,26 @@ mod abi {
 }
 
 impl mwatch_kernel::system::Clock for System {
-    fn get_time(&self) -> stm32l4xx_hal::datetime::Time {
-        self.rtc.get_time()
+    fn get_time(&self) -> Time {
+        let t = self.rtc.get_time();
+        // NOTE(unwrap): we assume rtc gives us a valid reading always
+        Time::from_hms(t.hours as u8, t.minutes as u8, t.seconds as u8).unwrap()
     }
 
-    fn set_time(&mut self, t: &stm32l4xx_hal::datetime::Time) {
-        self.rtc.set_time(t)
+    fn set_time(&mut self, t: &Time) {
+        let t = stm32l4xx_hal::datetime::Time::new((t.hour() as u32).hours(), (t.minute() as u32).minutes(), (t.second() as u32).seconds(), false);
+        self.rtc.set_time(&t);
     }
 
-    fn get_date(&self) -> stm32l4xx_hal::datetime::Date {
-        self.rtc.get_date()
+    fn get_date(&self) -> Date {
+        let d = self.rtc.get_date();
+        // NOTE(unwrap): we assume rtc gives us a valid reading always
+        Date::from_calendar_date(d.year as i32, (d.month as u8).try_into().unwrap(), d.date as u8).unwrap()
     }
 
-    fn set_date(&mut self, d: &stm32l4xx_hal::datetime::Date) {
-        self.rtc.set_date(d)
+    fn set_date(&mut self, d: &Date) {
+        let d = stm32l4xx_hal::datetime::Date::new(0.day(), (d.day() as u32).date(), (d.month() as u32).month(), (d.year() as u32).year());
+        self.rtc.set_date(&d);
     }
 }
 

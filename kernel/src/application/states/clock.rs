@@ -40,7 +40,7 @@ impl State for ClockState {
         let soc = system.soc();
         let bms_state = system.state();
         let mut clock_digits = SevenSegments::new(display, 18, 48, 0x2C78);
-        write!(self.buffer, "{:02}{:02}", time.hours, time.minutes).unwrap();
+        write!(self.buffer, "{:02}{:02}", time.hour(), time.minute()).unwrap();
         for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
             clock_digits.digit(digit - b'0');
             if idx == (self.buffer.len() / 2) - 1 {
@@ -57,7 +57,7 @@ impl State for ClockState {
             write!(
                 self.buffer,
                 "{:02}/{:02}/{:04}",
-                date.date, date.month, date.year
+                date.day(), date.month(), date.year()
             )
             .unwrap();
             Text::new(
