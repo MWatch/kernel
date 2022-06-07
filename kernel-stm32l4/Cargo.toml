@@ -41,7 +41,9 @@ panic-rtt-target = { version = "0.1.2", features = ["cortex-m"], optional = true
 
 [dependencies.ssd1351]
 version = "0.3"
-path = "../../../drivers/ssd1351"
+# path = "../../../drivers/ssd1351"
+git = "https://github.com/MabezDev/ssd1351"
+branch = "v3-mut-fb"
 features = ["graphics", "buffered"]
 
 [dependencies.stm32l4xx-hal]

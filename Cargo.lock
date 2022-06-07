@@ -374,7 +374,7 @@ dependencies = [
  "panic-semihosting",
  "rtt-target",
  "simple-hex",
- "ssd1351 0.3.0",
+ "ssd1351 0.3.0 (git+https://github.com/MabezDev/ssd1351?branch=v3-mut-fb)",
  "stm32l4xx-hal",
 ]
 
@@ -541,6 +541,7 @@ checksum = "b581d48c218869658cf5e61f33835dd69ef4722e1cad6f43157afa9f72c2d46e"
 [[package]]
 name = "ssd1351"
 version = "0.3.0"
+source = "git+https://github.com/MabezDev/ssd1351?branch=v3-mut-fb#2b1b13d654a502e10016b9585f69af26e235946c"
 dependencies = [
  "embedded-graphics 0.6.2",
  "embedded-hal",
