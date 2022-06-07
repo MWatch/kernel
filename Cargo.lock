@@ -408,7 +408,7 @@ dependencies = [
  "panic-semihosting",
  "rtt-target",
  "simple-hex",
- "ssd1351 0.4.0",
+ "ssd1351 0.4.1",
  "stm32l4xx-hal",
 ]
 
@@ -592,8 +592,9 @@ dependencies = [
 
 [[package]]
 name = "ssd1351"
-version = "0.4.0"
-source = "git+https://github.com/MabezDev/ssd1351?branch=mut-fb#83003445455172c685d1d95583013b26ced83a49"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cb81a95aa3c4961c29f1151ab2a75156c3fa217623aea0f74a4c8d64f4c3747"
 dependencies = [
  "embedded-graphics-core",
  "embedded-hal",
