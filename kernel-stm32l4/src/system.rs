@@ -3,9 +3,11 @@
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
 use embedded_graphics::{pixelcolor::{Rgb565}, prelude::OriginDimensions};
+use heapless::{String, consts::*};
 use mwatch_kernel::{system::{notification::NotificationManager, Display}, application::Table};
 use stm32l4xx_hal::rtc::Rtc;
 use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin, Ssd1351}, bms::BatteryManagement};
+use core::fmt::Write;
 
 
 pub const DMA_HALF_BYTES: usize = 64;
@@ -30,13 +32,14 @@ pub struct System {
 }
 
 impl mwatch_kernel::system::System for System {
-
-    fn nm(&mut self) -> &mut NotificationManager {
-        self.nm()
-    }
-
     fn is_idle(&mut self) -> bool {
         (self.ss().idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
+    }
+}
+
+impl mwatch_kernel::system::NotificationInterface for System {
+    fn nm(&mut self) -> &mut NotificationManager {
+        self.nm()
     }
 }
 
@@ -87,6 +90,17 @@ impl mwatch_kernel::system::bms::BatteryManagement for System {
 
     fn soc(&mut self) -> u16 {
         self.bms.soc()
+    }
+}
+
+impl mwatch_kernel::system::Statistics for System {
+    type Statistics = StatsIter;
+
+    fn stats(&self) -> Self::Statistics {
+        StatsIter {
+            stats: self.stats,
+            index: 0
+        }
     }
 }
 
@@ -160,27 +174,29 @@ impl Default for Stats {
     }
 }
 
+pub struct StatsIter {
+    index: usize,
+    stats: Stats,
+}
+
+impl Iterator for StatsIter {
+    type Item = String<U128>;
+
+    /// Anything that needs to be printed should be produced by this iterator
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buffer = String::new();
+        match self.index {
+            0 => write!(buffer, "CPU_USAGE: {:.02}%", self.stats.cpu_usage).unwrap(),
+            1 => write!(buffer, "TSC EVENTS: {}/s", self.stats.tsc_events).unwrap(),
+            2 => write!(buffer, "TSC THRES: {}", self.stats.tsc_threshold).unwrap(),
+            _ => return None
+        }
+        self.index += 1;
+        Some(buffer)
+    }
+}
+
 pub struct DisplayWrapper(pub Ssd1351);
-
-// use eg6::{DrawTarget, pixelcolor::{Rgb565, raw::RawU16}, drawable::Pixel, prelude::Point};
-
-
-// impl Drawing<PixelColorU16> for DisplayWrapper {
-
-//     fn draw<T>(&mut self, item_pixels: T)
-//     where
-//         T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
-//     {
-//         let size = self.0.size();
-//         // this is kinda crap, converting between two different versions of embedded_graphics... should probably update to latest everywhere
-//         for p in item_pixels {
-//             let point = p.0;
-//             let c: Rgb565 = RawU16::from(p.1.into_inner()).into();
-//             let pixel = Pixel(Point {x : core::cmp::min(point.0 as i32, (size.width - 1) as i32), y: core::cmp::min(point.1 as i32, (size.height -1) as i32) }, c);
-//             self.0.draw_pixel(pixel).unwrap();
-//         }
-//     }
-// }
 
 impl Display for DisplayWrapper {
     fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
