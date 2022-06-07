@@ -9,11 +9,15 @@ use crate::system::System;
 use crate::system::bms::State as BmsState;
 use crate::system::input::InputEvent;
 use core::fmt::Write;
+use embedded_graphics::pixelcolor::raw::RawU16;
 use heapless::consts::*;
 use heapless::String;
 
-use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
+use embedded_graphics::{
+    mono_font::{ascii::FONT_6X12, MonoTextStyle},
+    text::Text,
+};
 
 use seven_segment::SevenSegments;
 
@@ -47,27 +51,30 @@ impl State for ClockState {
 
         self.buffer.clear(); // reset the buffer
         if !system.is_idle() {
+            let size = display.bounding_box().size;
+            let style = MonoTextStyle::new(&FONT_6X12, RawU16::new(0x2C78).into());
+
             write!(
                 self.buffer,
                 "{:02}/{:02}/{:04}",
                 date.date, date.month, date.year
             )
             .unwrap();
-            display.draw(
-                Font6x12::render_str(self.buffer.as_str())
-                    .translate(Coord::new(30, 128 - 12))
-                    .with_stroke(Some(0x2C78_u16.into()))
-                    .into_iter(),
-            );
+            Text::new(
+                self.buffer.as_str(),
+                Point::new(30, size.height as i32 - 12),
+                style,
+            )
+            .draw(display)
+            .ok();
             self.buffer.clear();
+
             write!(self.buffer, "{:02}%", soc).unwrap();
-            display.draw(
-                Font6x12::render_str(self.buffer.as_str())
-                    .translate(Coord::new(110, 12))
-                    .with_stroke(Some(0x2C78_u16.into()))
-                    .into_iter(),
-            );
+            Text::new(self.buffer.as_str(), Point::new(110, 12), style)
+                .draw(display)
+                .ok();
             self.buffer.clear(); // reset the buffer
+
             match bms_state {
                 BmsState::Charging => {
                     write!(self.buffer, "CHARGING").unwrap();
@@ -79,12 +86,9 @@ impl State for ClockState {
                     write!(self.buffer, "DONE").unwrap();
                 }
             }
-            display.draw(
-                Font6x12::render_str(self.buffer.as_str())
-                    .translate(Coord::new(0, 12))
-                    .with_stroke(Some(0x2C78_u16.into()))
-                    .into_iter(),
-            );
+            Text::new(self.buffer.as_str(), Point::new(0, 12), style)
+                .draw(display)
+                .ok();
             self.buffer.clear(); // reset the buffer
         }
 
@@ -103,10 +107,11 @@ impl State for ClockState {
 impl StaticState for ClockState {}
 
 mod seven_segment {
-    use embedded_graphics::coord::Coord;
-    use embedded_graphics::pixelcolor::PixelColorU16;
-    use embedded_graphics::prelude::*;
-    use embedded_graphics::primitives::Rect;
+    use embedded_graphics::{
+        pixelcolor::{raw::RawU16, Rgb565},
+        prelude::*,
+        primitives::{PrimitiveStyleBuilder, Rectangle, StyledDrawable},
+    };
 
     pub struct SevenSegments<'a, D> {
         display: &'a mut D,
@@ -116,12 +121,12 @@ mod seven_segment {
         space: i32,
         x: i32,
         y: i32,
-        colour: u16
+        colour: u16,
     }
 
     impl<'a, D> SevenSegments<'a, D>
     where
-        D: Drawing<PixelColorU16>,
+        D: DrawTarget<Color = Rgb565>,
     {
         pub fn new(display: &'a mut D, x: i32, y: i32, colour: u16) -> Self {
             Self {
@@ -201,12 +206,13 @@ mod seven_segment {
         }
 
         fn draw_rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
-            self.display.draw(
-                Rect::new(Coord::new(x1, y1), Coord::new(x2, y2))
-                    .with_fill(Some(self.colour.into()))
-                    .translate(Coord::new(self.x, self.y))
-                    .into_iter(),
-            );
+            let style = PrimitiveStyleBuilder::new()
+                .fill_color(RawU16::new(self.colour).into())
+                .build();
+            Rectangle::with_corners(Point::new(x1, y1), Point::new(x2, y2))
+                .translate(Point::new(self.x, self.y))
+                .draw_styled(&style, self.display)
+                .ok();
         }
     }
 }

@@ -4,18 +4,19 @@
 //!  
 
 use crate::application::states::prelude::*;
+use crate::system::input::InputEvent;
 use crate::system::Display;
 use crate::system::System;
-use crate::system::input::InputEvent;
-use heapless::String;
-use heapless::consts::*;
 use core::fmt::Write;
+use embedded_graphics::pixelcolor::raw::RawU16;
+use embedded_graphics::{mono_font::{MonoTextStyle, ascii::FONT_6X10}, pixelcolor::Rgb565, text::{Alignment, Text}};
+use heapless::consts::*;
+use heapless::String;
 
-use embedded_graphics::fonts::Font6x12;
 use embedded_graphics::prelude::*;
 
 pub struct AppState {
-    buffer: String<U256>
+    buffer: String<U256>,
 }
 
 impl Default for AppState {
@@ -31,7 +32,7 @@ impl State for AppState {
         system.am().service(display).unwrap_or_else(|err| {
             error!("Failed to render app {:?}", err);
         });
-        None     
+        None
     }
 
     fn input(&mut self, system: &mut impl System, input: InputEvent) -> Option<Signal> {
@@ -41,7 +42,7 @@ impl State for AppState {
                 Some(Signal::Home) // signal to dm to go home
             }
             _ => {
-                system.am().service_input(input).unwrap_or_else(|err|{
+                system.am().service_input(input).unwrap_or_else(|err| {
                     error!("Failed to service input for app {:?}", err);
                 });
                 None
@@ -61,11 +62,10 @@ impl ScopedState for AppState {
             write!(self.buffer, "No App loaded!").unwrap();
         }
 
-        let text = Font6x12::render_str(self.buffer.as_str());
-        display.draw(horizontal_centre(text, 24)
-                .with_stroke(Some(0x02D4_u16.into()))
-                .into_iter(),
-        );
+        let size = display.bounding_box().size;
+        let style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(RawU16::from(0x02D4)));
+        Text::with_alignment(self.buffer.as_str(), Point::new(size.width as i32 / 2, size.height as i32 / 2), style, Alignment::Center).draw(display).ok();
+
         None
     }
 
@@ -73,17 +73,17 @@ impl ScopedState for AppState {
         system.am().status().is_running
     }
 
-    /// Start 
+    /// Start
     fn start(&mut self, system: &mut impl System) {
         match system.am().execute() {
-            Ok(_) => {},
-            Err(err) => error!("Failed to launch application {:?}", err)
+            Ok(_) => {}
+            Err(err) => error!("Failed to launch application {:?}", err),
         }
     }
 
     /// Stop
     fn stop(&mut self, system: &mut impl System) {
-        system.am().kill().unwrap_or_else(|err|{
+        system.am().kill().unwrap_or_else(|err| {
             error!("Failed to kill app {:?}", err);
         });
     }

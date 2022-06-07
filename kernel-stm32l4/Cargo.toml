@@ -21,8 +21,7 @@ edition = "2021"
 cortex-m = "0.5.8"
 cortex-m-rt = "0.6.8"
 cortex-m-rtic = { version = "0.5.6" }
-embedded-graphics = "0.4.7"
-eg6 = { package = "embedded-graphics", version = "0.6.2" }
+embedded-graphics = "0.7.1"
 max17048 = "0.1.0"
 hm11 = "0.2.1"
 simple-hex = "0.1.0"
@@ -40,10 +39,10 @@ rtt-target = { version = "0.3.1", features = ["cortex-m"], optional = true }
 panic-rtt-target = { version = "0.1.2", features = ["cortex-m"], optional = true }
 
 [dependencies.ssd1351]
-version = "0.3"
+version = "0.4"
 # path = "../../../drivers/ssd1351"
 git = "https://github.com/MabezDev/ssd1351"
-branch = "v3-mut-fb"
+branch = "mut-fb"
 features = ["graphics", "buffered"]
 
 [dependencies.stm32l4xx-hal]

@@ -36,6 +36,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "az"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f771a5d1f5503f7f4279a30f3643d3421ba149848b89ecaaec0ea2acf04a5ac4"
+
+[[package]]
 name = "bare-metal"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -200,10 +206,24 @@ dependencies = [
 
 [[package]]
 name = "embedded-graphics"
-version = "0.6.2"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a69991ceb896bd4810a0cf2bcc46fc94b7860573c71f965d8e5b3d66942fed"
+checksum = "750082c65094fbcc4baf9ba31583ce9a8bb7f52cadfb96f6164b1bc7f922f32b"
 dependencies = [
+ "az",
+ "byteorder",
+ "embedded-graphics-core",
+ "float-cmp",
+ "micromath",
+]
+
+[[package]]
+name = "embedded-graphics-core"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b1239db5f3eeb7e33e35bd10bd014e7b2537b17e071f726a09351431337cfa"
+dependencies = [
+ "az",
  "byteorder",
 ]
 
@@ -215,6 +235,15 @@ checksum = "35949884794ad573cf46071e41c9b60efb0cb311e3ca01f7af807af1debc66ff"
 dependencies = [
  "nb 0.1.3",
  "void",
+]
+
+[[package]]
+name = "float-cmp"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -338,16 +367,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
+name = "micromath"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc4010833aea396656c2f91ee704d51a6f1329ec2ab56ffd00bfd56f7481ea94"
+
+[[package]]
 name = "mwatch-kernel"
 version = "1.0.0"
 dependencies = [
  "crc",
- "embedded-graphics 0.4.9",
+ "embedded-graphics 0.7.1",
  "embedded-hal",
  "heapless 0.4.4",
  "log",
  "simple-hex",
- "ssd1351 0.3.0 (git+https://github.com/mabezdev/ssd1351?rev=6240d8cc614a0d10cfb067faf1b87968369c4b56)",
+ "ssd1351 0.3.0",
  "stm32l4xx-hal",
 ]
 
@@ -361,8 +396,7 @@ dependencies = [
  "cortex-m-rt",
  "cortex-m-rtic",
  "crc",
- "embedded-graphics 0.4.9",
- "embedded-graphics 0.6.2",
+ "embedded-graphics 0.7.1",
  "embedded-hal",
  "heapless 0.4.4",
  "hm11",
@@ -374,7 +408,7 @@ dependencies = [
  "panic-semihosting",
  "rtt-target",
  "simple-hex",
- "ssd1351 0.3.0 (git+https://github.com/MabezDev/ssd1351?branch=v3-mut-fb)",
+ "ssd1351 0.4.0",
  "stm32l4xx-hal",
 ]
 
@@ -411,6 +445,15 @@ checksum = "ffb4262d26ed83a1c0a33a38fe2bb15797329c85770da05e6b828ddb782627af"
 dependencies = [
  "memchr",
  "version_check 0.9.4",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]
@@ -541,18 +584,18 @@ checksum = "b581d48c218869658cf5e61f33835dd69ef4722e1cad6f43157afa9f72c2d46e"
 [[package]]
 name = "ssd1351"
 version = "0.3.0"
-source = "git+https://github.com/MabezDev/ssd1351?branch=v3-mut-fb#2b1b13d654a502e10016b9585f69af26e235946c"
+source = "git+https://github.com/mabezdev/ssd1351?rev=6240d8cc614a0d10cfb067faf1b87968369c4b56#6240d8cc614a0d10cfb067faf1b87968369c4b56"
 dependencies = [
- "embedded-graphics 0.6.2",
+ "embedded-graphics 0.4.9",
  "embedded-hal",
 ]
 
 [[package]]
 name = "ssd1351"
-version = "0.3.0"
-source = "git+https://github.com/mabezdev/ssd1351?rev=6240d8cc614a0d10cfb067faf1b87968369c4b56#6240d8cc614a0d10cfb067faf1b87968369c4b56"
+version = "0.4.0"
+source = "git+https://github.com/MabezDev/ssd1351?branch=mut-fb#83003445455172c685d1d95583013b26ced83a49"
 dependencies = [
- "embedded-graphics 0.4.9",
+ "embedded-graphics-core",
  "embedded-hal",
 ]
 

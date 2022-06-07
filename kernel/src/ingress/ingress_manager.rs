@@ -267,8 +267,9 @@ mod test {
         }
         data.push(ETX);
         imgr.write(&data);
-        imgr.process();
+        todo!("dummy system for tests");
+        // imgr.process(); 
 
-        assert_eq!(imgr.state, State::Wait);
+        // assert_eq!(imgr.state, State::Wait);
     }
 }

@@ -2,7 +2,7 @@
 //! 
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
-use embedded_graphics::{pixelcolor::PixelColorU16, Drawing};
+use embedded_graphics::{pixelcolor::{Rgb565}, prelude::OriginDimensions};
 use mwatch_kernel::{system::{notification::NotificationManager, Display}, application::Table};
 use stm32l4xx_hal::rtc::Rtc;
 use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin, Ssd1351}, bms::BatteryManagement};
@@ -162,25 +162,25 @@ impl Default for Stats {
 
 pub struct DisplayWrapper(pub Ssd1351);
 
-use eg6::{DrawTarget, pixelcolor::{Rgb565, raw::RawU16}, drawable::Pixel, prelude::Point};
+// use eg6::{DrawTarget, pixelcolor::{Rgb565, raw::RawU16}, drawable::Pixel, prelude::Point};
 
 
-impl Drawing<PixelColorU16> for DisplayWrapper {
+// impl Drawing<PixelColorU16> for DisplayWrapper {
 
-    fn draw<T>(&mut self, item_pixels: T)
-    where
-        T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
-    {
-        let size = self.0.size();
-        // this is kinda crap, converting between two different versions of embedded_graphics... should probably update to latest everywhere
-        for p in item_pixels {
-            let point = p.0;
-            let c: Rgb565 = RawU16::from(p.1.into_inner()).into();
-            let pixel = Pixel(Point {x : core::cmp::min(point.0 as i32, (size.width - 1) as i32), y: core::cmp::min(point.1 as i32, (size.height -1) as i32) }, c);
-            self.0.draw_pixel(pixel).unwrap();
-        }
-    }
-}
+//     fn draw<T>(&mut self, item_pixels: T)
+//     where
+//         T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
+//     {
+//         let size = self.0.size();
+//         // this is kinda crap, converting between two different versions of embedded_graphics... should probably update to latest everywhere
+//         for p in item_pixels {
+//             let point = p.0;
+//             let c: Rgb565 = RawU16::from(p.1.into_inner()).into();
+//             let pixel = Pixel(Point {x : core::cmp::min(point.0 as i32, (size.width - 1) as i32), y: core::cmp::min(point.1 as i32, (size.height -1) as i32) }, c);
+//             self.0.draw_pixel(pixel).unwrap();
+//         }
+//     }
+// }
 
 impl Display for DisplayWrapper {
     fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
@@ -188,6 +188,24 @@ impl Display for DisplayWrapper {
         let buffer = self.0.fb_mut();
 
         mwatch_kernel::application::FrameBuffer::new(buffer.as_mut_ptr(), buffer.len(), size.width as u8, size.height as u8)
+    }
+}
+
+impl embedded_graphics::draw_target::DrawTarget for DisplayWrapper {
+    type Color = Rgb565;
+
+    type Error = ();
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>> {
+        self.0.draw_iter(pixels)
+    }
+}
+
+impl embedded_graphics::geometry::Dimensions for DisplayWrapper {
+    fn bounding_box(&self) -> embedded_graphics::primitives::Rectangle {
+        self.0.bounding_box()
     }
 }
 

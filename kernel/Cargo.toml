@@ -18,7 +18,7 @@ exclude = [
 edition = "2021"
 
 [dependencies]
-embedded-graphics = "0.4.7"
+embedded-graphics = "0.7.1"
 simple-hex = "0.1.0"
 log = "0.4.6"
 crc = { version = "1.8.1", default-features = false }

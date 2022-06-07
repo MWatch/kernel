@@ -1,4 +1,4 @@
-use embedded_graphics::{Drawing, pixelcolor::PixelColorU16};
+use embedded_graphics::{draw_target::DrawTarget, pixelcolor::Rgb565};
 use stm32l4xx_hal::datetime::{Time, Date};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
@@ -34,6 +34,6 @@ pub trait ApplicationInterface {
     fn am(&mut self) -> &mut ApplicationManager;
 }
 
-pub trait Display: Drawing<PixelColorU16> {
+pub trait Display: DrawTarget<Color = Rgb565> {
     fn framebuffer(&mut self) -> FrameBuffer;
 }

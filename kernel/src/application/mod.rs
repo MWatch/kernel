@@ -1,10 +1,10 @@
-use embedded_graphics::pixelcolor::PixelColorU16;
+
+use embedded_graphics::{pixelcolor::{Rgb565, raw::RawU16}, primitives::Rectangle, prelude::{Size, Point, Dimensions, RawData}, Pixel};
 
 use crate::system::input::InputEvent;
 
 pub mod application_manager;
 pub mod display_manager;
-pub mod render_util;
 pub mod states;
 
 pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
@@ -41,23 +41,55 @@ impl FrameBuffer {
     }
 }
 
-impl embedded_graphics::Drawing<PixelColorU16> for FrameBuffer {
-    fn draw<T>(&mut self, item_pixels: T)
+// impl embedded_graphics::Drawing<PixelColorU16> for FrameBuffer {
+//     fn draw<T>(&mut self, item_pixels: T)
+//     where
+//         T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
+//     {
+//         for embedded_graphics::drawable::Pixel(
+//             embedded_graphics::unsignedcoord::UnsignedCoord(x, y),
+//             color,
+//         ) in item_pixels
+//         {
+//             if x <= self.width.into() && y <= self.height.into() {
+//                 let color = color.into_inner();
+//                 let slice = unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) };
+//                 slice[((x + (y * self.width as u32)) as usize * 2)] = (color >> 8) as u8;
+//                 slice[(((x + (y * self.width as u32)) as usize) * 2) + 1] = color as u8;
+//             }
+//         }
+//     }
+// }
+
+impl embedded_graphics::draw_target::DrawTarget for FrameBuffer {
+    type Color = Rgb565;
+
+    type Error = ();
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
-        T: Iterator<Item = embedded_graphics::drawable::Pixel<PixelColorU16>>,
-    {
-        for embedded_graphics::drawable::Pixel(
-            embedded_graphics::unsignedcoord::UnsignedCoord(x, y),
-            color,
-        ) in item_pixels
-        {
-            if x <= self.width.into() && y <= self.height.into() {
-                let color = color.into_inner();
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>> {
+        let bb = self.bounding_box();
+
+        pixels
+            .into_iter()
+            .filter(|Pixel(pos, _)| bb.contains(*pos))
+            .for_each(|Pixel(pos, color)| {
+                let x = pos.x;
+                let y = pos.y;
+                let color: u16 = RawU16::from(color).into_inner();
                 let slice = unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) };
-                slice[((x + (y * self.width as u32)) as usize * 2)] = (color >> 8) as u8;
-                slice[(((x + (y * self.width as u32)) as usize) * 2) + 1] = color as u8;
-            }
-        }
+                slice[((x + (y * self.width as i32)) as usize * 2)] = (color >> 8) as u8;
+                slice[(((x + (y * self.width as i32)) as usize) * 2) + 1] = color as u8;
+            });
+
+        Ok(())
+    }
+}
+
+impl embedded_graphics::geometry::Dimensions for FrameBuffer {
+    fn bounding_box(&self) -> embedded_graphics::primitives::Rectangle {
+        Rectangle::new(Point::new(0, 0), Size::new(self.width as u32, self.height as u32))
     }
 }
 
