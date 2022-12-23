@@ -379,20 +379,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc4010833aea396656c2f91ee704d51a6f1329ec2ab56ffd00bfd56f7481ea94"
 
 [[package]]
-name = "mwatch-kernel"
-version = "2.0.0"
-dependencies = [
- "crc",
- "embedded-graphics 0.7.1",
- "embedded-hal",
- "heapless 0.4.4",
- "log",
- "simple-hex",
- "ssd1351 0.3.0",
- "time",
-]
-
-[[package]]
 name = "mwatch-kernel-stm32l4"
 version = "2.0.0"
 dependencies = [
@@ -408,7 +394,7 @@ dependencies = [
  "hm11",
  "log",
  "max17048",
- "mwatch-kernel",
+ "mwatch_kernel",
  "panic-itm",
  "panic-rtt-target",
  "panic-semihosting",
@@ -416,6 +402,20 @@ dependencies = [
  "simple-hex",
  "ssd1351 0.4.1",
  "stm32l4xx-hal",
+ "time",
+]
+
+[[package]]
+name = "mwatch_kernel"
+version = "2.0.0"
+dependencies = [
+ "crc",
+ "embedded-graphics 0.7.1",
+ "embedded-hal",
+ "heapless 0.4.4",
+ "log",
+ "simple-hex",
+ "ssd1351 0.3.0",
  "time",
 ]
 

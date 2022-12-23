@@ -1,5 +1,5 @@
 [package]
-name = "mwatch-kernel"
+name = "mwatch_kernel"
 version = "2.0.0"
 authors = ["Scott Mabin <scott@mabez.dev>"]
 description = "A embedded 'Smart' watch"
