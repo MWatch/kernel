@@ -1,0 +1,36 @@
+[package]
+name = "mwatch-kernel"
+version = "2.0.0"
+authors = ["Scott Mabin <scott@mabez.dev>"]
+description = "A embedded 'Smart' watch"
+keywords = ["smartwatch", "embedded", "no-std"]
+categories = ["embedded", "no-std"]
+repository = "https://github.com/mwatch/kernel"
+readme = "../README.md"
+license = "MIT OR Apache-2.0"
+exclude = [
+	".gitignore",
+	"tools/",
+	"tools/*",
+	"itm.fifo",
+]
+edition = "2021"
+
+[dependencies]
+embedded-graphics = "0.7.1"
+simple-hex = "0.1.0"
+log = "0.4.6"
+crc = { version = "1.8.1", default-features = false }
+heapless = "0.4.2"
+embedded-hal = "0.2.3"
+
+[dependencies.time]
+version = "0.3"
+default-features = false
+
+[dependencies.ssd1351]
+version = "0.3.0"
+git = "https://github.com/mabezdev/ssd1351"
+rev = "6240d8cc614a0d10cfb067faf1b87968369c4b56"
+# path = "../../drivers/ssd1351"
+features = ["embedded-graphics", "buffered"]
