@@ -1,15 +1,18 @@
 //! System
-//! 
+//!
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
-use embedded_graphics::{pixelcolor::{Rgb565}, prelude::OriginDimensions};
-use heapless::{String, consts::*};
-use mwatch_kernel::{system::{notification::NotificationManager, Display}, application::Table};
-use stm32l4xx_hal::{rtc::Rtc, prelude::_stm32l4_hal_datetime_U32Ext};
-use time::{Time, Date};
-use crate::{application::application_manager::ApplicationManager, types::{BatteryManagementInterface, StandbyStatusPin, ChargeStatusPin, Ssd1351}, bms::BatteryManagement};
+use crate::{
+    application::application_manager::ApplicationManager,
+    bms::BatteryManagement,
+    types::{BatteryManagementInterface, ChargeStatusPin, Ssd1351, StandbyStatusPin},
+};
 use core::fmt::Write;
-
+use embedded_graphics::{pixelcolor::Rgb565, prelude::OriginDimensions};
+use heapless::{consts::*, String};
+use mwatch_kernel::system::{notification::NotificationManager, Display};
+use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, rtc::Rtc};
+use time::{Date, Time};
 
 pub const DMA_HALF_BYTES: usize = 64;
 
@@ -45,23 +48,38 @@ impl mwatch_kernel::system::NotificationInterface for System {
 }
 
 impl mwatch_kernel::system::ApplicationInterface for System {
-    unsafe fn install_os_table(&mut self) {
-        static mut TBL : Table = Table {
-            print: abi::print,
-        };
-        Table::install(&mut TBL)
-    }
 
     fn am(&mut self) -> &mut ApplicationManager {
         self.am()
     }
 }
 
-mod abi {
+pub mod abi {
+    use embedded_graphics::draw_target::DrawTarget;
     use mwatch_kernel::application::Context;
 
+    /// Assumes control over the display, it is up to use to make sure the display is not borrowed by anything else
+    pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
+        let ctx = &mut *context;
+        if let Some(ref mut display) = ctx.framebuffer {
+            display.draw_iter(
+                [embedded_graphics::Pixel(
+                    embedded_graphics::prelude::Point::new(x as i32, y as i32),
+                    embedded_graphics::pixelcolor::raw::RawU16::from(colour).into(),
+                )]
+                .into_iter(),
+            ).ok(); // TODO handle error
+        } else {
+            panic!("Display invoked in an invalid state. Applications can only use the display within update.")
+        }
+        0
+    }
+
     pub unsafe extern "C" fn print(_context: *mut Context, ptr: *const u8, len: usize) -> i32 {
-        info!("[APP] - {}", core::str::from_utf8_unchecked(core::slice::from_raw_parts(ptr, len)));
+        info!(
+            "[APP] - {}",
+            core::str::from_utf8_unchecked(core::slice::from_raw_parts(ptr, len))
+        );
         0
     }
 }
@@ -74,18 +92,33 @@ impl mwatch_kernel::system::Clock for System {
     }
 
     fn set_time(&mut self, t: &Time) {
-        let t = stm32l4xx_hal::datetime::Time::new((t.hour() as u32).hours(), (t.minute() as u32).minutes(), (t.second() as u32).seconds(), false);
+        let t = stm32l4xx_hal::datetime::Time::new(
+            (t.hour() as u32).hours(),
+            (t.minute() as u32).minutes(),
+            (t.second() as u32).seconds(),
+            false,
+        );
         self.rtc.set_time(&t);
     }
 
     fn get_date(&self) -> Date {
         let d = self.rtc.get_date();
         // NOTE(unwrap): we assume rtc gives us a valid reading always
-        Date::from_calendar_date(d.year as i32, (d.month as u8).try_into().unwrap(), d.date as u8).unwrap()
+        Date::from_calendar_date(
+            d.year as i32,
+            (d.month as u8).try_into().unwrap(),
+            d.date as u8,
+        )
+        .unwrap()
     }
 
     fn set_date(&mut self, d: &Date) {
-        let d = stm32l4xx_hal::datetime::Date::new(0.day(), (d.day() as u32).date(), (d.month() as u32).month(), (d.year() as u32).year());
+        let d = stm32l4xx_hal::datetime::Date::new(
+            0.day(),
+            (d.day() as u32).date(),
+            (d.month() as u32).month(),
+            (d.year() as u32).year(),
+        );
         self.rtc.set_date(&d);
     }
 }
@@ -106,13 +139,18 @@ impl mwatch_kernel::system::Statistics for System {
     fn stats(&self) -> Self::Statistics {
         StatsIter {
             stats: self.stats,
-            index: 0
+            index: 0,
         }
     }
 }
 
 impl System {
-    pub fn new(rtc: Rtc, bms: BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>, nm: NotificationManager, am: ApplicationManager) -> Self {
+    pub fn new(
+        rtc: Rtc,
+        bms: BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>,
+        nm: NotificationManager,
+        am: ApplicationManager,
+    ) -> Self {
         Self {
             rtc,
             bms,
@@ -128,7 +166,9 @@ impl System {
     }
 
     /// Battery management
-    pub fn bms(&mut self) -> &mut BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin> {
+    pub fn bms(
+        &mut self,
+    ) -> &mut BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin> {
         &mut self.bms
     }
 
@@ -168,7 +208,6 @@ pub struct Stats {
     pub idle_count: u32,
     pub tsc_threshold: u16,
 }
-    
 
 impl Default for Stats {
     fn default() -> Self {
@@ -196,7 +235,7 @@ impl Iterator for StatsIter {
             0 => write!(buffer, "CPU_USAGE: {:.02}%", self.stats.cpu_usage).unwrap(),
             1 => write!(buffer, "TSC EVENTS: {}/s", self.stats.tsc_events).unwrap(),
             2 => write!(buffer, "TSC THRES: {}", self.stats.tsc_threshold).unwrap(),
-            _ => return None
+            _ => return None,
         }
         self.index += 1;
         Some(buffer)
@@ -210,7 +249,12 @@ impl Display for DisplayWrapper {
         let size = self.0.size();
         let buffer = self.0.fb_mut();
 
-        mwatch_kernel::application::FrameBuffer::new(buffer.as_mut_ptr(), buffer.len(), size.width as u8, size.height as u8)
+        mwatch_kernel::application::FrameBuffer::new(
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            size.width as u8,
+            size.height as u8,
+        )
     }
 }
 
@@ -221,7 +265,8 @@ impl embedded_graphics::draw_target::DrawTarget for DisplayWrapper {
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>> {
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
+    {
         self.0.draw_iter(pixels)
     }
 }

@@ -30,8 +30,6 @@ pub trait System:
 }
 
 pub trait ApplicationInterface {
-    unsafe fn install_os_table(&mut self);
-
     fn am(&mut self) -> &mut ApplicationManager;
 }
 

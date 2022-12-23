@@ -23,7 +23,7 @@ use crate::{
 };
 use mwatch_kernel::{
     application, ingress,
-    system::{input::InputEvent, ApplicationInterface},
+    system::input::InputEvent,
 };
 
 use crate::hal::{
@@ -188,6 +188,7 @@ const APP: () = {
             .set_rotation(DisplayRotation::Rotate0)
             .expect("Failed to set the display rotation");
         display.clear(true);
+        let display = DisplayWrapper(display);
 
         let tx = gpioa.pa2.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
         let rx = gpioa.pa3.into_af7(&mut gpioa.moder, &mut gpioa.afrl);
@@ -310,7 +311,11 @@ const APP: () = {
 
         /* Give the application manager its ram */
         let ram: &'static mut [u8] = cx.resources.APPLICATION_RAM;
-        let amgr = ApplicationManager::new(Ram::new(ram));
+        static mut TBL: application::Table = application::Table {
+            draw_pixel: system::abi::draw_pixel,
+            print: system::abi::print,
+        };
+        let amgr = ApplicationManager::new(Ram::new(ram), unsafe { &mut TBL });
 
         let mut systick = Timer::tim2(cx.device.TIM2, SYSTICK_HZ.hz(), clocks, &mut rcc.apb1r1);
         systick.listen(TimerEvent::TimeOut);
@@ -336,14 +341,24 @@ const APP: () = {
         let mut system = System::new(rtc, bms, nmgr, amgr);
         system.ss().tsc_threshold = tsc_mgr.threshold();
 
-        unsafe { system.install_os_table() };
+        // To preload a path, add include the path here
+        // let app = include_bytes!(/* PATH */);
+        // let cs = crc::crc32::checksum_ieee(app);
+        // let bytes = cs.to_be_bytes();
+        // for b in bytes {
+        //     system.am().write_checksum_byte(b).unwrap()
+        // }
+        // for &b in app {
+        //     system.am().write_ram_byte(b).unwrap()
+        // }
+        // system.am().verify().unwrap();
 
         // Resources that need to be initialized are passed back here
         init::LateResources {
             CB: rx.circ_read(channels.6, buffer),
             USART2_RX: rx,
             IMNG: imgr,
-            DISPLAY: DisplayWrapper(display),
+            DISPLAY: display,
             SYSTEM: system,
             BT_CONN: bt_conn,
             SYSTICK: systick,

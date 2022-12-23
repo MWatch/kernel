@@ -13,7 +13,7 @@ use crc::crc32::checksum_ieee;
 
 use crate::system::{input::InputEvent, Display};
 
-use super::{ServiceFn, InputFn, SetupFn, Context};
+use super::{ServiceFn, InputFn, SetupFn, Context, Table};
 
 /// Application manager
 pub struct ApplicationManager {
@@ -23,6 +23,7 @@ pub struct ApplicationManager {
     service_fn: Option<ServiceFn>,
     input_fn: Option<InputFn>,
     status: Status,
+    os_table_ptr: &'static mut Table
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -63,7 +64,7 @@ impl Default for Status {
 impl ApplicationManager {
     
     /// Create a new application manager from a chunk of ram
-    pub fn new(ram: Ram) -> Self {
+    pub fn new(ram: Ram, os_table_ptr: &'static mut Table) -> Self {
         Self {
             ram: ram,
             target_cs: [0u8; 4],
@@ -71,6 +72,7 @@ impl ApplicationManager {
             service_fn: None,
             input_fn: None,
             status: Status::default(),
+            os_table_ptr,
         }
     }
 
@@ -130,7 +132,7 @@ impl ApplicationManager {
             let input: InputFn = ::core::mem::transmute(input_ptr);
             self.service_fn = Some(service);
             self.input_fn = Some(input);
-            setup()
+            setup(self.os_table_ptr as *mut _)
         };
         self.status.is_running = true;
         Ok(())
@@ -144,7 +146,7 @@ impl ApplicationManager {
         let mut ctx = Context {
             framebuffer: Some(fb)
         };
-        self.status.service_result = service_fn(&mut ctx);
+        self.status.service_result = unsafe { service_fn(&mut ctx) };
         Ok(())
        } else {
            Err(Error::InvalidServiceFn)
@@ -157,7 +159,7 @@ impl ApplicationManager {
         let mut ctx = Context {
             framebuffer: None,
         };
-        let _ = input_fn(&mut ctx, input);
+        let _ = unsafe { input_fn(&mut ctx, input) };
         Ok(())
        } else {
            Err(Error::InvalidInputFn)
