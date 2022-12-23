@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v2.0.0]
+
+- Make the kernel agnostic to the hardware its running on. Details can be found in https://github.com/MWatch/kernel/pull/69.
+- There are now two crates in this repo, `mwatch-kernel` and `mwatch-kernel-stm32l4`.
+
 ## [v1.0.0]
 
 - Adds the notification state, which adds the ability to view incming applications

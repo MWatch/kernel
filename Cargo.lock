@@ -380,7 +380,7 @@ checksum = "bc4010833aea396656c2f91ee704d51a6f1329ec2ab56ffd00bfd56f7481ea94"
 
 [[package]]
 name = "mwatch-kernel"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "crc",
  "embedded-graphics 0.7.1",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "mwatch-kernel-stm32l4"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "cfg-if",
  "cortex-m 0.5.11",

@@ -1,12 +1,12 @@
 [package]
 name = "mwatch-kernel-stm32l4"
-version = "1.0.0"
-authors = ["Scott Mabin <mabezdev@gmail.com>"]
+version = "2.0.0"
+authors = ["Scott Mabin <scott@mabez.dev>"]
 description = "A embedded 'Smart' watch"
 keywords = ["arm", "cortex-m", "smartwatch"]
 categories = ["embedded", "no-std"]
 repository = "https://github.com/mwatch/kernel"
-readme = "README.md"
+readme = "../README.md"
 license = "MIT OR Apache-2.0"
 exclude = [
 	".travis.yml",
