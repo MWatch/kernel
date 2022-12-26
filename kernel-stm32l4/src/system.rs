@@ -17,11 +17,11 @@ use time::{Date, Time};
 pub const DMA_HALF_BYTES: usize = 64;
 
 pub const CPU_USAGE_POLL_HZ: u32 = 1; // hz
-pub const SYSTICK_HZ: u32 = 3; // hz
+pub const SYSTICK_HZ: u32 = 10; // hz
 pub const TSC_HZ: u32 = 8 * 3; // 8 polls per second (for 3 inputs)
 
-pub const SYS_CLK_HZ: u32 = 16_000_000;
-pub const SPI_MHZ: u32 = SYS_CLK_HZ / 2_000_000; // spi is always half of sysclock
+pub const SYS_CLK_HZ: u32 = 80_000_000;
+pub const SPI_MHZ: u32 = SYS_CLK_HZ / 20_000_000;
 pub const I2C_KHZ: u32 = 100;
 
 pub const IDLE_TIMEOUT_SECONDS: u32 = 15;

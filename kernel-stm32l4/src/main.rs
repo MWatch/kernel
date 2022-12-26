@@ -21,10 +21,7 @@ use crate::{
     tsc::TscManager,
     types::{hal, BluetoothConnectedPin, LoggerType},
 };
-use mwatch_kernel::{
-    application, ingress,
-    system::input::InputEvent,
-};
+use mwatch_kernel::{application, ingress, system::input::InputEvent};
 
 use crate::hal::{
     datetime::Date,
@@ -43,8 +40,7 @@ use ssd1351::{builder::Builder, mode::GraphicsMode, prelude::*, properties::Disp
 
 #[cfg(feature = "itm")]
 use cortex_m_log::{
-    destination::Itm as ItmDestination,
-    log::Logger,
+    destination::Itm as ItmDestination, log::Logger,
     printer::itm::InterruptSync as InterruptSyncItm,
 };
 
@@ -113,7 +109,14 @@ const APP: () = {
         let mut flash = cx.device.FLASH.constrain();
         let mut rcc = cx.device.RCC.constrain();
 
-        let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr); // 63% cpu usage~
+        // let clocks = rcc.cfgr.lsi(true).freeze(&mut flash.acr);
+        let clocks = rcc
+            .cfgr
+            .sysclk(80u32.mhz())
+            .pclk1(80u32.mhz())
+            .pclk2(80u32.mhz())
+            .lsi(true)
+            .freeze(&mut flash.acr);
 
         // initialize the logging framework
         #[cfg(feature = "itm")]

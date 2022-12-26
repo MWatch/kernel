@@ -51,7 +51,7 @@ version = "0.3"
 default-features = false
 
 [features]
-default = ["rtt"]
+default = ["rtt", "dyn-tsc-cal"]
 rtt = ["dep:rtt-target", "dep:panic-rtt-target"]
 itm = ["dep:panic-itm"]
 semihosting = ["dep:panic-semihosting"]
