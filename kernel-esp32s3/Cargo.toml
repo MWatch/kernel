@@ -1,0 +1,16 @@
+[package]
+name = "kernel-esp32s3"
+version = "0.1.0"
+authors = ["Scott Mabin <scott@mabez.dev>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+esp32s3-hal = "0.4.0"
+esp-backtrace = { version = "0.4.0", features = ["esp32s3", "panic-handler", "print-uart"] }
+xtensa-lx-rt = { version = "0.14.0", features = ["esp32s3"], optional = true }
+mwatch-kernel = { version = "2.0", package = "mwatch_kernel", path = "../kernel" }
+
+[features]
+default = ["rt"]
+rt = ["xtensa-lx-rt"]

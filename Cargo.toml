@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["kernel", "kernel-stm32l4"]
+members = ["kernel", "kernel-stm32l4", "kernel-esp32s3"]
 
 [profile.dev]
 codegen-units = 1
