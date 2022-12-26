@@ -6,7 +6,6 @@ use crate::ingress::buffer::{Buffer, Type};
 use crate::system::syscall::Syscall;
 use crate::system::System;
 use core::str::FromStr;
-use heapless::consts::*;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
 
@@ -39,7 +38,7 @@ const ETX: u8 = 3;
 const PAYLOAD: u8 = 31; // Unit Separator
 
 pub struct IngressManager {
-    rb: Queue<u8, U512>,
+    rb: Queue<u8, 512>,
     state: State,
 
     hex_chars: [u8; 2],

@@ -9,7 +9,7 @@ use crate::{
 };
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::OriginDimensions};
-use heapless::{consts::*, String};
+use heapless::String;
 use mwatch_kernel::system::{notification::NotificationManager, Display};
 use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, rtc::Rtc};
 use time::{Date, Time};
@@ -226,7 +226,7 @@ pub struct StatsIter {
 }
 
 impl Iterator for StatsIter {
-    type Item = String<U128>;
+    type Item = String<128>;
 
     /// Anything that needs to be printed should be produced by this iterator
     fn next(&mut self) -> Option<Self::Item> {

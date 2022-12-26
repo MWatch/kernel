@@ -10,13 +10,12 @@ use crate::system::System;
 use core::fmt::Write;
 use embedded_graphics::pixelcolor::raw::RawU16;
 use embedded_graphics::{mono_font::{MonoTextStyle, ascii::FONT_6X10}, pixelcolor::Rgb565, text::{Alignment, Text}};
-use heapless::consts::*;
 use heapless::String;
 
 use embedded_graphics::prelude::*;
 
 pub struct AppState {
-    buffer: String<U256>,
+    buffer: String<256>,
 }
 
 impl Default for AppState {

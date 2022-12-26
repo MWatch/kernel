@@ -3,7 +3,7 @@ use time::{Time, Date};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
 
-use heapless::{String, consts::*};
+use heapless::String;
 
 use self::{bms::BatteryManagement, notification::NotificationManager};
 
@@ -45,7 +45,7 @@ pub trait Statistics {
 
     // TODO ideally formatting would be done inside the kernel, instead of passing this buffer but 
     // we are limited by the technology of our time
-    type Statistics: Iterator<Item = String<U128>>; // TODO constrain to size of display
+    type Statistics: Iterator<Item = String<128>>; // TODO constrain to size of display
 
     fn stats(&self) -> Self::Statistics;
 }

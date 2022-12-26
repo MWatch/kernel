@@ -10,7 +10,6 @@ use crate::system::bms::State as BmsState;
 use crate::system::input::InputEvent;
 use core::fmt::Write;
 use embedded_graphics::pixelcolor::raw::RawU16;
-use heapless::consts::*;
 use heapless::String;
 
 use embedded_graphics::prelude::*;
@@ -22,7 +21,7 @@ use embedded_graphics::{
 use seven_segment::SevenSegments;
 
 pub struct ClockState {
-    buffer: String<U256>,
+    buffer: String<256>,
 }
 
 impl Default for ClockState {
