@@ -5,7 +5,7 @@
 
 use crate::application::states::prelude::*;
 use crate::system::input::InputEvent;
-use crate::system::{Display, System};
+use crate::system::{Display, System, Host};
 
 use embedded_graphics::mono_font::ascii::FONT_6X12;
 use embedded_graphics::mono_font::MonoTextStyle;
@@ -36,14 +36,14 @@ pub struct NotificationState {
 
 impl State for NotificationState {
     /// Render the notification state
-    fn render(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
-        self.menu.update_count(system.nm().idx() as i8);
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+        self.menu.update_count(system.nm.idx() as i8);
         match self.state {
             InternalState::Menu => {
                 let size = display.bounding_box().size;
                 let style = MonoTextStyle::new(&FONT_6X12, RawU16::from(0x02D4).into());
 
-                if system.nm().idx() > 0 {
+                if system.nm.idx() > 0 {
                     // Display a selection indicator
                     Text::with_baseline(
                         ">",
@@ -52,8 +52,8 @@ impl State for NotificationState {
                         Baseline::Top,
                     )
                     .draw(display).ok();
-                    for item in 0..system.nm().idx() {
-                        system.nm().peek_notification(item, |notification| {
+                    for item in 0..system.nm.idx() {
+                        system.nm.peek_notification(item, |notification| {
                             Text::with_baseline(
                                 notification.title(),
                                 Point::new(size.width as i32 / 2, item as i32 * CHAR_HEIGHT),
@@ -75,7 +75,7 @@ impl State for NotificationState {
             }
             InternalState::Body => {
                 system
-                    .nm()
+                    .nm
                     .peek_notification(self.menu.selected() as usize, |notification| {
                         self.body.render(display, &notification);
                     });
@@ -85,15 +85,15 @@ impl State for NotificationState {
     }
 
     /// Handle the input for the notification
-    fn input(&mut self, system: &mut impl System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> {
         if input == InputEvent::Multi {
             self.stop(system);
             return Some(Signal::Home); // signal to dm to go home
         }
-        self.menu.update_count(system.nm().idx() as i8);
+        self.menu.update_count(system.nm.idx() as i8);
         match self.state {
             InternalState::Menu => {
-                if system.nm().idx() > 0 {
+                if system.nm.idx() > 0 {
                     match input {
                         InputEvent::Left => {
                             self.menu.prev();
@@ -103,7 +103,7 @@ impl State for NotificationState {
                         }
                         InputEvent::Middle => {
                             self.state = InternalState::Body;
-                            system.nm().peek_notification(
+                            system.nm.peek_notification(
                                 self.menu.selected() as usize,
                                 |notification| {
                                     let line_count = notification.body().len() as i32 / LINE_WIDTH;
@@ -147,7 +147,7 @@ impl Default for NotificationState {
 
 impl ScopedState for NotificationState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, _system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
+    fn preview(&mut self, _system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
         let size = display.bounding_box().size;
         let style = MonoTextStyle::new(&FONT_6X12, RawU16::from(0x02D4).into());
         Text::with_alignment(
@@ -161,17 +161,17 @@ impl ScopedState for NotificationState {
     }
 
     /// Is the notification app opened?
-    fn is_running(&self, _system: &mut impl System) -> bool {
+    fn is_running(&self, _system: &mut System<impl Host>) -> bool {
         self.is_running
     }
 
     /// Start
-    fn start(&mut self, _system: &mut impl System) {
+    fn start(&mut self, _system: &mut System<impl Host>) {
         self.is_running = true;
     }
 
     /// Stop
-    fn stop(&mut self, _system: &mut impl System) {
+    fn stop(&mut self, _system: &mut System<impl Host>) {
         self.is_running = false;
     }
 }

@@ -3,14 +3,13 @@
 //! Performs housekeeping of system hardware and provides a nice sofware abstraction to read / manipulate it
 
 use crate::{
-    application::application_manager::ApplicationManager,
     bms::BatteryManagement,
     types::{BatteryManagementInterface, ChargeStatusPin, Ssd1351, StandbyStatusPin},
 };
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::OriginDimensions};
 use heapless::String;
-use mwatch_kernel::system::{notification::NotificationManager, Display};
+use mwatch_kernel::system::{Display, Host};
 use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, rtc::Rtc};
 use time::{Date, Time};
 
@@ -26,39 +25,20 @@ pub const I2C_KHZ: u32 = 100;
 
 pub const IDLE_TIMEOUT_SECONDS: u32 = 15;
 
-/// A grouping of core sysem peripherals
-pub struct System {
-    rtc: Rtc,
-    bms: BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>,
-    nm: NotificationManager,
-    am: ApplicationManager,
-    stats: Stats,
-}
 
-impl mwatch_kernel::system::System for System {
-    fn is_idle(&mut self) -> bool {
-        (self.ss().idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
-    }
-}
+pub struct KernelHost;
 
-impl mwatch_kernel::system::NotificationInterface for System {
-    fn nm(&mut self) -> &mut NotificationManager {
-        self.nm()
-    }
-}
-
-impl mwatch_kernel::system::ApplicationInterface for System {
-
-    fn am(&mut self) -> &mut ApplicationManager {
-        self.am()
-    }
+impl Host for KernelHost {
+    type BatteryManager = BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>;
+    type Time = RtcWrapper;
+    type RuntimeStatistics = Stats;
 }
 
 pub mod abi {
     use embedded_graphics::draw_target::DrawTarget;
     use mwatch_kernel::application::Context;
 
-    /// Assumes control over the display, it is up to use to make sure the display is not borrowed by anything else
+    /// Assumes control over the display, it is up to us to make sure the display is not borrowed by anything else
     pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
         let ctx = &mut *context;
         if let Some(ref mut display) = ctx.framebuffer {
@@ -84,9 +64,12 @@ pub mod abi {
     }
 }
 
-impl mwatch_kernel::system::Clock for System {
+#[repr(transparent)]
+pub struct RtcWrapper(pub Rtc);
+
+impl mwatch_kernel::system::Clock for RtcWrapper {
     fn get_time(&self) -> Time {
-        let t = self.rtc.get_time();
+        let t = self.0.get_time();
         // NOTE(unwrap): we assume rtc gives us a valid reading always
         Time::from_hms(t.hours as u8, t.minutes as u8, t.seconds as u8).unwrap()
     }
@@ -98,11 +81,11 @@ impl mwatch_kernel::system::Clock for System {
             (t.second() as u32).seconds(),
             false,
         );
-        self.rtc.set_time(&t);
+        self.0.set_time(&t);
     }
 
     fn get_date(&self) -> Date {
-        let d = self.rtc.get_date();
+        let d = self.0.get_date();
         // NOTE(unwrap): we assume rtc gives us a valid reading always
         Date::from_calendar_date(
             d.year as i32,
@@ -119,85 +102,32 @@ impl mwatch_kernel::system::Clock for System {
             (d.month() as u32).month(),
             (d.year() as u32).year(),
         );
-        self.rtc.set_date(&d);
+        self.0.set_date(&d);
     }
 }
 
-impl mwatch_kernel::system::bms::BatteryManagement for System {
+impl mwatch_kernel::system::bms::BatteryManagement for BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin> {
     fn state(&self) -> mwatch_kernel::system::bms::State {
-        self.bms.state()
+        self.state()
     }
 
     fn soc(&mut self) -> u16 {
-        self.bms.soc()
+        self.soc()
     }
 }
 
-impl mwatch_kernel::system::Statistics for System {
+impl mwatch_kernel::system::Statistics for Stats {
     type Statistics = StatsIter;
 
     fn stats(&self) -> Self::Statistics {
         StatsIter {
-            stats: self.stats,
+            stats: *self,
             index: 0,
         }
     }
-}
 
-impl System {
-    pub fn new(
-        rtc: Rtc,
-        bms: BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>,
-        nm: NotificationManager,
-        am: ApplicationManager,
-    ) -> Self {
-        Self {
-            rtc,
-            bms,
-            nm,
-            am,
-            stats: Stats::default(),
-        }
-    }
-
-    /// Real time clock
-    pub fn rtc(&mut self) -> &mut Rtc {
-        &mut self.rtc
-    }
-
-    /// Battery management
-    pub fn bms(
-        &mut self,
-    ) -> &mut BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin> {
-        &mut self.bms
-    }
-
-    /// Application manager
-    pub fn am(&mut self) -> &mut ApplicationManager {
-        &mut self.am
-    }
-
-    /// Notification Manager
-    pub fn nm(&mut self) -> &mut NotificationManager {
-        &mut self.nm
-    }
-
-    /// System stats
-    pub fn ss(&mut self) -> &mut Stats {
-        &mut self.stats
-    }
-
-    pub fn get_free_stack() -> usize {
-        unsafe {
-            extern "C" {
-                static __ebss: u32;
-                static __sdata: u32;
-            }
-            let ebss = &__ebss as *const u32 as usize;
-            let start = &__sdata as *const u32 as usize;
-            let total = ebss - start;
-            (16 * 1024) - total // ram for stack in linker script
-        }
+    fn is_idle(&mut self) -> bool {
+        (self.idle_count / SYSTICK_HZ) > IDLE_TIMEOUT_SECONDS
     }
 }
 

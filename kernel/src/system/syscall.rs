@@ -8,7 +8,9 @@ use core::str::FromStr;
 
 use time::{Date, Time};
 
-use super::System;
+use crate::system::Clock;
+
+use super::{System, Host};
 
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -47,15 +49,15 @@ impl FromStr for Syscall {
 
 impl Syscall {
 
-    pub fn execute(self, system: &mut impl System) {
+    pub fn execute(self, system: &mut System<impl Host>) {
         match self {
             Syscall::Date(date) => {
                 info!("Setting the date to {:?}", date);
-                system.set_date(&date);
+                system.clock.set_date(&date);
             },
             Syscall::Time(time) => {
                 info!("Setting the time to {:?}", time);
-                system.set_time(&time);
+                system.clock.set_time(&time);
             },
         }
     }

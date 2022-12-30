@@ -17,11 +17,12 @@ mod types;
 
 use crate::{
     bms::BatteryManagement,
-    system::DisplayWrapper,
+    system::{DisplayWrapper, Stats},
     tsc::TscManager,
     types::{hal, BluetoothConnectedPin, LoggerType},
 };
-use mwatch_kernel::{application, ingress, system::input::InputEvent};
+use mwatch_kernel::{application, ingress, system::{input::InputEvent, System}};
+use system::KernelHost;
 
 use crate::hal::{
     datetime::Date,
@@ -57,9 +58,9 @@ use crate::application::{
 use crate::ingress::ingress_manager::IngressManager;
 
 use crate::system::{
-    System, CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
+    CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
-use mwatch_kernel::system::{input::InputManager, notification::NotificationManager};
+use mwatch_kernel::system::input::InputManager;
 
 #[cfg(any(feature = "itm", feature = "rtt"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -77,7 +78,7 @@ const APP: () = {
         USART2_RX: hal::serial::Rx<hal::stm32l4::stm32l4x2::USART2>,
         DISPLAY: DisplayWrapper,
         BT_CONN: BluetoothConnectedPin,
-        SYSTEM: System,
+        SYSTEM: System<KernelHost>,
         SYSTICK: hal::timer::Timer<hal::stm32::TIM2>,
         TIM6: hal::timer::Timer<hal::stm32::TIM6>,
         TIM7_HANDLE: hal::timer::Timer<hal::stm32::TIM7>,
@@ -310,7 +311,6 @@ const APP: () = {
         let max17048 = Max17048::new(i2c);
         let bms = BatteryManagement::new(max17048, chrg, stdby);
         let imgr = IngressManager::new();
-        let nmgr = NotificationManager::new();
 
         /* Give the application manager its ram */
         let ram: &'static mut [u8] = cx.resources.APPLICATION_RAM;
@@ -341,8 +341,9 @@ const APP: () = {
         let tsc_mgr = TscManager::new(tsc, tsc_threshold, left_button, middle_button, right_button);
         let input_mgr = InputManager::new();
         let dmng = DisplayManager::default();
-        let mut system = System::new(rtc, bms, nmgr, amgr);
-        system.ss().tsc_threshold = tsc_mgr.threshold();
+        let mut stats = Stats::default();
+        stats.tsc_threshold = tsc_mgr.threshold();
+        let system = System::new(system::RtcWrapper(rtc), bms, stats, amgr);
 
         // To preload a path, add include the path here
         // let app = include_bytes!(/* PATH */);
@@ -404,8 +405,8 @@ const APP: () = {
         });
 
         system.lock(|system| {
-            system.bms().process();
-            system.ss().idle_count = idle.lock(|val| {
+            system.bms.process();
+            system.stats.idle_count = idle.lock(|val| {
                 let value = *val;
                 *val += 1; // append to idle count
                 value
@@ -446,13 +447,13 @@ const APP: () = {
         *cx.resources.SLEEP_TIME = 0;
 
         let current_soc = systemr.lock(|system| {
-            system.ss().tsc_events = tsc_ev.lock(|val| {
+            system.stats.tsc_events = tsc_ev.lock(|val| {
                 let value = *val;
                 *val = 0; // reset the value
                 value
             });
-            system.ss().cpu_usage = cpu;
-            system.bms().soc()
+            system.stats.cpu_usage = cpu;
+            system.bms.soc()
         });
 
         let last_soc = *cx.resources.LAST_BATT_PERCENT;

@@ -2,6 +2,8 @@
 
 use crate::application::states::prelude::*;
 use crate::system::Display;
+use crate::system::Host;
+use crate::system::Statistics;
 use crate::system::System;
 use crate::system::input::InputEvent;
 use embedded_graphics::mono_font::MonoTextStyle;
@@ -20,10 +22,10 @@ impl Default for InfoState {
 }
 
 impl State for InfoState {
-    fn render(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
         let style = MonoTextStyle::new(&FONT_6X12, RawU16::new(0x02D4).into());
 
-        for (i, buffer) in system.stats().enumerate() {
+        for (i, buffer) in system.stats.stats().enumerate() {
             Text::with_baseline(
                 &buffer,
                 Point::new(0, (i as i32 * 12) + 2),
@@ -36,7 +38,7 @@ impl State for InfoState {
         None
     }
 
-    fn input(&mut self, _system: &mut impl System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),
