@@ -12,7 +12,7 @@ use crate::{application::{
         notifications::NotificationState,
     },
     states::prelude::*
-}, system::{input::InputEvent, System, Display}};
+}, system::{input::InputEvent, System, Display, Host}};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Signal {
@@ -58,7 +58,7 @@ impl DisplayManager
 {
 
     /// Services the current application
-    pub fn process(&mut self, system: &mut impl System, display: &mut impl Display) {
+    pub fn process(&mut self, system: &mut System<impl Host>, display: &mut impl Display) {
         let signal = match self.state_idx {
             0 => {
                 DisplayManager::static_state_render(&mut self.clock_state, system, display)
@@ -87,7 +87,7 @@ impl DisplayManager
     }
 
     /// Services input to the current application
-    pub fn service_input(&mut self, system: &mut impl System, input: InputEvent) {
+    pub fn service_input(&mut self, system: &mut System<impl Host>, input: InputEvent) {
         let signal = match self.state_idx {
             0 => {
                 DisplayManager::static_state_input(&mut self.clock_state, system, input)
@@ -141,7 +141,7 @@ impl DisplayManager
     }
 
     /// Render a static state
-    fn static_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Display) -> Option<Signal> 
+    fn static_state_render<S>(state: &mut S, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> 
         where S : StaticState
     {
         state.render(system, display)
@@ -149,7 +149,7 @@ impl DisplayManager
 
     /// Render a scoped state, this state may or may not be running hence we have different functionality
     /// depending on the `is_running()` state
-    fn scoped_state_render<S>(state: &mut S, system: &mut impl System, display: &mut impl Display) -> Option<Signal> 
+    fn scoped_state_render<S>(state: &mut S, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> 
         where S : ScopedState
     {
         if state.is_running(system) {
@@ -160,7 +160,7 @@ impl DisplayManager
     }
 
     /// Handle input for a static state
-    fn static_state_input<S>(state: &mut S, system: &mut impl System, input: InputEvent) -> Option<Signal> 
+    fn static_state_input<S>(state: &mut S, system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> 
         where S : StaticState
     {
         state.input(system, input)
@@ -168,7 +168,7 @@ impl DisplayManager
 
     /// Handle the input for a scoped state, this state may or may not be running hence we have different functionality
     /// depending on the `is_running()` state
-    fn scoped_state_input<S>(state: &mut S, system: &mut impl System, input: InputEvent) -> Option<Signal> 
+    fn scoped_state_input<S>(state: &mut S, system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> 
         where S : ScopedState
     {
         if state.is_running(system) {

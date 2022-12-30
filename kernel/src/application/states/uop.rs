@@ -1,6 +1,6 @@
 //! Uop Logo state
 
-use crate::{application::states::prelude::*, system::{System, input::InputEvent, Display}};
+use crate::{application::states::prelude::*, system::{System, input::InputEvent, Display, Host}};
 
 use embedded_graphics::{image::{Image, ImageRaw}, pixelcolor::{Rgb565, raw::LittleEndian}, prelude::{Point, OriginDimensions}, Drawable};
 
@@ -15,7 +15,7 @@ impl Default for UopState {
 }
 
 impl State for UopState {
-    fn render(&mut self, _system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, _system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
         let dsize = display.bounding_box().size;
         let image = ImageRaw::<Rgb565, LittleEndian>::new(include_bytes!("../../../data/uop.raw"), 48);
         let size = image.size();
@@ -27,7 +27,7 @@ impl State for UopState {
         None
     }
 
-    fn input(&mut self, _system: &mut impl System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

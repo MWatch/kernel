@@ -3,9 +3,13 @@
 //! The main home page
 
 use crate::application::states::prelude::*;
+use crate::system::Clock;
 use crate::system::Display;
+use crate::system::Host;
+use crate::system::Statistics;
 use crate::system::System;
 
+use crate::system::bms::BatteryManagement;
 use crate::system::bms::State as BmsState;
 use crate::system::input::InputEvent;
 use core::fmt::Write;
@@ -33,11 +37,11 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, system: &mut impl System, display: &mut impl Display) -> Option<Signal> {
-        let time = system.get_time();
-        let date = system.get_date();
-        let soc = system.soc();
-        let bms_state = system.state();
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+        let time = system.clock.get_time();
+        let date = system.clock.get_date();
+        let soc = system.bms.soc();
+        let bms_state = system.bms.state();
         let mut clock_digits = SevenSegments::new(display, 18, 48, 0x2C78);
         write!(self.buffer, "{:02}{:02}", time.hour(), time.minute()).unwrap();
         for (idx, digit) in self.buffer.as_bytes().iter().enumerate() {
@@ -49,7 +53,7 @@ impl State for ClockState {
         }
 
         self.buffer.clear(); // reset the buffer
-        if !system.is_idle() {
+        if !system.stats.is_idle() {
             let size = display.bounding_box().size;
             let style = MonoTextStyle::new(&FONT_6X12, RawU16::new(0x2C78).into());
 
@@ -94,7 +98,7 @@ impl State for ClockState {
         None
     }
 
-    fn input(&mut self, _system: &mut impl System, input: InputEvent) -> Option<Signal> {
+    fn input(&mut self, _system: &mut System<impl Host>, input: InputEvent) -> Option<Signal> {
         match input {
             InputEvent::Left => Some(Signal::Previous),
             InputEvent::Right => Some(Signal::Next),

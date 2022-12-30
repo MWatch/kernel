@@ -4,7 +4,7 @@
 
 use crate::ingress::buffer::{Buffer, Type};
 use crate::system::syscall::Syscall;
-use crate::system::System;
+use crate::system::{System, Host};
 use core::str::FromStr;
 use heapless::spsc::Queue;
 use simple_hex::hex_byte_to_byte;
@@ -80,7 +80,7 @@ impl IngressManager {
     }
 
     /// Processs the internal ringbuffer's bytes and execute if the payload is complete
-    pub fn process(&mut self, system: &mut impl System) {
+    pub fn process(&mut self, system: &mut System<impl Host>) {
         let buffer = &mut self.buffer; // lifetime gynmastics, move the field out of self
         if !self.rb.is_empty() {
             while let Some(byte) = self.rb.dequeue() {
@@ -104,7 +104,7 @@ impl IngressManager {
                                 // if the type cannot be determined abort, and wait until next STX
                             }
                             Type::Application => {
-                                system.am().verify().unwrap_or_else(|e| {
+                                system.am.verify().unwrap_or_else(|e| {
                                     error!("Failed to verify application: {:?}", e)
                                 });
                             }
@@ -115,7 +115,7 @@ impl IngressManager {
                                 );
                                 self.nsi[2] = self.nsi_idx;
                                 let nscopy = self.nsi;
-                                system.nm().add(buffer, &nscopy).unwrap_or_else(|e| {
+                                system.nm.add(buffer, &nscopy).unwrap_or_else(|e| {
                                     error!("Failed to add notification: {:?}", e)
                                 });
                             }
@@ -141,7 +141,7 @@ impl IngressManager {
                                 } else {
                                     self.state = State::ApplicationChecksum;
                                     // reset before we load the new application
-                                    system.am().kill().unwrap_or_else(|e| {
+                                    system.am.kill().unwrap_or_else(|e| {
                                         warn!("Failed to kill running app: {:?}", e)
                                     });
                                 }
@@ -189,7 +189,7 @@ impl IngressManager {
                                             ) {
                                                 Ok(byte) => {
                                                     system
-                                                        .am()
+                                                        .am
                                                         .write_checksum_byte(byte)
                                                         .unwrap_or_else(|e| {
                                                             error!(
@@ -214,7 +214,7 @@ impl IngressManager {
                                             ) {
                                                 Ok(byte) => {
                                                     system
-                                                        .am()
+                                                        .am
                                                         .write_ram_byte(byte)
                                                         .unwrap_or_else(|e| {
                                                             error!(

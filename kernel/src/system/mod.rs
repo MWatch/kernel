@@ -1,5 +1,5 @@
 use embedded_graphics::{draw_target::DrawTarget, pixelcolor::Rgb565};
-use time::{Time, Date};
+use time::{Date, Time};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
 
@@ -13,7 +13,6 @@ pub mod notification;
 pub mod syscall;
 
 pub trait Clock {
-    // TODO don't use st hal concrete types
     fn get_time(&self) -> Time;
     fn set_time(&mut self, t: &Time);
 
@@ -21,16 +20,30 @@ pub trait Clock {
     fn set_date(&mut self, t: &Date);
 }
 
-pub trait System:
-    ApplicationInterface + BatteryManagement + Clock + NotificationInterface + Statistics
-{
-    fn is_idle(&mut self) -> bool {
-        false
+pub struct System<H: Host> {
+    pub clock: H::Time,
+    pub bms: H::BatteryManager,
+    pub nm: NotificationManager,
+    pub am: ApplicationManager,
+    pub stats: H::RuntimeStatistics,
+}
+
+impl<H: Host> System<H> {
+    pub fn new(time: H::Time, bms: H::BatteryManager, stats: H::RuntimeStatistics, am: ApplicationManager) -> Self {
+        Self {
+            clock: time,
+            bms,
+            stats,
+            am,
+            nm: NotificationManager::new(),
+        }
     }
 }
 
-pub trait ApplicationInterface {
-    fn am(&mut self) -> &mut ApplicationManager;
+pub trait Host {
+    type BatteryManager: BatteryManagement;
+    type Time: Clock;
+    type RuntimeStatistics: Statistics;
 }
 
 pub trait Display: DrawTarget<Color = Rgb565> {
@@ -43,11 +56,15 @@ pub trait Statistics {
     // https://github.com/jan-auer/dynfmt
     // type Statistics: Iterator<Item = (&'static str, &'a dyn core::fmt::Display)>;
 
-    // TODO ideally formatting would be done inside the kernel, instead of passing this buffer but 
+    // TODO ideally formatting would be done inside the kernel, instead of passing this buffer but
     // we are limited by the technology of our time
     type Statistics: Iterator<Item = String<128>>; // TODO constrain to size of display
 
     fn stats(&self) -> Self::Statistics;
+
+    fn is_idle(&mut self) -> bool {
+        false
+    }
 }
 
 pub trait NotificationInterface {
