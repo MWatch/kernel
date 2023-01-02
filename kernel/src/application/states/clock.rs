@@ -2,9 +2,9 @@
 //!
 //! The main home page
 
+use crate::application::FrameBuffer;
 use crate::application::states::prelude::*;
 use crate::system::Clock;
-use crate::system::Display;
 use crate::system::Host;
 use crate::system::Statistics;
 use crate::system::System;
@@ -37,7 +37,7 @@ impl Default for ClockState {
 }
 
 impl State for ClockState {
-    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         let time = system.clock.get_time();
         let date = system.clock.get_date();
         let soc = system.bms.soc();

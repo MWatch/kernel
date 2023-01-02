@@ -1,4 +1,3 @@
-use embedded_graphics::{draw_target::DrawTarget, pixelcolor::Rgb565};
 use time::{Date, Time};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
@@ -46,7 +45,7 @@ pub trait Host {
     type RuntimeStatistics: Statistics;
 }
 
-pub trait Display: DrawTarget<Color = Rgb565> {
+pub trait Display {
     fn framebuffer(&mut self) -> FrameBuffer;
 }
 

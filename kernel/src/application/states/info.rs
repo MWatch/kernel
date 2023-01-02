@@ -1,7 +1,7 @@
 //! Debug info state
 
+use crate::application::FrameBuffer;
 use crate::application::states::prelude::*;
-use crate::system::Display;
 use crate::system::Host;
 use crate::system::Statistics;
 use crate::system::System;
@@ -22,7 +22,7 @@ impl Default for InfoState {
 }
 
 impl State for InfoState {
-    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         let style = MonoTextStyle::new(&FONT_6X12, RawU16::new(0x02D4).into());
 
         for (i, buffer) in system.stats.stats().enumerate() {

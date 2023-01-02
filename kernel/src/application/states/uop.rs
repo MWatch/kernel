@@ -1,8 +1,8 @@
 //! Uop Logo state
 
-use crate::{application::states::prelude::*, system::{System, input::InputEvent, Display, Host}};
+use crate::{application::{states::prelude::*, FrameBuffer}, system::{System, input::InputEvent, Host}};
 
-use embedded_graphics::{image::{Image, ImageRaw}, pixelcolor::{Rgb565, raw::LittleEndian}, prelude::{Point, OriginDimensions}, Drawable};
+use embedded_graphics::{image::{Image, ImageRaw}, pixelcolor::{Rgb565, raw::LittleEndian}, prelude::{Point, OriginDimensions, Dimensions}, Drawable};
 
 pub struct UopState {}
 
@@ -15,7 +15,7 @@ impl Default for UopState {
 }
 
 impl State for UopState {
-    fn render(&mut self, _system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, _system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         let dsize = display.bounding_box().size;
         let image = ImageRaw::<Rgb565, LittleEndian>::new(include_bytes!("../../../data/uop.raw"), 48);
         let size = image.size();

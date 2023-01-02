@@ -61,6 +61,7 @@ use crate::system::{
     CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
 use mwatch_kernel::system::input::InputManager;
+use mwatch_kernel::system::Display; 
 
 #[cfg(any(feature = "itm", feature = "rtt"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -582,7 +583,7 @@ const APP: () = {
             {
                 display.clear(false);
                 sys.lock(|system| {
-                    dmng.process(system, display);
+                    dmng.process(system, &mut display.framebuffer());
                 });
                 display.flush();
             }

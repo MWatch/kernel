@@ -15,7 +15,7 @@ pub type InputFn = unsafe extern "C" fn(*mut Context, InputEvent) -> i32;
 
 #[repr(C)]
 pub struct Context {
-    pub framebuffer: Option<FrameBuffer>,
+    pub framebuffer: *mut FrameBuffer,
 }
 
 #[repr(C)]
