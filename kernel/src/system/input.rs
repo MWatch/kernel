@@ -34,7 +34,7 @@ pub enum Error {
     Incomplete,
 }
 
-/// Input manager, assumes control over the tsc peripheral and handles the raw inputs
+/// Input manager
 pub struct InputManager {
     raw_vector: u8,
     last_vector: u8,

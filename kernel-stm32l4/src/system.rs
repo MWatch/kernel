@@ -9,7 +9,7 @@ use crate::{
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::OriginDimensions};
 use heapless::String;
-use mwatch_kernel::system::{Display, Host};
+use mwatch_kernel::system::Host;
 use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, rtc::Rtc};
 use time::{Date, Time};
 
@@ -30,8 +30,9 @@ pub struct KernelHost;
 impl Host for KernelHost {
     type BatteryManager =
         BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>;
-    type Time = RtcWrapper;
-    type RuntimeStatistics = Stats;
+    type TimeProvider = RtcWrapper;
+    type Statistics = Stats;
+    type Display = DisplayWrapper;
 }
 
 pub mod abi {
@@ -174,17 +175,19 @@ impl Iterator for StatsIter {
 
 pub struct DisplayWrapper(pub Ssd1351);
 
-impl Display for DisplayWrapper {
+impl mwatch_kernel::system::Display for DisplayWrapper {
     fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
         let size = self.0.size();
         let buffer = self.0.fb_mut();
 
-        mwatch_kernel::application::FrameBuffer::new(
-            buffer.as_mut_ptr(),
-            buffer.len(),
-            size.width as u8,
-            size.height as u8,
-        )
+        unsafe {
+            mwatch_kernel::application::FrameBuffer::new(
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                size.width as u8,
+                size.height as u8,
+            )
+        }
     }
 }
 

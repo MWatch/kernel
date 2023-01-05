@@ -61,7 +61,6 @@ use crate::system::{
     CPU_USAGE_POLL_HZ, DMA_HALF_BYTES, I2C_KHZ, SPI_MHZ, SYSTICK_HZ, SYS_CLK_HZ, TSC_HZ,
 };
 use mwatch_kernel::system::input::InputManager;
-use mwatch_kernel::system::Display; 
 
 #[cfg(any(feature = "itm", feature = "rtt"))]
 const LOG_LEVEL: log::LevelFilter = log::LevelFilter::Info;
@@ -251,9 +250,9 @@ const APP: () = {
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
             clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
-            max_count_error: Some(hal::tsc::MaxCountError::U16383),
-            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C8),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C8),
+            max_count_error: Some(hal::tsc::MaxCountError::U4095),
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C2),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C2),
             spread_spectrum_deviation: None, /* Some(128u8) */
         };
         let tsc = Tsc::tsc(cx.device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));
@@ -583,7 +582,7 @@ const APP: () = {
             {
                 display.clear(false);
                 sys.lock(|system| {
-                    dmng.process(system, &mut display.framebuffer());
+                    dmng.process(system, display);
                 });
                 display.flush();
             }

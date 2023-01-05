@@ -7,29 +7,35 @@ pub mod application_manager;
 pub mod display_manager;
 pub mod states;
 
-pub type InputHandlerFn = extern "C" fn(*mut Context, bool) -> i32;
-
+/// The FFI function signature for initialising an application.
 pub type SetupFn = unsafe extern "C" fn(*mut Table) -> i32;
+/// The FFI function signature for servicing an application.
 pub type ServiceFn = unsafe extern "C" fn(*mut Context) -> i32;
+/// The FFI function signature for pushing an input event to an application.
 pub type InputFn = unsafe extern "C" fn(*mut Context, InputEvent) -> i32;
 
 #[repr(C)]
+/// The context passed to the application interface.
 pub struct Context {
     pub framebuffer: *mut FrameBuffer,
 }
 
 #[repr(C)]
 #[derive(Debug)] 
-// TODO rotation of the FB?
+/// FrameBuffer
+/// 
+/// A generic interface to write to a frame buffer.
 pub struct FrameBuffer {
     ptr: *mut u8,
     len: usize,
     width: u8,
     height: u8,
+    // TODO rotation of the FB?
 }
 
 impl FrameBuffer {
-    pub fn new(ptr: *mut u8, len: usize, width: u8, height: u8) -> Self {
+    /// Create a frame buffer from a pointer
+    pub unsafe fn new(ptr: *mut u8, len: usize, width: u8, height: u8) -> Self {
         Self {
             ptr,
             len,
@@ -40,6 +46,8 @@ impl FrameBuffer {
 }
 
 impl embedded_graphics::draw_target::DrawTarget for FrameBuffer {
+    // TODO put this behind a feature gate when we support more pixel formats
+    // we can't use generics here because the FrameBuffer is passed over ffi.
     type Color = Rgb565;
 
     type Error = ();
@@ -79,6 +87,6 @@ unsafe impl Send for Context {}
 pub struct Table {
     /// Draw a colour on the display - x, y, colour
     pub draw_pixel: unsafe extern "C" fn(*mut Context, u8, u8, u16) -> i32,
-    /// Print a string using th info! macro
+    /// Print a string using the info! macro
     pub print: unsafe extern "C" fn(*mut Context, ptr: *const u8, len: usize) -> i32,
 }

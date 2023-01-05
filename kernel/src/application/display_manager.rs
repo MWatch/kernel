@@ -12,7 +12,7 @@ use crate::{application::{
         notifications::NotificationState,
     },
     states::prelude::*
-}, system::{input::InputEvent, System, Host}};
+}, system::{input::InputEvent, System, Host, Display}};
 
 use super::FrameBuffer;
 
@@ -60,7 +60,8 @@ impl DisplayManager
 {
 
     /// Services the current application
-    pub fn process(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) {
+    pub fn process<H: Host>(&mut self, system: &mut System<H>, display: &mut H::Display) {
+        let display = &mut display.framebuffer();
         let signal = match self.state_idx {
             0 => {
                 DisplayManager::static_state_render(&mut self.clock_state, system, display)
@@ -85,7 +86,7 @@ impl DisplayManager
 
         if let Some(signal) = signal {
             self.handle_exit(signal);
-        }
+        } 
     }
 
     /// Services input to the current application
