@@ -3,9 +3,10 @@
 //! A simple notification manager
 //!  
 
+use crate::application::FrameBuffer;
 use crate::application::states::prelude::*;
 use crate::system::input::InputEvent;
-use crate::system::{Display, System, Host};
+use crate::system::{System, Host};
 
 use embedded_graphics::mono_font::ascii::FONT_6X12;
 use embedded_graphics::mono_font::MonoTextStyle;
@@ -36,7 +37,7 @@ pub struct NotificationState {
 
 impl State for NotificationState {
     /// Render the notification state
-    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         self.menu.update_count(system.nm.idx() as i8);
         match self.state {
             InternalState::Menu => {
@@ -147,7 +148,7 @@ impl Default for NotificationState {
 
 impl ScopedState for NotificationState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, _system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn preview(&mut self, _system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         let size = display.bounding_box().size;
         let style = MonoTextStyle::new(&FONT_6X12, RawU16::from(0x02D4).into());
         Text::with_alignment(
@@ -199,7 +200,7 @@ impl Body {
     }
 
     /// Render the notification
-    pub fn render(&mut self, display: &mut impl Display, notification: &Notification) {
+    pub fn render(&mut self, display: &mut FrameBuffer, notification: &Notification) {
         let body = notification.body().as_bytes();
         for (idx, line) in body[0..body.len()].chunks(LINE_WIDTH as usize).enumerate() {
             // screen pixels / character width

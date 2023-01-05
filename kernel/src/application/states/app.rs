@@ -3,10 +3,10 @@
 //! Wraps the application manager in a display manager state
 //!  
 
+use crate::application::FrameBuffer;
 use crate::application::states::prelude::*;
 use crate::system::Host;
 use crate::system::input::InputEvent;
-use crate::system::Display;
 use crate::system::System;
 use core::fmt::Write;
 use embedded_graphics::pixelcolor::raw::RawU16;
@@ -28,7 +28,7 @@ impl Default for AppState {
 }
 
 impl State for AppState {
-    fn render(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         system.am.service(display).unwrap_or_else(|err| {
             error!("Failed to render app {:?}", err);
         });
@@ -53,7 +53,7 @@ impl State for AppState {
 
 impl ScopedState for AppState {
     /// Render a preview or Icon before launching the whole application
-    fn preview(&mut self, system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn preview(&mut self, system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         self.buffer.clear();
         let status = system.am.status();
         if status.is_loaded {

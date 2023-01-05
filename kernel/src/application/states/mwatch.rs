@@ -1,6 +1,7 @@
+use crate::application::FrameBuffer;
 use crate::application::states::prelude::*;
 use crate::system::input::InputEvent;
-use crate::system::{Display, System, Host};
+use crate::system::{System, Host};
 
 use embedded_graphics::image::{Image, ImageRaw};
 use embedded_graphics::mono_font::ascii::FONT_6X12;
@@ -19,7 +20,7 @@ impl Default for MWState {
 }
 
 impl State for MWState {
-    fn render(&mut self, _system: &mut System<impl Host>, display: &mut impl Display) -> Option<Signal> {
+    fn render(&mut self, _system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
         Image::new(
             &ImageRaw::<Rgb565, LittleEndian>::new(include_bytes!("../../../data/mwatch.raw"), 64),
             Point::new(32, 10),

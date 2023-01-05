@@ -11,9 +11,9 @@
 
 use crc::crc32::checksum_ieee;
 
-use crate::system::{input::InputEvent, Display};
+use crate::system::{input::InputEvent};
 
-use super::{ServiceFn, InputFn, SetupFn, Context, Table};
+use super::{ServiceFn, InputFn, SetupFn, Context, Table, FrameBuffer};
 
 /// Application manager
 pub struct ApplicationManager {
@@ -140,11 +140,10 @@ impl ApplicationManager {
 
 
     /// Gives processing time to the application
-    pub fn service(&mut self, display: &mut impl Display) -> Result<(), Error> {
+    pub fn service(&mut self, display: &mut FrameBuffer) -> Result<(), Error> {
        if let Some(service_fn) = self.service_fn {
-        let fb = display.framebuffer();
         let mut ctx = Context {
-            framebuffer: Some(fb)
+            framebuffer: display
         };
         self.status.service_result = unsafe { service_fn(&mut ctx) };
         Ok(())
@@ -157,7 +156,7 @@ impl ApplicationManager {
     pub fn service_input(&mut self, input: InputEvent) -> Result<(), Error> {
        if let Some(input_fn) = self.input_fn {
         let mut ctx = Context {
-            framebuffer: None,
+            framebuffer: core::ptr::null_mut(),
         };
         let _ = unsafe { input_fn(&mut ctx, input) };
         Ok(())

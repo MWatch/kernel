@@ -250,9 +250,9 @@ const APP: () = {
                 .into_touch_channel(&mut gpiob.moder, &mut gpiob.otyper, &mut gpiob.afrl);
         let tsc_config = TscConfig {
             clock_prescale: None, /* Some(TscClockPrescaler::HclkDiv2) */
-            max_count_error: Some(hal::tsc::MaxCountError::U16383),
-            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C8),
-            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C8),
+            max_count_error: Some(hal::tsc::MaxCountError::U4095),
+            charge_transfer_high: Some(hal::tsc::ChargeDischargeTime::C2),
+            charge_transfer_low: Some(hal::tsc::ChargeDischargeTime::C2),
             spread_spectrum_deviation: None, /* Some(128u8) */
         };
         let tsc = Tsc::tsc(cx.device.TSC, sample_pin, &mut rcc.ahb1, Some(tsc_config));

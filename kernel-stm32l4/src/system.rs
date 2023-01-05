@@ -9,7 +9,7 @@ use crate::{
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::OriginDimensions};
 use heapless::String;
-use mwatch_kernel::system::{Display, Host};
+use mwatch_kernel::system::Host;
 use stm32l4xx_hal::{prelude::_stm32l4_hal_datetime_U32Ext, rtc::Rtc};
 use time::{Date, Time};
 
@@ -25,13 +25,14 @@ pub const I2C_KHZ: u32 = 100;
 
 pub const IDLE_TIMEOUT_SECONDS: u32 = 15;
 
-
 pub struct KernelHost;
 
 impl Host for KernelHost {
-    type BatteryManager = BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>;
-    type Time = RtcWrapper;
-    type RuntimeStatistics = Stats;
+    type BatteryManager =
+        BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>;
+    type TimeProvider = RtcWrapper;
+    type Statistics = Stats;
+    type Display = DisplayWrapper;
 }
 
 pub mod abi {
@@ -41,17 +42,15 @@ pub mod abi {
     /// Assumes control over the display, it is up to us to make sure the display is not borrowed by anything else
     pub unsafe extern "C" fn draw_pixel(context: *mut Context, x: u8, y: u8, colour: u16) -> i32 {
         let ctx = &mut *context;
-        if let Some(ref mut display) = ctx.framebuffer {
-            display.draw_iter(
-                [embedded_graphics::Pixel(
-                    embedded_graphics::prelude::Point::new(x as i32, y as i32),
-                    embedded_graphics::pixelcolor::raw::RawU16::from(colour).into(),
-                )]
-                .into_iter(),
-            ).ok(); // TODO handle error
-        } else {
-            panic!("Display invoked in an invalid state. Applications can only use the display within update.")
-        }
+        let fb = &mut *ctx.framebuffer;
+        fb.draw_iter(
+            [embedded_graphics::Pixel(
+                embedded_graphics::prelude::Point::new(x as i32, y as i32),
+                embedded_graphics::pixelcolor::raw::RawU16::from(colour).into(),
+            )]
+            .into_iter(),
+        )
+        .ok(); // TODO handle error
         0
     }
 
@@ -106,7 +105,9 @@ impl mwatch_kernel::system::Clock for RtcWrapper {
     }
 }
 
-impl mwatch_kernel::system::bms::BatteryManagement for BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin> {
+impl mwatch_kernel::system::bms::BatteryManagement
+    for BatteryManagement<BatteryManagementInterface, ChargeStatusPin, StandbyStatusPin>
+{
     fn state(&self) -> mwatch_kernel::system::bms::State {
         self.state()
     }
@@ -174,17 +175,19 @@ impl Iterator for StatsIter {
 
 pub struct DisplayWrapper(pub Ssd1351);
 
-impl Display for DisplayWrapper {
+impl mwatch_kernel::system::Display for DisplayWrapper {
     fn framebuffer(&mut self) -> mwatch_kernel::application::FrameBuffer {
         let size = self.0.size();
         let buffer = self.0.fb_mut();
 
-        mwatch_kernel::application::FrameBuffer::new(
-            buffer.as_mut_ptr(),
-            buffer.len(),
-            size.width as u8,
-            size.height as u8,
-        )
+        unsafe {
+            mwatch_kernel::application::FrameBuffer::new(
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                size.width as u8,
+                size.height as u8,
+            )
+        }
     }
 }
 

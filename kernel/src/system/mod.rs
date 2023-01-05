@@ -1,4 +1,3 @@
-use embedded_graphics::{draw_target::DrawTarget, pixelcolor::Rgb565};
 use time::{Date, Time};
 
 use crate::application::{application_manager::ApplicationManager, FrameBuffer};
@@ -20,16 +19,19 @@ pub trait Clock {
     fn set_date(&mut self, t: &Date);
 }
 
+/// System
+/// 
+/// The [`System`] struct contains the interface to the [`Host`] system. The kernel uses this struct to operate.
 pub struct System<H: Host> {
-    pub clock: H::Time,
+    pub clock: H::TimeProvider,
     pub bms: H::BatteryManager,
+    pub stats: H::Statistics,
     pub nm: NotificationManager,
     pub am: ApplicationManager,
-    pub stats: H::RuntimeStatistics,
 }
 
 impl<H: Host> System<H> {
-    pub fn new(time: H::Time, bms: H::BatteryManager, stats: H::RuntimeStatistics, am: ApplicationManager) -> Self {
+    pub fn new(time: H::TimeProvider, bms: H::BatteryManager, stats: H::Statistics, am: ApplicationManager) -> Self {
         Self {
             clock: time,
             bms,
@@ -40,33 +42,31 @@ impl<H: Host> System<H> {
     }
 }
 
+/// Host
+///
+/// The main trait for defining the "host" system that the kernel runs on.
+/// There are no trait methods here, just associated types which define what gets put into [`System`]
 pub trait Host {
     type BatteryManager: BatteryManagement;
-    type Time: Clock;
-    type RuntimeStatistics: Statistics;
+    type TimeProvider: Clock;
+    type Statistics: Statistics;
+    type Display: Display;
 }
 
-pub trait Display: DrawTarget<Color = Rgb565> {
+/// Display
+/// 
+/// Implement to retrieve the [`FrameBuffer`] for the [`Host`] display.
+pub trait Display {
     fn framebuffer(&mut self) -> FrameBuffer;
 }
 
 pub trait Statistics {
-    // TODO: below did not work :(
-    // look into below in the future
-    // https://github.com/jan-auer/dynfmt
-    // type Statistics: Iterator<Item = (&'static str, &'a dyn core::fmt::Display)>;
-
-    // TODO ideally formatting would be done inside the kernel, instead of passing this buffer but
-    // we are limited by the technology of our time
-    type Statistics: Iterator<Item = String<128>>; // TODO constrain to size of display
+    // TODO use GAT based design, see: https://gist.github.com/MabezDev/af1b05eb38aefebee6af1504ba54164f
+    type Statistics: Iterator<Item = String<128>>;
 
     fn stats(&self) -> Self::Statistics;
 
     fn is_idle(&mut self) -> bool {
         false
     }
-}
-
-pub trait NotificationInterface {
-    fn nm(&mut self) -> &mut NotificationManager;
 }
