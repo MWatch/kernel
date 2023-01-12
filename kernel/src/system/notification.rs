@@ -31,8 +31,8 @@ impl Notification {
 
     pub fn from_buffer(buffer: &Buffer, idxs: &[usize; 3]) -> Result<Notification, NotificationError> {
         Ok(Notification {
-            section_indexes: idxs.clone(),
-            inner: buffer.clone()
+            section_indexes: *idxs,
+            inner: *buffer
         })
     }
 
@@ -60,7 +60,7 @@ pub struct NotificationManager {
 }
 
 impl NotificationManager {
-    pub fn new() -> NotificationManager {
+    pub const fn new() -> NotificationManager {
         NotificationManager {
             pool: [Notification::default(); BUFF_COUNT],
             idx: 0,
@@ -73,7 +73,7 @@ impl NotificationManager {
         F: FnOnce(&Notification),
     {
         let notification = &self.pool[index];
-        f(&notification);
+        f(notification);
     }
 
     pub fn idx(&self) -> usize {

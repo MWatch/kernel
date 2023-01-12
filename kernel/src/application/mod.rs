@@ -35,6 +35,10 @@ pub struct FrameBuffer {
 
 impl FrameBuffer {
     /// Create a frame buffer from a pointer
+    /// 
+    /// # Safety
+    /// 
+    /// The pointer passed **must** but a unique pointer and not shared or aliased.
     pub unsafe fn new(ptr: *mut u8, len: usize, width: u8, height: u8) -> Self {
         Self {
             ptr,

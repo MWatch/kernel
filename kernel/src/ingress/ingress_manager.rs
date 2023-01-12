@@ -53,7 +53,7 @@ pub struct IngressManager {
 impl IngressManager {
     /// Constructs a new IngressManager
     pub fn new() -> Self {
-        IngressManager {
+        Self {
             rb: Queue::new(),
             state: State::Init,
             hex_chars: [0u8; 2],
@@ -250,6 +250,12 @@ impl IngressManager {
                 }
             }
         }
+    }
+}
+
+impl Default for IngressManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

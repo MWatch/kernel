@@ -72,7 +72,7 @@ impl State for ClockState {
             .ok();
             self.buffer.clear();
 
-            write!(self.buffer, "{:02}%", soc).unwrap();
+            write!(self.buffer, "{soc:02}%").unwrap();
             Text::new(self.buffer.as_str(), Point::new(110, 12), style)
                 .draw(display)
                 .ok();

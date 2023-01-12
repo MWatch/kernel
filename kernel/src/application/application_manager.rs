@@ -66,7 +66,7 @@ impl ApplicationManager {
     /// Create a new application manager from a chunk of ram
     pub fn new(ram: Ram, os_table_ptr: &'static mut Table) -> Self {
         Self {
-            ram: ram,
+            ram,
             target_cs: [0u8; 4],
             target_cs_idx: 0,
             service_fn: None,
@@ -111,11 +111,11 @@ impl ApplicationManager {
     fn digest_from_bytes(bytes: &[u8]) -> u32 {
         assert_eq!(bytes.len(), 4);
         // bytes arrive in reversed order                
-        let digest = ((u32::from(bytes[0])) << 24)
+        
+        ((u32::from(bytes[0])) << 24)
             | ((u32::from(bytes[1])) << 16)
             | ((u32::from(bytes[2])) << 8)
-            | (u32::from(bytes[3]));
-        digest
+            | (u32::from(bytes[3]))
     }
 
     /// Run the application
@@ -123,9 +123,9 @@ impl ApplicationManager {
         if !self.status.is_loaded {
             return Err(Error::NoApplication);
         }
-        let setup_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[..4]);
-        let service_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[4..8]);
-        let input_ptr = Self::fn_ptr_from_slice(&self.ram.as_ref()[8..12]);
+        let setup_ptr = Self::fn_ptr_from_slice(&self.ram.bytes()[..4]);
+        let service_ptr = Self::fn_ptr_from_slice(&self.ram.bytes()[4..8]);
+        let input_ptr = Self::fn_ptr_from_slice(&self.ram.bytes()[8..12]);
         let _result = unsafe {
             let setup: SetupFn = ::core::mem::transmute(setup_ptr);
             let service: ServiceFn = ::core::mem::transmute(service_ptr);
@@ -250,8 +250,8 @@ impl Ram {
     }
 
     /// Get an immutable reference to the internal ram buffer
-    pub fn as_ref(&self) -> &[u8] {
-        &self.ram
+    pub fn bytes(&self) -> &[u8] {
+        self.ram
     }
 
     pub fn as_slice(&self) -> &[u8] {

@@ -4,15 +4,10 @@ use crate::{application::{states::prelude::*, FrameBuffer}, system::{System, inp
 
 use embedded_graphics::{image::{Image, ImageRaw}, pixelcolor::{Rgb565, raw::LittleEndian}, prelude::{Point, OriginDimensions, Dimensions}, Drawable};
 
+#[derive(Default)]
 pub struct UopState {}
 
-impl Default for UopState {
-    fn default() -> Self {
-        Self {
-            
-        }
-    }
-}
+
 
 impl State for UopState {
     fn render(&mut self, _system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {

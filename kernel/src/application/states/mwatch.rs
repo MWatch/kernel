@@ -11,13 +11,10 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{Alignment, Text};
 
+#[derive(Default)]
 pub struct MWState {}
 
-impl Default for MWState {
-    fn default() -> Self {
-        Self {}
-    }
-}
+
 
 impl State for MWState {
     fn render(&mut self, _system: &mut System<impl Host>, display: &mut FrameBuffer) -> Option<Signal> {
