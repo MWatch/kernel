@@ -1,0 +1,112 @@
+{
+    "version": 1,
+    "author": "Scott Mabin",
+    "editor": "wokwi",
+    "parts": [
+        {
+            "type": "board-esp32-s3-devkitc-1",
+            "id": "esp",
+            "top": 0,
+            "left": 0,
+            "attrs": {
+                "builder": "rust-nostd-esp"
+            }
+        },
+        {
+            "type": "wokwi-pushbutton",
+            "id": "btn1",
+            "top": 45,
+            "left": -250.27,
+            "attrs": {
+                "color": "green"
+            }
+        },
+        {
+            "type": "wokwi-pushbutton",
+            "id": "btn2",
+            "top": 103.94,
+            "left": -247.33,
+            "attrs": {
+                "color": "green"
+            }
+        },
+        {
+            "type": "wokwi-pushbutton",
+            "id": "btn3",
+            "top": 170.6,
+            "left": -248.01,
+            "attrs": {
+                "color": "green"
+            }
+        }
+    ],
+    "connections": [
+        [
+            "esp:TX",
+            "$serialMonitor:RX",
+            "",
+            []
+        ],
+        [
+            "esp:RX",
+            "$serialMonitor:TX",
+            "",
+            []
+        ],
+        [
+            "btn1:1.l",
+            "esp:GND.1",
+            "green",
+            [
+                "h-43.3",
+                "v12.88"
+            ]
+        ],
+        [
+            "btn2:1.l",
+            "esp:GND.1",
+            "green",
+            [
+                "h-29.57",
+                "v111.28"
+            ]
+        ],
+        [
+            "btn3:1.l",
+            "esp:GND.1",
+            "green",
+            [
+                "h-14.23",
+                "v45.95"
+            ]
+        ],
+        [
+            "esp:4",
+            "btn1:2.r",
+            "green",
+            [
+                "h-173.51",
+                "v19"
+            ]
+        ],
+        [
+            "esp:5",
+            "btn2:2.r",
+            "green",
+            [
+                "h-163.58",
+                "v1.03"
+            ]
+        ],
+        [
+            "esp:6",
+            "btn3:2.r",
+            "green",
+            [
+                "h-153.65",
+                "v126.79"
+            ]
+        ]
+    ],
+    "dependencies": {}
+}
