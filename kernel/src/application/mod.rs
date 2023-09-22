@@ -69,7 +69,7 @@ impl embedded_graphics::draw_target::DrawTarget for FrameBuffer {
                 let y = pos.y;
                 let color: u16 = RawU16::from(color).into_inner();
                 let slice = unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) };
-                slice[((x + (y * self.width as i32)) as usize * 2)] = (color >> 8) as u8;
+                slice[(x + (y * self.width as i32)) as usize * 2] = (color >> 8) as u8;
                 slice[(((x + (y * self.width as i32)) as usize) * 2) + 1] = color as u8;
             });
 

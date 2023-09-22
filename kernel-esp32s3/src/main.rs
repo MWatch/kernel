@@ -5,7 +5,7 @@
 use embassy_executor::Executor;
 use embassy_futures::select::{select3, Either3};
 use embassy_time::{Timer, Duration};
-use esp32s3_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, timer::TimerGroup, Rtc, embassy, gpio::{PullUp, Input, Gpio4, Gpio5, Gpio6}, IO};
+use esp32s3_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, embassy, gpio::{PullUp, Input, Gpio4, Gpio5, Gpio6}, IO};
 use esp_backtrace as _;
 use esp_println;
 use static_cell::StaticCell;
@@ -23,17 +23,6 @@ fn main() -> ! {
 
     log::info!("\r\n\r\n  /\\/\\/ / /\\ \\ \\__ _| |_ ___| |__  \r\n /    \\ \\/  \\/ / _` | __/ __| '_ \\ \r\n/ /\\/\\ \\  /\\  / (_| | || (__| | | |\r\n\\/    \\/\\/  \\/ \\__,_|\\__\\___|_| |_|\r\n                                   \r\n");
     log::info!("Copyright Scott Mabin 2022");
-
-    // Disable the RTC and TIMG watchdog timers
-    let mut rtc = Rtc::new(peripherals.RTC_CNTL);
-    let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
-    let mut wdt0 = timer_group0.wdt;
-    let timer_group1 = TimerGroup::new(peripherals.TIMG1, &clocks);
-    let mut wdt1 = timer_group1.wdt;
-
-    rtc.rwdt.disable();
-    wdt0.disable();
-    wdt1.disable();
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 

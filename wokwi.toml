@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-elf = "target/xtensa-esp32s3-none-elf/release/kernel-esp32s3"
-firmware = "target/xtensa-esp32s3-none-elf/release/kernel-esp32s3"
