@@ -78,7 +78,7 @@ impl State for NotificationState {
                 system
                     .nm
                     .peek_notification(self.menu.selected() as usize, |notification| {
-                        self.body.render(display, &notification);
+                        self.body.render(display, notification);
                     });
             }
         }

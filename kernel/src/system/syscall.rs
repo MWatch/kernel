@@ -74,7 +74,7 @@ impl Syscall {
             }
         }
         // vals[0] // TODO day in week
-        Ok(Date::from_calendar_date(vals[3], (vals[2] as u8).try_into().map_err(|_| Error::ParseError)?, vals[1] as u8).map_err(|_| Error::ParseError)?)
+        Date::from_calendar_date(vals[3], (vals[2] as u8).try_into().map_err(|_| Error::ParseError)?, vals[1] as u8).map_err(|_| Error::ParseError)
     }
 
     pub fn time_from_str(s: &str) -> Result<Time, Error> {
@@ -88,7 +88,7 @@ impl Syscall {
                 }
             }
         }
-        Ok(Time::from_hms(vals[0], vals[1], vals[2]).map_err(|_| Error::ParseError)?)
+        Time::from_hms(vals[0], vals[1], vals[2]).map_err(|_| Error::ParseError)
     }
 }
 

@@ -1,6 +1,7 @@
 
 [workspace]
-members = ["kernel", "kernel-stm32l4"]
+members = ["kernel", "kernel-stm32l4", "kernel-esp32s3"]
+resolver = "2"
 
 [profile.dev]
 codegen-units = 1
@@ -9,5 +10,5 @@ opt-level = 'z' # 0 or 1 for debug
 
 [profile.release]
 codegen-units = 1
-lto = true
+lto = 'fat'
 debug = true

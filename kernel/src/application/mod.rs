@@ -35,6 +35,10 @@ pub struct FrameBuffer {
 
 impl FrameBuffer {
     /// Create a frame buffer from a pointer
+    /// 
+    /// # Safety
+    /// 
+    /// The pointer passed **must** but a unique pointer and not shared or aliased.
     pub unsafe fn new(ptr: *mut u8, len: usize, width: u8, height: u8) -> Self {
         Self {
             ptr,
@@ -65,7 +69,7 @@ impl embedded_graphics::draw_target::DrawTarget for FrameBuffer {
                 let y = pos.y;
                 let color: u16 = RawU16::from(color).into_inner();
                 let slice = unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) };
-                slice[((x + (y * self.width as i32)) as usize * 2)] = (color >> 8) as u8;
+                slice[(x + (y * self.width as i32)) as usize * 2] = (color >> 8) as u8;
                 slice[(((x + (y * self.width as i32)) as usize) * 2) + 1] = color as u8;
             });
 

@@ -43,7 +43,7 @@ pub struct InputManager {
 
 impl InputManager {
     /// Creates a new instance of the InputManager
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             raw_vector: 0,
             last_vector: 0,

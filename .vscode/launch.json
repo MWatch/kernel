@@ -5,63 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
-            "request": "custom",
-            "name": "LLDB - Release",
-            "targetCreateCommands": [
-                "command source ${workspaceFolder}/openocd.lldb"
-            ],
-            "sourceLanguages": [
-                "rust"
-            ]
-        },
-        {
             "type": "gdb",
-            "request": "launch",
-            "name": "Debug",
-            "target": "./target/thumbv7em-none-eabi/debug/mwatch_kernel",
-            // "gdbpath": "arm-none-eabi-gdb",
-            "gdbpath": "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
+            "request": "attach",
+            "name": "VsCode: Wokwi Debug S3",
+            "executable": "${workspaceFolder}/target/xtensa-esp32s3-none-elf/release/kernel-esp32s3",
+            "target": "127.0.0.1:9333",
+            "remote": true,
+            "gdbpath": "${userHome}/.espressif/tools/xtensa-esp-elf-gdb/11.2_20220823/xtensa-esp-elf-gdb/bin/xtensa-esp32s3-elf-gdb",
             "cwd": "${workspaceRoot}",
-            "autorun": [
-                "source openocd.gdb"
-            ]
-        },
-        {
-            "type": "gdb",
-            "request": "launch",
-            "name": "Debug - ITM",
-            "target": "./target/thumbv7em-none-eabi/debug/mwatch_kernel",
-            // "gdbpath": "arm-none-eabi-gdb",
-            "gdbpath": "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
-            "cwd": "${workspaceRoot}",
-            "autorun": [
-                "source openocd_itm.gdb"
-            ]
-        },
-        {
-            "type": "gdb",
-            "request": "launch",
-            "name": "Release",
-            "target": "./target/thumbv7em-none-eabi/release/mwatch_kernel",
-            // "gdbpath": "arm-none-eabi-gdb",
-            "gdbpath": "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
-            "cwd": "${workspaceRoot}",
-            "autorun": [
-                "source openocd.gdb"
-            ]
-        },
-        {
-            "type": "gdb",
-            "request": "launch",
-            "name": "Release - ITM",
-            "target": "./target/thumbv7em-none-eabi/release/mwatch_kernel",
-            // "gdbpath": "arm-none-eabi-gdb",
-            "gdbpath": "/home/mabez/programs/gcc-arm-none-eabi-7-2017-q4-major/bin/arm-none-eabi-gdb",
-            "cwd": "${workspaceRoot}",
-            "autorun": [
-                "source openocd_itm.gdb"
-            ]
-        },
+            "stopAtConnect": true,
+            "valuesFormatting": "parseText"
+        }
     ]
 }
